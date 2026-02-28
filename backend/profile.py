@@ -1,6 +1,5 @@
 """Browser profile management — save/restore Chromium profiles to/from sandbox containers."""
 
-import os
 import logging
 import json
 import tarfile
@@ -11,9 +10,9 @@ from pathlib import Path
 import docker
 from docker.errors import NotFound
 
-logger = logging.getLogger(__name__)
+from .config import PROFILES_DIR
 
-PROFILES_DIR = Path(os.environ.get("PROFILES_DIR", "/app/profiles"))
+logger = logging.getLogger(__name__)
 CHROME_PROFILE_CONTAINER_PATH = "/tmp/chrome-profile"
 
 
@@ -58,6 +57,8 @@ class ProfileManager:
             with tarfile.open(tmp.name, "r:") as src_tar:
                 with tarfile.open(str(archive_path), "w:gz") as dst_tar:
                     for member in src_tar.getmembers():
+                        if member.name.startswith('..') or member.name.startswith('/'):
+                            raise ValueError(f'Unsafe tar member: {member.name}')
                         f = src_tar.extractfile(member)
                         if f is not None:
                             dst_tar.addfile(member, f)
@@ -97,6 +98,8 @@ class ProfileManager:
             with tarfile.open(str(archive_path), "r:gz") as gz:
                 with tarfile.open(tmp.name, "w:") as plain:
                     for member in gz.getmembers():
+                        if member.name.startswith('..') or member.name.startswith('/'):
+                            raise ValueError(f'Unsafe tar member: {member.name}')
                         f = gz.extractfile(member)
                         if f is not None:
                             plain.addfile(member, f)
@@ -193,6 +196,8 @@ class ProfileManager:
                     cookie["sameSite"] = "Lax"
                 elif sam == "strict":
                     cookie["sameSite"] = "Strict"
+                elif sam == "unspecified":
+                    cookie["sameSite"] = "Lax"
             if c.get("expirationDate"):
                 cookie["expires"] = c["expirationDate"]
             playwright_cookies.append(cookie)

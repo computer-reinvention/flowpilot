@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from .sandbox import SandboxManager
 from .profile import ProfileManager
 from .booking import UberBookingAgent, BookingStatus, get_booking
+from .config import PROFILES_DIR
 from . import auth
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -24,8 +25,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-
-PROFILES_DIR = Path(os.environ.get("PROFILES_DIR", "/app/profiles"))
 DEFAULT_PROFILE = os.environ.get("DEFAULT_PROFILE", "default")
 FRONTEND_DIR = Path(os.environ.get("FRONTEND_DIR", "/app/frontend"))
 

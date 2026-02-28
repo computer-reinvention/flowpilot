@@ -5,16 +5,15 @@ import json
 import os
 import logging
 from enum import Enum
-from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Callable, Awaitable
 from datetime import datetime, timezone
 
 from browser_use import Agent, Browser
 
-logger = logging.getLogger(__name__)
+from .config import PROFILES_DIR
 
-PROFILES_DIR = Path(os.environ.get("PROFILES_DIR", "/app/profiles"))
+logger = logging.getLogger(__name__)
 
 
 class BookingStatus(str, Enum):
@@ -173,10 +172,29 @@ class UberBookingAgent:
                 f"Return the ride details including driver name, car details, ETA, and fare if visible."
             )
 
+            # Step callback for intermediate progress statuses
+            step_count = 0
+
+            def _on_step(state_summary, agent_output, step_num):
+                nonlocal step_count
+                step_count += 1
+                msg = f'Step {step_num}: {agent_output.current_state.next_step if hasattr(agent_output, "current_state") else "processing"}'
+                if step_count <= 2:
+                    asyncio.create_task(_update(BookingStatus.NAVIGATING, msg))
+                elif step_count <= 4:
+                    asyncio.create_task(_update(BookingStatus.ENTERING_PICKUP, msg))
+                elif step_count <= 6:
+                    asyncio.create_task(_update(BookingStatus.ENTERING_DROPOFF, msg))
+                elif step_count <= 8:
+                    asyncio.create_task(_update(BookingStatus.SELECTING_RIDE, msg))
+                else:
+                    asyncio.create_task(_update(BookingStatus.CONFIRMING, msg))
+
             agent = Agent(
                 task=task,
                 llm=llm,
                 browser=browser,
+                register_new_step_callback=_on_step,
             )
 
             await _update(BookingStatus.ENTERING_PICKUP, f"Agent running: entering pickup '{pickup}'")
