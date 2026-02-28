@@ -262,14 +262,32 @@
       chrome.storage.local.set({ backendUrl: backendUrlInput.value.trim() });
     });
 
-    function setAuthStatus(text, type) {
+    function setAuthStatus(text, type, showSpinner) {
       authStatusEl.className = 'status ' + type;
-      authStatusEl.innerHTML = text;
+      authStatusEl.textContent = '';
+      if (showSpinner) {
+        var spinner = document.createElement('span');
+        spinner.className = 'spinner';
+        spinner.setAttribute('aria-label', 'Loading');
+        authStatusEl.appendChild(spinner);
+        authStatusEl.appendChild(document.createTextNode(' ' + text));
+      } else {
+        authStatusEl.textContent = text;
+      }
     }
 
-    function setConnectStatus(text, type) {
+    function setConnectStatus(text, type, showSpinner) {
       connectStatusEl.className = 'status ' + type;
-      connectStatusEl.innerHTML = text;
+      connectStatusEl.textContent = '';
+      if (showSpinner) {
+        var spinner = document.createElement('span');
+        spinner.className = 'spinner';
+        spinner.setAttribute('aria-label', 'Loading');
+        connectStatusEl.appendChild(spinner);
+        connectStatusEl.appendChild(document.createTextNode(' ' + text));
+      } else {
+        connectStatusEl.textContent = text;
+      }
     }
 
     async function verifyAndShowConnected(backendUrl, token, userName) {
@@ -304,8 +322,14 @@
         return;
       }
 
+      try { new URL(backendUrl); } catch(e) { setAuthStatus('Invalid backend URL', 'error'); return; }
+
+      if (!backendUrl.startsWith('https://') && !backendUrl.includes('localhost') && !backendUrl.includes('127.0.0.1')) {
+        setAuthStatus('Warning: sending credentials over insecure HTTP!', 'error');
+      }
+
       loginBtn.disabled = true;
-      setAuthStatus('<span class="spinner"></span> Logging in...', 'info');
+      setAuthStatus('Logging in...', 'info', true);
 
       try {
         const res = await fetch(backendUrl + '/api/auth/login', {
@@ -332,7 +356,7 @@
         connectedUserName.textContent = data.user.name;
 
         // Now auto-sync Uber session
-        setAuthStatus('<span class="spinner"></span> Syncing Uber session...', 'info');
+        setAuthStatus('Syncing Uber session...', 'info', true);
         await captureAndSendSession(backendUrl, data.token);
 
         authSection.classList.add('hidden');
@@ -347,7 +371,7 @@
 
     resyncBtn.addEventListener('click', async () => {
       resyncBtn.disabled = true;
-      setConnectStatus('<span class="spinner"></span> Syncing session...', 'info');
+      setConnectStatus('Syncing session...', 'info', true);
 
       try {
         await captureAndSendSession(savedBackendUrl, savedToken);
