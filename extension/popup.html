@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #000;
+      color: #fff;
+      width: 340px;
+      padding: 24px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .logo {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .logo h1 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    .logo span {
+      color: #afafaf;
+      font-weight: 400;
+    }
+
+    .input-group {
+      margin-bottom: 16px;
+    }
+
+    .input-group label {
+      display: block;
+      font-size: 12px;
+      color: #afafaf;
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+
+    .input-group input {
+      width: 100%;
+      padding: 12px 14px;
+      font-size: 14px;
+      font-family: inherit;
+      background: #282828;
+      color: #fff;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      outline: none;
+      transition: border-color 0.3s ease;
+    }
+
+    .input-group input:focus {
+      border-color: #fff;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      padding: 14px 20px;
+      font-size: 15px;
+      font-weight: 600;
+      border: none;
+      border-radius: 500px;
+      cursor: pointer;
+      transition: background 0.3s ease, opacity 0.3s ease;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: #fff;
+      color: #000;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #e2e2e2;
+    }
+
+    .status {
+      text-align: center;
+      margin-top: 16px;
+      font-size: 13px;
+      min-height: 20px;
+    }
+
+    .status.success {
+      color: #06C167;
+    }
+
+    .status.error {
+      color: #e74c3c;
+    }
+
+    .status.info {
+      color: #afafaf;
+    }
+
+    .hint {
+      text-align: center;
+      margin-top: 12px;
+      font-size: 12px;
+      color: #6b6b6b;
+      line-height: 1.5;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #6b6b6b;
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="logo">
+    <h1>uber<span>-bookr</span></h1>
+  </div>
+
+  <div class="input-group">
+    <label>Backend URL</label>
+    <input type="text" id="backend-url" placeholder="http://localhost:8080" />
+  </div>
+
+  <button class="btn btn-primary" id="connect-btn">Connect</button>
+
+  <div class="status" id="status"></div>
+
+  <div class="hint">
+    Navigate to any uber.com page and click Connect to sync your session.
+  </div>
+
+  <script>
+    const backendUrlInput = document.getElementById('backend-url');
+    const connectBtn = document.getElementById('connect-btn');
+    const statusEl = document.getElementById('status');
+
+    // Load saved backend URL
+    chrome.storage.local.get(['backendUrl'], (result) => {
+      if (result.backendUrl) {
+        backendUrlInput.value = result.backendUrl;
+      } else {
+        backendUrlInput.value = 'http://localhost:8080';
+      }
+    });
+
+    // Save backend URL on change
+    backendUrlInput.addEventListener('change', () => {
+      chrome.storage.local.set({ backendUrl: backendUrlInput.value.trim() });
+    });
+
+    function setStatus(text, type) {
+      statusEl.className = 'status ' + type;
+      statusEl.innerHTML = text;
+    }
+
+    connectBtn.addEventListener('click', async () => {
+      const backendUrl = backendUrlInput.value.trim().replace(/\/+$/, '');
+      if (!backendUrl) {
+        setStatus('Please enter a backend URL', 'error');
+        return;
+      }
+
+      // Save the URL
+      chrome.storage.local.set({ backendUrl });
+
+      connectBtn.disabled = true;
+      setStatus('<span class="spinner"></span> Collecting session data...', 'info');
+
+      try {
+        // 1. Get all Uber cookies via chrome.cookies API
+        const cookies = await chrome.cookies.getAll({ domain: '.uber.com' });
+
+        if (cookies.length === 0) {
+          setStatus('No Uber cookies found. Are you logged in to uber.com?', 'error');
+          connectBtn.disabled = false;
+          return;
+        }
+
+        // 2. Get the active tab
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+        if (!tab || !tab.url || !tab.url.includes('uber.com')) {
+          setStatus('Please navigate to an uber.com page first', 'error');
+          connectBtn.disabled = false;
+          return;
+        }
+
+        // 3. Extract localStorage and sessionStorage from the active tab
+        setStatus('<span class="spinner"></span> Extracting storage data...', 'info');
+
+        const injectionResults = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: () => {
+            const ls = {};
+            for (let i = 0; i < localStorage.length; i++) {
+              const key = localStorage.key(i);
+              ls[key] = localStorage.getItem(key);
+            }
+
+            const ss = {};
+            for (let i = 0; i < sessionStorage.length; i++) {
+              const key = sessionStorage.key(i);
+              ss[key] = sessionStorage.getItem(key);
+            }
+
+            return {
+              localStorage: ls,
+              sessionStorage: ss,
+              url: window.location.href,
+              userAgent: navigator.userAgent,
+            };
+          },
+        });
+
+        const storageData = injectionResults[0].result;
+
+        // 4. Package everything
+        const payload = {
+          cookies: cookies,
+          localStorage: storageData.localStorage,
+          sessionStorage: storageData.sessionStorage,
+          url: storageData.url,
+          userAgent: storageData.userAgent,
+          timestamp: new Date().toISOString(),
+        };
+
+        // 5. POST to backend
+        setStatus('<span class="spinner"></span> Sending to backend...', 'info');
+
+        const response = await fetch(backendUrl + '/api/profile/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(errText || response.statusText);
+        }
+
+        const result = await response.json();
+        setStatus(
+          'Connected! ' + cookies.length + ' cookies and storage data synced.',
+          'success'
+        );
+      } catch (err) {
+        setStatus('Error: ' + err.message, 'error');
+      } finally {
+        connectBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -8,7 +8,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -183,6 +183,41 @@ async def profile_status(profile_name: str = "default"):
         "connected": info["exists"],
         "profile_name": profile_name if info["exists"] else None,
         "last_saved": info.get("last_modified"),
+        "source": info.get("source"),
+    }
+
+
+@app.post("/api/profile/import")
+async def profile_import(request: Request):
+    """Import session data from the Chrome extension.
+
+    Receives cookies, localStorage, sessionStorage from the extension
+    and writes them into a profile directory. Cookies are saved in
+    Playwright-compatible format for injection at booking time.
+    """
+    try:
+        session_data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    profile_name = session_data.pop("profile_name", "default") if "profile_name" in session_data else "default"
+
+    cookies = session_data.get("cookies", [])
+    if not cookies:
+        raise HTTPException(status_code=400, detail="No cookies in payload")
+
+    try:
+        profile_mgr.import_session(profile_name, session_data)
+    except Exception as e:
+        logger.error("Failed to import session: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
+
+    logger.info("Imported session for profile '%s': %d cookies", profile_name, len(cookies))
+
+    return {
+        "status": "imported",
+        "profile_name": profile_name,
+        "cookie_count": len(cookies),
     }
 
 
@@ -239,6 +274,7 @@ async def booking_start(req: BookingStartRequest):
             sandbox_id=sandbox_id,
             cdp_url=cdp_url,
             progress_callback=on_progress,
+            profile_name=req.profile_name,
         )
     )
 
@@ -258,6 +294,7 @@ async def _run_booking(
     sandbox_id: str,
     cdp_url: str,
     progress_callback,
+    profile_name: str = "default",
 ):
     """Background task that runs the booking agent."""
     try:
@@ -269,6 +306,7 @@ async def _run_booking(
             cdp_url=cdp_url,
             booking_id=booking_id,
             progress_callback=progress_callback,
+            profile_name=profile_name,
         )
     except Exception as e:
         logger.error("Booking %s failed: %s", booking_id, e)

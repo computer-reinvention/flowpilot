@@ -1,8 +1,10 @@
 """Uber booking automation using browser-use."""
 
+import json
 import os
 import logging
 from enum import Enum
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Callable, Awaitable
 from datetime import datetime, timezone
@@ -10,6 +12,8 @@ from datetime import datetime, timezone
 from browser_use import Agent, Browser, BrowserConfig
 
 logger = logging.getLogger(__name__)
+
+PROFILES_DIR = Path(os.environ.get("PROFILES_DIR", "/app/profiles"))
 
 
 class BookingStatus(str, Enum):
@@ -103,6 +107,7 @@ class UberBookingAgent:
         cdp_url: str,
         booking_id: str,
         progress_callback: Callable[[BookingStatus, str], Awaitable[None]] | None = None,
+        profile_name: str = "default",
     ) -> dict:
         """Run the full Uber booking flow.
 
@@ -114,6 +119,7 @@ class UberBookingAgent:
             cdp_url: Chrome DevTools Protocol WebSocket URL to connect to.
             booking_id: Unique booking ID for tracking state.
             progress_callback: Async callback(status, message) for streaming progress.
+            profile_name: Profile to load cookies/storage from.
 
         Returns:
             Dict with booking result details.
@@ -139,6 +145,55 @@ class UberBookingAgent:
                     cdp_url=cdp_url,
                 )
             )
+
+            # Inject cookies from imported session if available
+            cookies_path = PROFILES_DIR / profile_name / "cookies.json"
+            session_path = PROFILES_DIR / profile_name / "session.json"
+
+            if cookies_path.exists():
+                try:
+                    cookies = json.loads(cookies_path.read_text())
+                    if cookies:
+                        context = await browser.browser.contexts[0] if hasattr(browser, 'browser') else None
+                        # browser-use exposes the playwright browser; inject cookies via context
+                        # We need to get a context and page after browser init
+                        pw_browser = await browser.get_playwright_browser()
+                        if pw_browser and pw_browser.contexts:
+                            ctx = pw_browser.contexts[0]
+                            await ctx.add_cookies(cookies)
+                            await _update(BookingStatus.NAVIGATING, f"Injected {len(cookies)} cookies from saved session")
+
+                            # Inject localStorage and sessionStorage if available
+                            if session_path.exists():
+                                session_data = json.loads(session_path.read_text())
+                                local_storage = session_data.get("localStorage", {})
+                                session_storage = session_data.get("sessionStorage", {})
+
+                                if local_storage or session_storage:
+                                    # Navigate to uber.com first so we can set storage on the right origin
+                                    page = ctx.pages[0] if ctx.pages else await ctx.new_page()
+                                    await page.goto("https://m.uber.com", wait_until="domcontentloaded", timeout=30000)
+
+                                    if local_storage:
+                                        await page.evaluate("""(items) => {
+                                            for (const [key, value] of Object.entries(items)) {
+                                                try { localStorage.setItem(key, value); } catch(e) {}
+                                            }
+                                        }""", local_storage)
+
+                                    if session_storage:
+                                        await page.evaluate("""(items) => {
+                                            for (const [key, value] of Object.entries(items)) {
+                                                try { sessionStorage.setItem(key, value); } catch(e) {}
+                                            }
+                                        }""", session_storage)
+
+                                    await _update(BookingStatus.NAVIGATING, "Injected localStorage/sessionStorage")
+                        else:
+                            logger.warning("Could not access browser contexts for cookie injection")
+                except Exception as e:
+                    logger.warning("Failed to inject session data: %s", e)
+                    await _update(BookingStatus.NAVIGATING, "Cookie injection failed, continuing without session")
 
             await _update(BookingStatus.NAVIGATING, "Connected. Launching booking agent...")
 

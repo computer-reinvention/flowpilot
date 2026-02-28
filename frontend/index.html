@@ -302,36 +302,39 @@
       <h1>uber<span>-bookr</span></h1>
     </div>
 
-    <!-- State 1: Not Connected -->
+    <!-- State 1: Not Connected — use Chrome extension -->
     <div id="connect-card" class="card hidden">
-      <!-- Phase A: Connect button -->
       <div id="connect-prompt">
-        <p class="text-center text-muted" style="margin-bottom: 24px;">
-          Connect your Uber account to get started
+        <p class="text-center" style="margin-bottom: 8px; font-size: 15px; font-weight: 600;">
+          Connect your Uber account
         </p>
-        <button id="connect-btn" class="btn btn-primary" onclick="startSandbox()">
-          Connect Uber
-        </button>
-      </div>
+        <p class="text-center text-muted" style="margin-bottom: 24px; line-height: 1.6;">
+          Install the uber-bookr Chrome extension, log in to
+          <a href="https://m.uber.com" target="_blank" style="color: #fff; text-decoration: underline;">uber.com</a>,
+          then click <strong style="color: #fff;">Connect</strong> in the extension popup.
+        </p>
 
-      <!-- Phase B: VNC + Save -->
-      <div id="connect-vnc" class="hidden">
-        <p class="text-center text-muted" style="margin-bottom: 12px;">
-          Log in to your Uber account in the browser below
-        </p>
-        <div class="vnc-wrapper">
-          <iframe id="connect-vnc-iframe" src="about:blank"></iframe>
+        <div style="background: #282828; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+          <p style="font-size: 13px; color: #afafaf; margin-bottom: 12px;">Setup steps:</p>
+          <ol style="font-size: 13px; color: #e2e2e2; padding-left: 20px; line-height: 2;">
+            <li>Open <code style="background: #1a1a1a; padding: 2px 6px; border-radius: 4px; font-size: 12px;">chrome://extensions</code></li>
+            <li>Enable Developer mode (top right)</li>
+            <li>Click "Load unpacked" and select the <code style="background: #1a1a1a; padding: 2px 6px; border-radius: 4px; font-size: 12px;">extension/</code> folder</li>
+            <li>Go to uber.com and log in</li>
+            <li>Click the extension icon and hit Connect</li>
+          </ol>
         </div>
-        <div class="spacer"></div>
-        <button id="save-btn" class="btn btn-success" onclick="saveProfile()">
-          Save &amp; Done
-        </button>
+
+        <div id="connect-waiting" style="text-align: center;">
+          <div class="spinner" style="margin: 0 auto 12px;"></div>
+          <p class="text-muted">Waiting for connection...</p>
+        </div>
       </div>
 
-      <!-- Phase C: Connected confirmation -->
+      <!-- Connected confirmation -->
       <div id="connect-done" class="hidden">
         <div class="status-connected">Uber Connected &#10003;</div>
-        <p class="text-center text-muted mt-12">Profile saved. You can now book rides.</p>
+        <p class="text-center text-muted mt-12">Session imported. You can now book rides.</p>
         <div class="spacer"></div>
         <button class="btn btn-primary" onclick="showBookingCard()">
           Book a Ride
@@ -415,8 +418,8 @@
     }
 
     // -- Initialization --
-    let sandboxInfo = null;
     let bookingVncVisible = false;
+    let pollTimer = null;
 
     async function init() {
       try {
@@ -428,50 +431,32 @@
         } else {
           show('connect-card');
           show('connect-prompt');
+          startPolling();
         }
       } catch (err) {
         hide('loading-card');
         show('connect-card');
         show('connect-prompt');
+        startPolling();
       }
     }
 
-    // -- Connect flow --
-    async function startSandbox() {
-      const btn = document.getElementById('connect-btn');
-      btn.disabled = true;
-      btn.textContent = 'Starting sandbox...';
-
-      try {
-        sandboxInfo = await api('POST', '/api/sandbox/start');
-        const vncUrl = sandboxInfo.novnc_url || sandboxInfo.vnc_url;
-        document.getElementById('connect-vnc-iframe').src = vncUrl;
-
-        hide('connect-prompt');
-        show('connect-vnc');
-      } catch (err) {
-        btn.disabled = false;
-        btn.textContent = 'Connect Uber';
-        alert('Failed to start sandbox: ' + err.message);
-      }
-    }
-
-    async function saveProfile() {
-      const btn = document.getElementById('save-btn');
-      btn.disabled = true;
-      btn.textContent = 'Saving profile...';
-
-      try {
-        await api('POST', '/api/profile/save', { sandbox_id: sandboxInfo.sandbox_id, profile_name: 'default' });
-        await api('POST', '/api/sandbox/stop', { sandbox_id: sandboxInfo.sandbox_id });
-
-        hide('connect-vnc');
-        show('connect-done');
-      } catch (err) {
-        btn.disabled = false;
-        btn.textContent = 'Save & Done';
-        alert('Failed to save profile: ' + err.message);
-      }
+    // -- Connect flow: poll for extension import --
+    function startPolling() {
+      if (pollTimer) return;
+      pollTimer = setInterval(async () => {
+        try {
+          const status = await api('GET', '/api/profile/status');
+          if (status.connected) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+            hide('connect-prompt');
+            show('connect-done');
+          }
+        } catch (err) {
+          // ignore — keep polling
+        }
+      }, 3000);
     }
 
     function showBookingCard() {

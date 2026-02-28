@@ -2,6 +2,7 @@
 
 import os
 import logging
+import json
 import tarfile
 import tempfile
 from datetime import datetime, timezone
@@ -122,33 +123,48 @@ class ProfileManager:
         return True
 
     def has_profile(self, profile_name: str) -> bool:
-        """Check if a saved profile exists."""
-        archive = self.profiles_dir / profile_name / "profile.tar.gz"
-        return archive.exists()
+        """Check if a saved profile exists (tar archive or imported cookies)."""
+        profile_dir = self.profiles_dir / profile_name
+        archive = profile_dir / "profile.tar.gz"
+        cookies = profile_dir / "cookies.json"
+        return archive.exists() or cookies.exists()
 
     def get_profile_info(self, profile_name: str) -> dict:
         """Get metadata about a saved profile.
 
         Returns:
-            Dict with name, exists, size_bytes, last_modified.
+            Dict with name, exists, size_bytes, last_modified, source (tar or extension).
         """
         profile_dir = self.profiles_dir / profile_name
         archive_path = profile_dir / "profile.tar.gz"
+        cookies_path = profile_dir / "cookies.json"
 
-        if not archive_path.exists():
+        # Check tar archive first, then cookies.json from extension import
+        check_path = None
+        source = None
+        if archive_path.exists():
+            check_path = archive_path
+            source = "tar"
+        elif cookies_path.exists():
+            check_path = cookies_path
+            source = "extension"
+
+        if check_path is None:
             return {
                 "name": profile_name,
                 "exists": False,
                 "size_bytes": None,
                 "last_modified": None,
+                "source": None,
             }
 
-        stat = archive_path.stat()
+        stat = check_path.stat()
         return {
             "name": profile_name,
             "exists": True,
             "size_bytes": stat.st_size,
             "last_modified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+            "source": source,
         }
 
     def list_profiles(self) -> list[dict]:
@@ -158,7 +174,108 @@ class ProfileManager:
             return profiles
 
         for entry in sorted(self.profiles_dir.iterdir()):
-            if entry.is_dir() and (entry / "profile.tar.gz").exists():
+            if entry.is_dir() and ((entry / "profile.tar.gz").exists() or (entry / "cookies.json").exists()):
                 profiles.append(self.get_profile_info(entry.name))
 
         return profiles
+
+    # ------------------------------------------------------------------
+    # Extension-based session import
+    # ------------------------------------------------------------------
+
+    def import_session(self, profile_name: str, session_data: dict) -> Path:
+        """Import session data captured by the Chrome extension.
+
+        Saves cookies as cookies.json (compatible with Playwright add_cookies)
+        and the full session payload as session.json.
+
+        Args:
+            profile_name: Name to save the profile under.
+            session_data: Dict with cookies, localStorage, sessionStorage, url, userAgent, timestamp.
+
+        Returns:
+            Path to the profile directory.
+        """
+        profile_dir = self.profiles_dir / profile_name
+        profile_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save cookies as a list suitable for Playwright's add_cookies()
+        raw_cookies = session_data.get("cookies", [])
+        playwright_cookies = []
+        for c in raw_cookies:
+            cookie = {
+                "name": c.get("name", ""),
+                "value": c.get("value", ""),
+                "domain": c.get("domain", ""),
+                "path": c.get("path", "/"),
+            }
+            # Playwright wants 'url' or 'domain'. Domain from Chrome cookies API starts with '.'
+            # which Playwright handles fine.
+            if c.get("secure"):
+                cookie["secure"] = True
+            if c.get("httpOnly"):
+                cookie["httpOnly"] = True
+            if c.get("sameSite"):
+                # Chrome uses "lax"/"strict"/"no_restriction"; Playwright uses "Lax"/"Strict"/"None"
+                sam = c["sameSite"].lower()
+                if sam == "no_restriction":
+                    cookie["sameSite"] = "None"
+                elif sam == "lax":
+                    cookie["sameSite"] = "Lax"
+                elif sam == "strict":
+                    cookie["sameSite"] = "Strict"
+            if c.get("expirationDate"):
+                cookie["expires"] = c["expirationDate"]
+            playwright_cookies.append(cookie)
+
+        cookies_path = profile_dir / "cookies.json"
+        cookies_path.write_text(json.dumps(playwright_cookies, indent=2))
+
+        # Save full session data as backup
+        session_path = profile_dir / "session.json"
+        session_path.write_text(json.dumps(session_data, indent=2))
+
+        # Write metadata
+        meta_path = profile_dir / "metadata.txt"
+        meta_path.write_text(
+            f"profile_name={profile_name}\n"
+            f"source=extension\n"
+            f"imported_at={datetime.now(timezone.utc).isoformat()}\n"
+            f"url={session_data.get('url', '')}\n"
+            f"cookie_count={len(playwright_cookies)}\n"
+        )
+
+        logger.info(
+            "Imported session for profile '%s': %d cookies, %d localStorage keys, %d sessionStorage keys",
+            profile_name,
+            len(playwright_cookies),
+            len(session_data.get("localStorage", {})),
+            len(session_data.get("sessionStorage", {})),
+        )
+        return profile_dir
+
+    def get_session_cookies(self, profile_name: str) -> list[dict] | None:
+        """Load cookies from an imported session profile.
+
+        Returns:
+            List of cookie dicts suitable for Playwright's add_cookies(), or None if not found.
+        """
+        cookies_path = self.profiles_dir / profile_name / "cookies.json"
+        if not cookies_path.exists():
+            return None
+        return json.loads(cookies_path.read_text())
+
+    def get_session_storage(self, profile_name: str) -> dict | None:
+        """Load localStorage and sessionStorage from an imported session profile.
+
+        Returns:
+            Dict with 'localStorage' and 'sessionStorage' keys, or None if not found.
+        """
+        session_path = self.profiles_dir / profile_name / "session.json"
+        if not session_path.exists():
+            return None
+        data = json.loads(session_path.read_text())
+        return {
+            "localStorage": data.get("localStorage", {}),
+            "sessionStorage": data.get("sessionStorage", {}),
+        }
