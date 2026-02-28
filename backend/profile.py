@@ -23,7 +23,13 @@ class ProfileManager:
     def __init__(self, profiles_dir: Path | None = None):
         self.profiles_dir = profiles_dir or PROFILES_DIR
         self.profiles_dir.mkdir(parents=True, exist_ok=True)
-        self.client = docker.from_env()
+        self._client = None
+
+    @property
+    def client(self):
+        if self._client is None:
+            self._client = docker.from_env()
+        return self._client
 
     def save_profile(self, sandbox_id: str, profile_name: str) -> Path:
         """Extract the Chrome profile directory from a running container and save as tar.gz.

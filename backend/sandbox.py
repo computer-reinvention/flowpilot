@@ -28,9 +28,15 @@ class SandboxManager:
     """Manages Docker containers that run headless Chromium + noVNC."""
 
     def __init__(self, profiles_host_dir: str = "/app/profiles"):
-        self.client = docker.from_env()
+        self._client = None
         self.profiles_host_dir = profiles_host_dir
         self._sandboxes: dict[str, SandboxInfo] = {}
+
+    @property
+    def client(self):
+        if self._client is None:
+            self._client = docker.from_env()
+        return self._client
 
     def start(self, profile_path: str | None = None) -> dict:
         """Create and start a new sandbox container.
