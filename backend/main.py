@@ -8,7 +8,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from .sandbox import SandboxManager
 from .profile import ProfileManager
 from .booking import UberBookingAgent, BookingStatus, get_booking
+from . import auth
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ _ws_connections: dict[str, list[WebSocket]] = {}  # booking_id -> [websocket, ..
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     PROFILES_DIR.mkdir(parents=True, exist_ok=True)
+    await auth.init_db()
     logger.info("uber-bookr backend starting. Profiles dir: %s", PROFILES_DIR)
     yield
     logger.info("uber-bookr backend shutting down.")
@@ -62,7 +64,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="uber-bookr",
     description="Self-hosted browser automation for Uber booking",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
@@ -79,6 +81,17 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Request / Response models
 # ---------------------------------------------------------------------------
+
+class SignupRequest(BaseModel):
+    email: str
+    password: str
+    name: str
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
 
 class SandboxStartRequest(BaseModel):
     profile_name: str | None = None
@@ -101,7 +114,7 @@ class BookingStartRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Health
+# Health (no auth)
 # ---------------------------------------------------------------------------
 
 @app.get("/health")
@@ -110,38 +123,75 @@ async def health():
 
 
 # ---------------------------------------------------------------------------
-# Sandbox endpoints
+# Auth endpoints (no auth required)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/auth/signup")
+async def signup(req: SignupRequest):
+    """Create a new user account."""
+    if not req.email or not req.password or not req.name:
+        raise HTTPException(status_code=400, detail="email, password, and name are required")
+    if len(req.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    try:
+        user = await auth.create_user(req.email, req.password, req.name)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+    token = auth.create_token(user["id"])
+    return {"token": token, "user": user}
+
+
+@app.post("/api/auth/login")
+async def login(req: LoginRequest):
+    """Log in with email and password."""
+    user = await auth.authenticate(req.email, req.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    token = auth.create_token(user["id"])
+    return {"token": token, "user": user}
+
+
+@app.get("/api/auth/me")
+async def auth_me(user: dict = Depends(auth.get_current_user)):
+    """Get current user info."""
+    return {"user": user}
+
+
+# ---------------------------------------------------------------------------
+# Sandbox endpoints (auth required)
 # ---------------------------------------------------------------------------
 
 @app.post("/api/sandbox/start")
-async def sandbox_start(req: SandboxStartRequest):
-    """Start a new browser sandbox container.
+async def sandbox_start(req: SandboxStartRequest, user: dict = Depends(auth.get_current_user)):
+    """Start a new browser sandbox container."""
+    user_id = user["id"]
+    profile_name = req.profile_name or "default"
+    profile_path_key = f"{user_id}/{profile_name}"
 
-    If a saved profile exists for the given profile_name, it will be restored
-    into the sandbox so the user's Uber login session persists.
-    """
     profile_path = None
-    if req.profile_name and profile_mgr.has_profile(req.profile_name):
-        profile_path = str(PROFILES_DIR / req.profile_name)
-        logger.info("Will restore profile '%s' into new sandbox", req.profile_name)
+    if profile_mgr.has_profile(user_id, profile_name):
+        profile_path = str(PROFILES_DIR / user_id / profile_name)
+        logger.info("Will restore profile '%s' for user %s into new sandbox", profile_name, user_id)
 
     try:
         result = sandbox_mgr.start(profile_path=profile_path)
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    # Also do tar-based profile restore for full fidelity
-    if req.profile_name and profile_mgr.has_profile(req.profile_name):
+    if profile_mgr.has_profile(user_id, profile_name):
         try:
-            profile_mgr.restore_profile(req.profile_name, result["sandbox_id"])
+            profile_mgr.restore_profile(user_id, profile_name, result["sandbox_id"])
         except Exception as e:
-            logger.warning("Tar-based profile restore failed (file-copy may have succeeded): %s", e)
+            logger.warning("Tar-based profile restore failed: %s", e)
 
     return result
 
 
 @app.post("/api/sandbox/stop")
-async def sandbox_stop(req: SandboxStopRequest):
+async def sandbox_stop(req: SandboxStopRequest, user: dict = Depends(auth.get_current_user)):
     """Stop and remove a sandbox container."""
     try:
         sandbox_mgr.stop(req.sandbox_id)
@@ -154,14 +204,15 @@ async def sandbox_stop(req: SandboxStopRequest):
 
 
 # ---------------------------------------------------------------------------
-# Profile endpoints
+# Profile endpoints (auth required)
 # ---------------------------------------------------------------------------
 
 @app.post("/api/profile/save")
-async def profile_save(req: ProfileSaveRequest):
+async def profile_save(req: ProfileSaveRequest, user: dict = Depends(auth.get_current_user)):
     """Save the browser profile from a running sandbox to host storage."""
+    user_id = user["id"]
     try:
-        saved_path = profile_mgr.save_profile(req.sandbox_id, req.profile_name)
+        saved_path = profile_mgr.save_profile(req.sandbox_id, req.profile_name, user_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except RuntimeError as e:
@@ -175,9 +226,10 @@ async def profile_save(req: ProfileSaveRequest):
 
 
 @app.get("/api/profile/status")
-async def profile_status(profile_name: str = "default"):
+async def profile_status(profile_name: str = "default", user: dict = Depends(auth.get_current_user)):
     """Check if a saved profile exists and return its metadata."""
-    info = profile_mgr.get_profile_info(profile_name)
+    user_id = user["id"]
+    info = profile_mgr.get_profile_info(user_id, profile_name)
 
     return {
         "connected": info["exists"],
@@ -188,13 +240,9 @@ async def profile_status(profile_name: str = "default"):
 
 
 @app.post("/api/profile/import")
-async def profile_import(request: Request):
-    """Import session data from the Chrome extension.
-
-    Receives cookies, localStorage, sessionStorage from the extension
-    and writes them into a profile directory. Cookies are saved in
-    Playwright-compatible format for injection at booking time.
-    """
+async def profile_import(request: Request, user: dict = Depends(auth.get_current_user)):
+    """Import session data from the Chrome extension."""
+    user_id = user["id"]
     try:
         session_data = await request.json()
     except Exception:
@@ -207,12 +255,12 @@ async def profile_import(request: Request):
         raise HTTPException(status_code=400, detail="No cookies in payload")
 
     try:
-        profile_mgr.import_session(profile_name, session_data)
+        profile_mgr.import_session(user_id, profile_name, session_data)
     except Exception as e:
         logger.error("Failed to import session: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
 
-    logger.info("Imported session for profile '%s': %d cookies", profile_name, len(cookies))
+    logger.info("Imported session for user %s profile '%s': %d cookies", user_id, profile_name, len(cookies))
 
     return {
         "status": "imported",
@@ -222,23 +270,19 @@ async def profile_import(request: Request):
 
 
 # ---------------------------------------------------------------------------
-# Booking endpoints
+# Booking endpoints (auth required)
 # ---------------------------------------------------------------------------
 
 @app.post("/api/booking/start")
-async def booking_start(req: BookingStartRequest):
-    """Start an Uber booking.
-
-    Spins up a sandbox with the saved profile, then runs the browser-use agent
-    to automate the booking. Progress is streamed via WebSocket at
-    /ws/booking/{booking_id}.
-    """
+async def booking_start(req: BookingStartRequest, user: dict = Depends(auth.get_current_user)):
+    """Start an Uber booking."""
+    user_id = user["id"]
     booking_id = str(uuid.uuid4())[:12]
+    profile_name = req.profile_name or "default"
 
-    # Start a sandbox with the user's saved profile
     profile_path = None
-    if profile_mgr.has_profile(req.profile_name):
-        profile_path = str(PROFILES_DIR / req.profile_name)
+    if profile_mgr.has_profile(user_id, profile_name):
+        profile_path = str(PROFILES_DIR / user_id / profile_name)
 
     try:
         sandbox_result = sandbox_mgr.start(profile_path=profile_path)
@@ -248,14 +292,12 @@ async def booking_start(req: BookingStartRequest):
     sandbox_id = sandbox_result["sandbox_id"]
     cdp_url = sandbox_result.get("cdp_url", "ws://localhost:9222")
 
-    # Restore full profile via tar if available
-    if profile_mgr.has_profile(req.profile_name):
+    if profile_mgr.has_profile(user_id, profile_name):
         try:
-            profile_mgr.restore_profile(req.profile_name, sandbox_id)
+            profile_mgr.restore_profile(user_id, profile_name, sandbox_id)
         except Exception as e:
             logger.warning("Profile restore failed: %s", e)
 
-    # Progress callback that broadcasts to WebSocket clients
     async def on_progress(status: BookingStatus, message: str):
         await _broadcast_booking_progress(booking_id, {
             "booking_id": booking_id,
@@ -264,7 +306,6 @@ async def booking_start(req: BookingStartRequest):
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
-    # Run the booking in the background so the HTTP response returns immediately
     asyncio.create_task(
         _run_booking(
             booking_id=booking_id,
@@ -274,7 +315,8 @@ async def booking_start(req: BookingStartRequest):
             sandbox_id=sandbox_id,
             cdp_url=cdp_url,
             progress_callback=on_progress,
-            profile_name=req.profile_name,
+            user_id=user_id,
+            profile_name=profile_name,
         )
     )
 
@@ -294,6 +336,7 @@ async def _run_booking(
     sandbox_id: str,
     cdp_url: str,
     progress_callback,
+    user_id: str,
     profile_name: str = "default",
 ):
     """Background task that runs the booking agent."""
@@ -306,6 +349,7 @@ async def _run_booking(
             cdp_url=cdp_url,
             booking_id=booking_id,
             progress_callback=progress_callback,
+            user_id=user_id,
             profile_name=profile_name,
         )
     except Exception as e:
@@ -319,7 +363,7 @@ async def _run_booking(
 
 
 @app.get("/api/booking/{booking_id}/status")
-async def booking_status(booking_id: str):
+async def booking_status(booking_id: str, user: dict = Depends(auth.get_current_user)):
     """Get the current status of a booking."""
     state = get_booking(booking_id)
     if not state:
@@ -341,12 +385,7 @@ async def booking_status(booking_id: str):
 
 @app.websocket("/ws/booking/{booking_id}")
 async def ws_booking(websocket: WebSocket, booking_id: str):
-    """Real-time booking progress updates.
-
-    Clients connect here before or after calling POST /api/booking/start.
-    The server pushes JSON messages as the booking progresses.
-    Send "ping" to receive "pong" as a heartbeat.
-    """
+    """Real-time booking progress updates."""
     await websocket.accept()
 
     if booking_id not in _ws_connections:
@@ -356,7 +395,6 @@ async def ws_booking(websocket: WebSocket, booking_id: str):
     logger.info("WebSocket client connected for booking %s", booking_id)
 
     try:
-        # Send current state if booking already exists
         state = get_booking(booking_id)
         if state:
             await websocket.send_json({
@@ -367,7 +405,6 @@ async def ws_booking(websocket: WebSocket, booking_id: str):
                 "error": state.error,
             })
 
-        # Keep connection alive — progress_callback pushes updates
         while True:
             data = await websocket.receive_text()
             if data == "ping":

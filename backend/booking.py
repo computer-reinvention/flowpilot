@@ -61,13 +61,7 @@ def get_booking(booking_id: str) -> BookingState | None:
 
 
 def _get_llm():
-    """Create the LLM instance based on LLM_PROVIDER env var.
-
-    Supported providers:
-      - gemini (default): uses GOOGLE_API_KEY
-      - claude / anthropic: uses ANTHROPIC_API_KEY
-      - openai: uses OPENAI_API_KEY
-    """
+    """Create the LLM instance based on LLM_PROVIDER env var."""
     provider = os.environ.get("LLM_PROVIDER", "gemini").lower()
 
     if provider == "gemini":
@@ -107,23 +101,10 @@ class UberBookingAgent:
         cdp_url: str,
         booking_id: str,
         progress_callback: Callable[[BookingStatus, str], Awaitable[None]] | None = None,
+        user_id: str = "",
         profile_name: str = "default",
     ) -> dict:
-        """Run the full Uber booking flow.
-
-        Args:
-            pickup: Pickup address or location name.
-            dropoff: Dropoff address or location name.
-            ride_type: Uber ride type (e.g. UberGo, Premier, Auto).
-            sandbox_id: The sandbox container ID for context.
-            cdp_url: Chrome DevTools Protocol WebSocket URL to connect to.
-            booking_id: Unique booking ID for tracking state.
-            progress_callback: Async callback(status, message) for streaming progress.
-            profile_name: Profile to load cookies/storage from.
-
-        Returns:
-            Dict with booking result details.
-        """
+        """Run the full Uber booking flow."""
         state = BookingState(booking_id=booking_id)
         _bookings[booking_id] = state
 
@@ -139,10 +120,11 @@ class UberBookingAgent:
         try:
             await _update(BookingStatus.CONNECTING, "Connecting to sandbox browser via CDP")
 
-            # Build storage_state from saved session before creating Browser
+            # Build storage_state from saved session — paths include user_id
             storage_state = None
-            cookies_path = PROFILES_DIR / profile_name / "cookies.json"
-            session_path = PROFILES_DIR / profile_name / "session.json"
+            profile_base = PROFILES_DIR / user_id / profile_name if user_id else PROFILES_DIR / profile_name
+            cookies_path = profile_base / "cookies.json"
+            session_path = profile_base / "session.json"
 
             if cookies_path.exists():
                 cookies = json.loads(cookies_path.read_text())
@@ -156,7 +138,6 @@ class UberBookingAgent:
                             "localStorage": [{"name": k, "value": v} for k, v in local_storage.items()],
                         })
 
-            # Connect to the sandbox browser via Chrome DevTools Protocol
             browser = Browser(cdp_url=cdp_url, storage_state=storage_state)
 
             if storage_state:
@@ -184,7 +165,6 @@ class UberBookingAgent:
 
             await _update(BookingStatus.ENTERING_PICKUP, f"Agent running: entering pickup '{pickup}'")
 
-            # Run the browser-use agent — it handles all the intermediate steps
             result = await agent.run()
 
             await _update(BookingStatus.COMPLETED, "Booking completed successfully")
@@ -207,7 +187,6 @@ class UberBookingAgent:
             raise
 
         finally:
-            # Try to close the browser connection gracefully
             try:
                 if "browser" in locals():
                     await browser.close()

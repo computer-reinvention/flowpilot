@@ -91,6 +91,17 @@
       background: #e2e2e2;
     }
 
+    .btn-outline {
+      background: transparent;
+      color: #fff;
+      border: 1px solid #6b6b6b;
+      margin-top: 8px;
+    }
+
+    .btn-outline:hover:not(:disabled) {
+      border-color: #fff;
+    }
+
     .status {
       text-align: center;
       margin-top: 16px;
@@ -118,6 +129,10 @@
       line-height: 1.5;
     }
 
+    .hidden {
+      display: none;
+    }
+
     .spinner {
       display: inline-block;
       width: 14px;
@@ -133,6 +148,34 @@
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
+
+    .logged-in-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: #1a1a1a;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      font-size: 13px;
+    }
+
+    .logged-in-bar .name {
+      color: #e2e2e2;
+    }
+
+    .logged-in-bar .logout-link {
+      background: none;
+      border: none;
+      color: #6b6b6b;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: inherit;
+    }
+
+    .logged-in-bar .logout-link:hover {
+      color: #fff;
+    }
   </style>
 </head>
 <body>
@@ -140,78 +183,206 @@
     <h1>uber<span>-bookr</span></h1>
   </div>
 
-  <div class="input-group">
-    <label>Backend URL</label>
-    <input type="text" id="backend-url" placeholder="http://localhost:8080" />
+  <!-- Auth section -->
+  <div id="auth-section">
+    <div class="input-group">
+      <label>Backend URL</label>
+      <input type="text" id="backend-url" placeholder="http://localhost:8080" />
+    </div>
+
+    <div class="input-group">
+      <label>Email</label>
+      <input type="email" id="auth-email" placeholder="you@example.com" />
+    </div>
+
+    <div class="input-group">
+      <label>Password</label>
+      <input type="password" id="auth-password" placeholder="Password" />
+    </div>
+
+    <button class="btn btn-primary" id="login-btn">Log in & Connect</button>
+
+    <div class="status" id="auth-status"></div>
+
+    <div class="hint">
+      Log in to your uber-bookr account, then your Uber session will be synced automatically.
+    </div>
   </div>
 
-  <button class="btn btn-primary" id="connect-btn">Connect</button>
+  <!-- Connected section (shown after auth + sync) -->
+  <div id="connected-section" class="hidden">
+    <div class="logged-in-bar">
+      <span class="name" id="connected-user-name"></span>
+      <button class="logout-link" id="ext-logout-btn">Log out</button>
+    </div>
 
-  <div class="status" id="status"></div>
+    <button class="btn btn-primary" id="resync-btn">Re-sync Uber Session</button>
 
-  <div class="hint">
-    Navigate to any uber.com page and click Connect to sync your session.
+    <div class="status" id="connect-status"></div>
+
+    <div class="hint">
+      Navigate to any uber.com page and click Re-sync to update your session.
+    </div>
   </div>
 
   <script>
     const backendUrlInput = document.getElementById('backend-url');
-    const connectBtn = document.getElementById('connect-btn');
-    const statusEl = document.getElementById('status');
+    const authEmailInput = document.getElementById('auth-email');
+    const authPasswordInput = document.getElementById('auth-password');
+    const loginBtn = document.getElementById('login-btn');
+    const authStatusEl = document.getElementById('auth-status');
 
-    // Load saved backend URL
-    chrome.storage.local.get(['backendUrl'], (result) => {
+    const connectedSection = document.getElementById('connected-section');
+    const authSection = document.getElementById('auth-section');
+    const connectedUserName = document.getElementById('connected-user-name');
+    const resyncBtn = document.getElementById('resync-btn');
+    const connectStatusEl = document.getElementById('connect-status');
+    const extLogoutBtn = document.getElementById('ext-logout-btn');
+
+    let savedToken = '';
+    let savedBackendUrl = '';
+
+    // Load saved state
+    chrome.storage.local.get(['backendUrl', 'authToken', 'userName'], (result) => {
       if (result.backendUrl) {
         backendUrlInput.value = result.backendUrl;
+        savedBackendUrl = result.backendUrl;
       } else {
         backendUrlInput.value = 'http://localhost:8080';
       }
+
+      if (result.authToken) {
+        savedToken = result.authToken;
+        // Verify token is still valid
+        verifyAndShowConnected(result.backendUrl || 'http://localhost:8080', result.authToken, result.userName || '');
+      }
     });
 
-    // Save backend URL on change
     backendUrlInput.addEventListener('change', () => {
       chrome.storage.local.set({ backendUrl: backendUrlInput.value.trim() });
     });
 
-    function setStatus(text, type) {
-      statusEl.className = 'status ' + type;
-      statusEl.innerHTML = text;
+    function setAuthStatus(text, type) {
+      authStatusEl.className = 'status ' + type;
+      authStatusEl.innerHTML = text;
     }
 
-    connectBtn.addEventListener('click', async () => {
+    function setConnectStatus(text, type) {
+      connectStatusEl.className = 'status ' + type;
+      connectStatusEl.innerHTML = text;
+    }
+
+    async function verifyAndShowConnected(backendUrl, token, userName) {
+      try {
+        const res = await fetch(backendUrl.replace(/\/+$/, '') + '/api/auth/me', {
+          headers: { 'Authorization': 'Bearer ' + token },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          savedToken = token;
+          savedBackendUrl = backendUrl;
+          connectedUserName.textContent = data.user.name;
+          authSection.classList.add('hidden');
+          connectedSection.classList.remove('hidden');
+        }
+      } catch (e) {
+        // Token invalid, stay on login
+      }
+    }
+
+    loginBtn.addEventListener('click', async () => {
       const backendUrl = backendUrlInput.value.trim().replace(/\/+$/, '');
+      const email = authEmailInput.value.trim();
+      const password = authPasswordInput.value;
+
       if (!backendUrl) {
-        setStatus('Please enter a backend URL', 'error');
+        setAuthStatus('Please enter a backend URL', 'error');
+        return;
+      }
+      if (!email || !password) {
+        setAuthStatus('Please enter email and password', 'error');
         return;
       }
 
-      // Save the URL
-      chrome.storage.local.set({ backendUrl });
-
-      connectBtn.disabled = true;
-      setStatus('<span class="spinner"></span> Collecting session data...', 'info');
+      loginBtn.disabled = true;
+      setAuthStatus('<span class="spinner"></span> Logging in...', 'info');
 
       try {
-        // 1. Get all Uber cookies via chrome.cookies API
-        const cookies = await chrome.cookies.getAll({ domain: '.uber.com' });
+        const res = await fetch(backendUrl + '/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
 
-        if (cookies.length === 0) {
-          setStatus('No Uber cookies found. Are you logged in to uber.com?', 'error');
-          connectBtn.disabled = false;
-          return;
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({ detail: res.statusText }));
+          throw new Error(errData.detail || 'Login failed');
         }
 
-        // 2. Get the active tab
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        const data = await res.json();
+        savedToken = data.token;
+        savedBackendUrl = backendUrl;
 
-        if (!tab || !tab.url || !tab.url.includes('uber.com')) {
-          setStatus('Please navigate to an uber.com page first', 'error');
-          connectBtn.disabled = false;
-          return;
-        }
+        chrome.storage.local.set({
+          backendUrl: backendUrl,
+          authToken: data.token,
+          userName: data.user.name,
+        });
 
-        // 3. Extract localStorage and sessionStorage from the active tab
-        setStatus('<span class="spinner"></span> Extracting storage data...', 'info');
+        connectedUserName.textContent = data.user.name;
 
+        // Now auto-sync Uber session
+        setAuthStatus('<span class="spinner"></span> Syncing Uber session...', 'info');
+        await captureAndSendSession(backendUrl, data.token);
+
+        authSection.classList.add('hidden');
+        connectedSection.classList.remove('hidden');
+        setConnectStatus('Logged in and session synced!', 'success');
+      } catch (err) {
+        setAuthStatus('Error: ' + err.message, 'error');
+      } finally {
+        loginBtn.disabled = false;
+      }
+    });
+
+    resyncBtn.addEventListener('click', async () => {
+      resyncBtn.disabled = true;
+      setConnectStatus('<span class="spinner"></span> Syncing session...', 'info');
+
+      try {
+        await captureAndSendSession(savedBackendUrl, savedToken);
+        setConnectStatus('Session synced!', 'success');
+      } catch (err) {
+        setConnectStatus('Error: ' + err.message, 'error');
+      } finally {
+        resyncBtn.disabled = false;
+      }
+    });
+
+    extLogoutBtn.addEventListener('click', () => {
+      savedToken = '';
+      savedBackendUrl = '';
+      chrome.storage.local.remove(['authToken', 'userName']);
+      connectedSection.classList.add('hidden');
+      authSection.classList.remove('hidden');
+      authPasswordInput.value = '';
+      setAuthStatus('', '');
+    });
+
+    async function captureAndSendSession(backendUrl, token) {
+      // 1. Get all Uber cookies
+      const cookies = await chrome.cookies.getAll({ domain: '.uber.com' });
+
+      if (cookies.length === 0) {
+        throw new Error('No Uber cookies found. Are you logged in to uber.com?');
+      }
+
+      // 2. Get the active tab
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+      let storageData = { localStorage: {}, sessionStorage: {}, url: '', userAgent: '' };
+
+      if (tab && tab.url && tab.url.includes('uber.com')) {
         const injectionResults = await chrome.scripting.executeScript({
           target: { tabId: tab.id },
           func: () => {
@@ -220,13 +391,11 @@
               const key = localStorage.key(i);
               ls[key] = localStorage.getItem(key);
             }
-
             const ss = {};
             for (let i = 0; i < sessionStorage.length; i++) {
               const key = sessionStorage.key(i);
               ss[key] = sessionStorage.getItem(key);
             }
-
             return {
               localStorage: ls,
               sessionStorage: ss,
@@ -235,44 +404,35 @@
             };
           },
         });
-
-        const storageData = injectionResults[0].result;
-
-        // 4. Package everything
-        const payload = {
-          cookies: cookies,
-          localStorage: storageData.localStorage,
-          sessionStorage: storageData.sessionStorage,
-          url: storageData.url,
-          userAgent: storageData.userAgent,
-          timestamp: new Date().toISOString(),
-        };
-
-        // 5. POST to backend
-        setStatus('<span class="spinner"></span> Sending to backend...', 'info');
-
-        const response = await fetch(backendUrl + '/api/profile/import', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-          const errText = await response.text();
-          throw new Error(errText || response.statusText);
-        }
-
-        const result = await response.json();
-        setStatus(
-          'Connected! ' + cookies.length + ' cookies and storage data synced.',
-          'success'
-        );
-      } catch (err) {
-        setStatus('Error: ' + err.message, 'error');
-      } finally {
-        connectBtn.disabled = false;
+        storageData = injectionResults[0].result;
       }
-    });
+
+      // 3. Package and send
+      const payload = {
+        cookies: cookies,
+        localStorage: storageData.localStorage,
+        sessionStorage: storageData.sessionStorage,
+        url: storageData.url,
+        userAgent: storageData.userAgent,
+        timestamp: new Date().toISOString(),
+      };
+
+      const response = await fetch(backendUrl.replace(/\/+$/, '') + '/api/profile/import', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || response.statusText);
+      }
+
+      return await response.json();
+    }
   </script>
 </body>
 </html>

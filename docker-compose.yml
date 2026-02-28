@@ -14,3 +14,4 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
       - PROFILES_DIR=/app/profiles
+      - JWT_SECRET=${JWT_SECRET:-}

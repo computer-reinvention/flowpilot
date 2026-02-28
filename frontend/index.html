@@ -130,10 +130,33 @@
       border-color: var(--white);
     }
 
+    .btn-text {
+      background: none;
+      border: none;
+      color: var(--gray-400);
+      cursor: pointer;
+      font-size: 14px;
+      font-family: inherit;
+      padding: 8px;
+      transition: color var(--transition);
+    }
+
+    .btn-text:hover {
+      color: var(--white);
+    }
+
     /* -- Inputs -------------------------------------- */
 
     .input-group {
       margin-bottom: 16px;
+    }
+
+    .input-group label {
+      display: block;
+      font-size: 12px;
+      color: var(--gray-400);
+      margin-bottom: 6px;
+      font-weight: 500;
     }
 
     .input-group input {
@@ -263,6 +286,51 @@
       color: var(--white);
     }
 
+    /* -- User bar ------------------------------------ */
+
+    .user-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding: 12px 16px;
+      background: var(--gray-900);
+      border-radius: var(--radius);
+      font-size: 14px;
+    }
+
+    .user-bar .user-name {
+      color: var(--gray-200);
+    }
+
+    .user-bar .logout-btn {
+      background: none;
+      border: none;
+      color: var(--gray-400);
+      cursor: pointer;
+      font-size: 13px;
+      font-family: inherit;
+      padding: 4px 12px;
+      border-radius: 500px;
+      border: 1px solid var(--gray-600);
+      transition: all var(--transition);
+    }
+
+    .user-bar .logout-btn:hover {
+      color: var(--white);
+      border-color: var(--white);
+    }
+
+    /* -- Auth error ---------------------------------- */
+
+    .auth-error {
+      color: var(--red);
+      font-size: 13px;
+      text-align: center;
+      margin-top: 12px;
+      min-height: 20px;
+    }
+
     /* -- Misc ---------------------------------------- */
 
     .spacer {
@@ -300,6 +368,50 @@
   <div class="container">
     <div class="logo">
       <h1>uber<span>-bookr</span></h1>
+    </div>
+
+    <!-- Auth: Login / Signup -->
+    <div id="auth-card" class="card hidden">
+      <div id="auth-login">
+        <p class="text-center" style="margin-bottom: 24px; font-size: 18px; font-weight: 600;">Log in</p>
+        <div class="input-group">
+          <input type="email" id="login-email" placeholder="Email" autocomplete="email" />
+        </div>
+        <div class="input-group">
+          <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" />
+        </div>
+        <div class="spacer"></div>
+        <button class="btn btn-primary" id="login-btn" onclick="doLogin()">Log in</button>
+        <div class="auth-error" id="login-error"></div>
+        <div class="text-center mt-12">
+          <button class="btn-text" onclick="showSignup()">Don't have an account? Sign up</button>
+        </div>
+      </div>
+
+      <div id="auth-signup" class="hidden">
+        <p class="text-center" style="margin-bottom: 24px; font-size: 18px; font-weight: 600;">Create account</p>
+        <div class="input-group">
+          <input type="text" id="signup-name" placeholder="Name" autocomplete="name" />
+        </div>
+        <div class="input-group">
+          <input type="email" id="signup-email" placeholder="Email" autocomplete="email" />
+        </div>
+        <div class="input-group">
+          <input type="password" id="signup-password" placeholder="Password (min 6 chars)" autocomplete="new-password" />
+        </div>
+        <div class="spacer"></div>
+        <button class="btn btn-primary" id="signup-btn" onclick="doSignup()">Sign up</button>
+        <div class="auth-error" id="signup-error"></div>
+        <div class="text-center mt-12">
+          <button class="btn-text" onclick="showLogin()">Already have an account? Log in</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- User bar (shown when logged in) -->
+    <div id="user-bar" class="user-bar hidden">
+      <span class="user-name" id="user-display-name"></span>
+      <button class="logout-btn" onclick="doLogout()">Log out</button>
     </div>
 
     <!-- State 1: Not Connected — use Chrome extension -->
@@ -387,6 +499,10 @@
   </div>
 
   <script>
+    // -- Auth state --
+    let authToken = localStorage.getItem('uber_bookr_token');
+    let currentUser = null;
+
     // -- API helpers --
     const API = '';
 
@@ -395,11 +511,19 @@
         method,
         headers: { 'Content-Type': 'application/json' },
       };
+      if (authToken) {
+        opts.headers['Authorization'] = 'Bearer ' + authToken;
+      }
       if (body) opts.body = JSON.stringify(body);
       const res = await fetch(API + path, opts);
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(text || res.statusText);
+        let detail = text;
+        try {
+          const json = JSON.parse(text);
+          detail = json.detail || text;
+        } catch(e) {}
+        throw new Error(detail || res.statusText);
       }
       return res.json();
     }
@@ -417,15 +541,101 @@
       el.classList.remove('fade-in');
     }
 
-    // -- Initialization --
-    let bookingVncVisible = false;
-    let pollTimer = null;
+    // -- Auth functions --
+    function showLogin() {
+      hide('auth-signup');
+      show('auth-login');
+      document.getElementById('signup-error').textContent = '';
+    }
 
-    async function init() {
+    function showSignup() {
+      hide('auth-login');
+      show('auth-signup');
+      document.getElementById('login-error').textContent = '';
+    }
+
+    async function doLogin() {
+      var email = document.getElementById('login-email').value.trim();
+      var password = document.getElementById('login-password').value;
+      var errEl = document.getElementById('login-error');
+      errEl.textContent = '';
+
+      if (!email || !password) {
+        errEl.textContent = 'Please enter email and password.';
+        return;
+      }
+
+      document.getElementById('login-btn').disabled = true;
       try {
-        const status = await api('GET', '/api/profile/status');
-        hide('loading-card');
+        var result = await api('POST', '/api/auth/login', { email: email, password: password });
+        authToken = result.token;
+        currentUser = result.user;
+        localStorage.setItem('uber_bookr_token', authToken);
+        onAuthenticated();
+      } catch (err) {
+        errEl.textContent = err.message;
+      } finally {
+        document.getElementById('login-btn').disabled = false;
+      }
+    }
 
+    async function doSignup() {
+      var name = document.getElementById('signup-name').value.trim();
+      var email = document.getElementById('signup-email').value.trim();
+      var password = document.getElementById('signup-password').value;
+      var errEl = document.getElementById('signup-error');
+      errEl.textContent = '';
+
+      if (!name || !email || !password) {
+        errEl.textContent = 'All fields are required.';
+        return;
+      }
+      if (password.length < 6) {
+        errEl.textContent = 'Password must be at least 6 characters.';
+        return;
+      }
+
+      document.getElementById('signup-btn').disabled = true;
+      try {
+        var result = await api('POST', '/api/auth/signup', { email: email, password: password, name: name });
+        authToken = result.token;
+        currentUser = result.user;
+        localStorage.setItem('uber_bookr_token', authToken);
+        onAuthenticated();
+      } catch (err) {
+        errEl.textContent = err.message;
+      } finally {
+        document.getElementById('signup-btn').disabled = false;
+      }
+    }
+
+    function doLogout() {
+      authToken = null;
+      currentUser = null;
+      localStorage.removeItem('uber_bookr_token');
+      hide('user-bar');
+      hide('connect-card');
+      hide('booking-card');
+      show('auth-card');
+      show('auth-login');
+      hide('auth-signup');
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    }
+
+    function onAuthenticated() {
+      hide('auth-card');
+      hide('loading-card');
+      document.getElementById('user-display-name').textContent = currentUser.name;
+      show('user-bar');
+      checkProfileAndShow();
+    }
+
+    async function checkProfileAndShow() {
+      try {
+        var status = await api('GET', '/api/profile/status');
         if (status.connected) {
           show('booking-card');
         } else {
@@ -434,10 +644,36 @@
           startPolling();
         }
       } catch (err) {
-        hide('loading-card');
         show('connect-card');
         show('connect-prompt');
         startPolling();
+      }
+    }
+
+    // -- Initialization --
+    let bookingVncVisible = false;
+    let pollTimer = null;
+
+    async function init() {
+      if (authToken) {
+        // Try to validate existing token
+        try {
+          var result = await api('GET', '/api/auth/me');
+          currentUser = result.user;
+          hide('loading-card');
+          onAuthenticated();
+        } catch (err) {
+          // Token invalid — show login
+          authToken = null;
+          localStorage.removeItem('uber_bookr_token');
+          hide('loading-card');
+          show('auth-card');
+          show('auth-login');
+        }
+      } else {
+        hide('loading-card');
+        show('auth-card');
+        show('auth-login');
       }
     }
 
@@ -446,7 +682,7 @@
       if (pollTimer) return;
       pollTimer = setInterval(async () => {
         try {
-          const status = await api('GET', '/api/profile/status');
+          var status = await api('GET', '/api/profile/status');
           if (status.connected) {
             clearInterval(pollTimer);
             pollTimer = null;
@@ -478,11 +714,11 @@
     let ws = null;
 
     function renderSteps() {
-      const container = document.getElementById('progress-steps');
+      var container = document.getElementById('progress-steps');
       container.innerHTML = '';
 
       BOOKING_STEPS.forEach(function(label, i) {
-        const step = document.createElement('div');
+        var step = document.createElement('div');
         step.className = 'progress-step';
         step.id = 'step-' + i;
         step.innerHTML =
@@ -590,7 +826,6 @@
       var stepIndex = STATUS_TO_STEP[data.status];
 
       if (data.status === 'completed') {
-        // Mark all steps done
         for (var i = 0; i < BOOKING_STEPS.length; i++) {
           updateStep(i, 'done');
         }
@@ -600,11 +835,9 @@
         addFinalStep(false, data.message || 'Booking failed');
         if (ws) ws.close();
       } else if (stepIndex !== undefined) {
-        // Mark previous steps as done
         for (var i = 0; i < stepIndex; i++) {
           updateStep(i, 'done');
         }
-        // Mark current step as active
         updateStep(stepIndex, 'active', data.message);
       }
     }
@@ -634,6 +867,17 @@
       document.getElementById('book-btn').disabled = false;
       show('booking-form');
     }
+
+    // Allow Enter key to submit forms
+    document.addEventListener('keydown', function(e) {
+      if (e.key !== 'Enter') return;
+      var target = e.target;
+      if (target.id === 'login-email' || target.id === 'login-password') {
+        doLogin();
+      } else if (target.id === 'signup-name' || target.id === 'signup-email' || target.id === 'signup-password') {
+        doSignup();
+      }
+    });
 
     // -- Boot --
     init();
