@@ -42,6 +42,7 @@ booking_agent = UberBookingAgent()
 # ---------------------------------------------------------------------------
 
 _ws_connections: dict[str, list[WebSocket]] = {}  # booking_id -> [websocket, ...]
+_booking_tasks: dict[str, asyncio.Task] = {}  # booking_id -> background task
 
 
 # ---------------------------------------------------------------------------
@@ -306,7 +307,7 @@ async def booking_start(req: BookingStartRequest, user: dict = Depends(auth.get_
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
-    asyncio.create_task(
+    task = asyncio.create_task(
         _run_booking(
             booking_id=booking_id,
             pickup=req.pickup,
@@ -319,6 +320,8 @@ async def booking_start(req: BookingStartRequest, user: dict = Depends(auth.get_
             profile_name=profile_name,
         )
     )
+    _booking_tasks[booking_id] = task
+    task.add_done_callback(lambda t: _booking_tasks.pop(booking_id, None))
 
     return {
         "booking_id": booking_id,
@@ -360,6 +363,11 @@ async def _run_booking(
             "message": str(e),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
+    finally:
+        try:
+            sandbox_mgr.stop(sandbox_id)
+        except Exception as e:
+            logger.warning("Failed to stop sandbox %s: %s", sandbox_id, e)
 
 
 @app.get("/api/booking/{booking_id}/status")

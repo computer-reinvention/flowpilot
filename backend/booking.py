@@ -1,5 +1,6 @@
 """Uber booking automation using browser-use."""
 
+import asyncio
 import json
 import os
 import logging
@@ -60,6 +61,12 @@ def get_booking(booking_id: str) -> BookingState | None:
     return _bookings.get(booking_id)
 
 
+async def _cleanup_booking(booking_id: str, delay: int = 3600):
+    """Remove a completed/failed booking from memory after a delay."""
+    await asyncio.sleep(delay)
+    _bookings.pop(booking_id, None)
+
+
 def _get_llm():
     """Create the LLM instance based on LLM_PROVIDER env var."""
     provider = os.environ.get("LLM_PROVIDER", "gemini").lower()
@@ -67,23 +74,32 @@ def _get_llm():
     if provider == "gemini":
         from langchain_google_genai import ChatGoogleGenerativeAI
 
+        api_key = os.environ.get("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError("GOOGLE_API_KEY environment variable is required when LLM_PROVIDER=gemini")
         return ChatGoogleGenerativeAI(
             model=os.environ.get("GEMINI_MODEL", "gemini-2.0-flash"),
-            google_api_key=os.environ.get("GOOGLE_API_KEY"),
+            google_api_key=api_key,
         )
     elif provider in ("claude", "anthropic"):
         from langchain_anthropic import ChatAnthropic
 
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise ValueError("ANTHROPIC_API_KEY environment variable is required when LLM_PROVIDER=claude")
         return ChatAnthropic(
             model=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"),
-            anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY"),
+            anthropic_api_key=api_key,
         )
     elif provider == "openai":
         from langchain_openai import ChatOpenAI
 
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY environment variable is required when LLM_PROVIDER=openai")
         return ChatOpenAI(
             model=os.environ.get("OPENAI_MODEL", "gpt-4o"),
-            openai_api_key=os.environ.get("OPENAI_API_KEY"),
+            openai_api_key=api_key,
         )
     else:
         raise ValueError(f"Unknown LLM_PROVIDER: {provider}. Use gemini, claude, or openai.")
@@ -165,7 +181,7 @@ class UberBookingAgent:
 
             await _update(BookingStatus.ENTERING_PICKUP, f"Agent running: entering pickup '{pickup}'")
 
-            result = await agent.run()
+            result = await asyncio.wait_for(agent.run(), timeout=300)
 
             await _update(BookingStatus.COMPLETED, "Booking completed successfully")
 
@@ -177,6 +193,7 @@ class UberBookingAgent:
                 "completed_at": datetime.now(timezone.utc).isoformat(),
             }
 
+            asyncio.create_task(_cleanup_booking(booking_id))
             return state.result
 
         except Exception as e:
@@ -184,6 +201,7 @@ class UberBookingAgent:
             logger.error("Booking %s failed: %s", booking_id, e, exc_info=True)
             await _update(BookingStatus.FAILED, error_msg)
             state.error = error_msg
+            asyncio.create_task(_cleanup_booking(booking_id))
             raise
 
         finally:
