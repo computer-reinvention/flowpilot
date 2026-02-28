@@ -13,9 +13,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from sandbox import SandboxManager
-from profile import ProfileManager
-from booking import UberBookingAgent, BookingStatus, get_booking
+from .sandbox import SandboxManager
+from .profile import ProfileManager
+from .booking import UberBookingAgent, BookingStatus, get_booking
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
