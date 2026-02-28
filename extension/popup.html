@@ -11,9 +11,9 @@
 
     body {
       font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background: #000;
+      background: #0f0f0f;
       color: #fff;
-      width: 340px;
+      width: 360px;
       padding: 24px;
       -webkit-font-smoothing: antialiased;
     }
@@ -24,18 +24,20 @@
     }
 
     .logo h1 {
-      font-size: 22px;
+      font-size: 20px;
       font-weight: 700;
-      letter-spacing: -0.5px;
+      letter-spacing: -0.3px;
+      color: #a5b4fc;
     }
 
-    .logo span {
-      color: #afafaf;
-      font-weight: 400;
+    .logo .subtitle {
+      font-size: 12px;
+      color: #6b6b6b;
+      margin-top: 4px;
     }
 
     .input-group {
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
 
     .input-group label {
@@ -48,19 +50,24 @@
 
     .input-group input {
       width: 100%;
-      padding: 12px 14px;
+      padding: 10px 12px;
       font-size: 14px;
       font-family: inherit;
-      background: #282828;
+      background: #1a1a2e;
       color: #fff;
-      border: 1px solid transparent;
+      border: 1px solid #2a2a3e;
       border-radius: 8px;
       outline: none;
       transition: border-color 0.3s ease;
     }
 
     .input-group input:focus {
-      border-color: #fff;
+      border-color: #6366f1;
+    }
+
+    .input-group input[readonly] {
+      color: #8b8ba0;
+      cursor: default;
     }
 
     .btn {
@@ -68,8 +75,8 @@
       align-items: center;
       justify-content: center;
       width: 100%;
-      padding: 14px 20px;
-      font-size: 15px;
+      padding: 12px 20px;
+      font-size: 14px;
       font-weight: 600;
       border: none;
       border-radius: 500px;
@@ -83,62 +90,52 @@
     }
 
     .btn-primary {
-      background: #fff;
-      color: #000;
+      background: #6366f1;
+      color: #fff;
     }
 
     .btn-primary:hover:not(:disabled) {
-      background: #e2e2e2;
+      background: #5558e6;
     }
 
     .btn-outline {
       background: transparent;
-      color: #fff;
-      border: 1px solid #6b6b6b;
+      color: #a5b4fc;
+      border: 1px solid #3a3a5e;
       margin-top: 8px;
     }
 
     .btn-outline:hover:not(:disabled) {
-      border-color: #fff;
+      border-color: #6366f1;
     }
 
     .status {
       text-align: center;
-      margin-top: 16px;
+      margin-top: 14px;
       font-size: 13px;
       min-height: 20px;
     }
 
-    .status.success {
-      color: #06C167;
-    }
-
-    .status.error {
-      color: #e74c3c;
-    }
-
-    .status.info {
-      color: #afafaf;
-    }
+    .status.success { color: #34d399; }
+    .status.error { color: #f87171; }
+    .status.info { color: #8b8ba0; }
 
     .hint {
       text-align: center;
       margin-top: 12px;
       font-size: 12px;
-      color: #6b6b6b;
+      color: #4a4a6a;
       line-height: 1.5;
     }
 
-    .hidden {
-      display: none;
-    }
+    .hidden { display: none; }
 
     .spinner {
       display: inline-block;
       width: 14px;
       height: 14px;
-      border: 2px solid #6b6b6b;
-      border-top-color: #fff;
+      border: 2px solid #3a3a5e;
+      border-top-color: #6366f1;
       border-radius: 50%;
       animation: spin 0.7s linear infinite;
       vertical-align: middle;
@@ -154,15 +151,13 @@
       align-items: center;
       justify-content: space-between;
       padding: 8px 12px;
-      background: #1a1a1a;
+      background: #1a1a2e;
       border-radius: 8px;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
       font-size: 13px;
     }
 
-    .logged-in-bar .name {
-      color: #e2e2e2;
-    }
+    .logged-in-bar .name { color: #e2e2e2; }
 
     .logged-in-bar .logout-link {
       background: none;
@@ -173,14 +168,53 @@
       font-family: inherit;
     }
 
-    .logged-in-bar .logout-link:hover {
-      color: #fff;
+    .logged-in-bar .logout-link:hover { color: #fff; }
+
+    .domain-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      background: #1a1a2e;
+      border: 1px solid #2a2a3e;
+      border-radius: 12px;
+      font-size: 12px;
+      color: #a5b4fc;
+      margin: 2px 4px 2px 0;
+    }
+
+    .captured-domains {
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid #1a1a2e;
+    }
+
+    .captured-domains h3 {
+      font-size: 12px;
+      color: #6b6b6b;
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+
+    .captured-domains .domain-list {
+      display: flex;
+      flex-wrap: wrap;
+    }
+
+    .captured-domains .empty {
+      font-size: 12px;
+      color: #3a3a5e;
+    }
+
+    .section-divider {
+      border: none;
+      border-top: 1px solid #1a1a2e;
+      margin: 16px 0;
     }
   </style>
 </head>
 <body>
   <div class="logo">
-    <h1>uber<span>-bookr</span></h1>
+    <h1>Session Connector</h1>
+    <div class="subtitle">Capture browser sessions for automation</div>
   </div>
 
   <!-- Auth section -->
@@ -200,28 +234,40 @@
       <input type="password" id="auth-password" placeholder="Password" />
     </div>
 
-    <button class="btn btn-primary" id="login-btn">Log in & Connect</button>
+    <button class="btn btn-primary" id="login-btn">Log In</button>
 
     <div class="status" id="auth-status"></div>
 
     <div class="hint">
-      Log in to your uber-bookr account, then your Uber session will be synced automatically.
+      Log in to your account to start capturing browser sessions.
     </div>
   </div>
 
-  <!-- Connected section (shown after auth + sync) -->
+  <!-- Connected section (shown after auth) -->
   <div id="connected-section" class="hidden">
     <div class="logged-in-bar">
       <span class="name" id="connected-user-name"></span>
       <button class="logout-link" id="ext-logout-btn">Log out</button>
     </div>
 
-    <button class="btn btn-primary" id="resync-btn">Re-sync Uber Session</button>
+    <div class="input-group">
+      <label>Current Domain</label>
+      <input type="text" id="current-domain" readonly placeholder="Navigate to a page..." />
+    </div>
+
+    <button class="btn btn-primary" id="capture-btn">Capture Session</button>
 
     <div class="status" id="connect-status"></div>
 
     <div class="hint">
-      Navigate to any uber.com page and click Re-sync to update your session.
+      Navigate to any website and click Capture to save the session.
+    </div>
+
+    <div class="captured-domains" id="captured-domains-section">
+      <h3>Previously captured</h3>
+      <div class="domain-list" id="domain-list">
+        <span class="empty">No sessions captured yet</span>
+      </div>
     </div>
   </div>
 
@@ -235,15 +281,55 @@
     const connectedSection = document.getElementById('connected-section');
     const authSection = document.getElementById('auth-section');
     const connectedUserName = document.getElementById('connected-user-name');
-    const resyncBtn = document.getElementById('resync-btn');
+    const captureBtn = document.getElementById('capture-btn');
     const connectStatusEl = document.getElementById('connect-status');
     const extLogoutBtn = document.getElementById('ext-logout-btn');
+    const currentDomainInput = document.getElementById('current-domain');
+    const domainListEl = document.getElementById('domain-list');
 
     let savedToken = '';
     let savedBackendUrl = '';
+    let currentTabDomain = '';
+
+    // Extract domain from a URL
+    function extractDomain(url) {
+      try {
+        return new URL(url).hostname;
+      } catch (e) {
+        return '';
+      }
+    }
+
+    // Auto-fill current domain from active tab
+    async function detectCurrentDomain() {
+      try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tab && tab.url) {
+          currentTabDomain = extractDomain(tab.url);
+          currentDomainInput.value = currentTabDomain || 'N/A (chrome:// page)';
+        }
+      } catch (e) {
+        currentDomainInput.value = 'Unable to detect';
+      }
+    }
+
+    // Render captured domains list
+    function renderCapturedDomains(domains) {
+      domainListEl.innerHTML = '';
+      if (!domains || domains.length === 0) {
+        domainListEl.innerHTML = '<span class="empty">No sessions captured yet</span>';
+        return;
+      }
+      domains.forEach(function(d) {
+        var badge = document.createElement('span');
+        badge.className = 'domain-badge';
+        badge.textContent = d;
+        domainListEl.appendChild(badge);
+      });
+    }
 
     // Load saved state
-    chrome.storage.local.get(['backendUrl', 'authToken', 'userName'], (result) => {
+    chrome.storage.local.get(['backendUrl', 'authToken', 'userName', 'capturedDomains'], function(result) {
       if (result.backendUrl) {
         backendUrlInput.value = result.backendUrl;
         savedBackendUrl = result.backendUrl;
@@ -251,14 +337,15 @@
         backendUrlInput.value = 'http://localhost:8080';
       }
 
+      renderCapturedDomains(result.capturedDomains || []);
+
       if (result.authToken) {
         savedToken = result.authToken;
-        // Verify token is still valid
         verifyAndShowConnected(result.backendUrl || 'http://localhost:8080', result.authToken, result.userName || '');
       }
     });
 
-    backendUrlInput.addEventListener('change', () => {
+    backendUrlInput.addEventListener('change', function() {
       chrome.storage.local.set({ backendUrl: backendUrlInput.value.trim() });
     });
 
@@ -292,26 +379,27 @@
 
     async function verifyAndShowConnected(backendUrl, token, userName) {
       try {
-        const res = await fetch(backendUrl.replace(/\/+$/, '') + '/api/auth/me', {
+        var res = await fetch(backendUrl.replace(/\/+$/, '') + '/api/auth/me', {
           headers: { 'Authorization': 'Bearer ' + token },
         });
         if (res.ok) {
-          const data = await res.json();
+          var data = await res.json();
           savedToken = token;
           savedBackendUrl = backendUrl;
           connectedUserName.textContent = data.user.name;
           authSection.classList.add('hidden');
           connectedSection.classList.remove('hidden');
+          detectCurrentDomain();
         }
       } catch (e) {
         // Token invalid, stay on login
       }
     }
 
-    loginBtn.addEventListener('click', async () => {
-      const backendUrl = backendUrlInput.value.trim().replace(/\/+$/, '');
-      const email = authEmailInput.value.trim();
-      const password = authPasswordInput.value;
+    loginBtn.addEventListener('click', async function() {
+      var backendUrl = backendUrlInput.value.trim().replace(/\/+$/, '');
+      var email = authEmailInput.value.trim();
+      var password = authPasswordInput.value;
 
       if (!backendUrl) {
         setAuthStatus('Please enter a backend URL', 'error');
@@ -332,18 +420,18 @@
       setAuthStatus('Logging in...', 'info', true);
 
       try {
-        const res = await fetch(backendUrl + '/api/auth/login', {
+        var res = await fetch(backendUrl + '/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
+          body: JSON.stringify({ email: email, password: password }),
         });
 
         if (!res.ok) {
-          const errData = await res.json().catch(() => ({ detail: res.statusText }));
+          var errData = await res.json().catch(function() { return { detail: res.statusText }; });
           throw new Error(errData.detail || 'Login failed');
         }
 
-        const data = await res.json();
+        var data = await res.json();
         savedToken = data.token;
         savedBackendUrl = backendUrl;
 
@@ -355,13 +443,10 @@
 
         connectedUserName.textContent = data.user.name;
 
-        // Now auto-sync Uber session
-        setAuthStatus('Syncing Uber session...', 'info', true);
-        await captureAndSendSession(backendUrl, data.token);
-
         authSection.classList.add('hidden');
         connectedSection.classList.remove('hidden');
-        setConnectStatus('Logged in and session synced!', 'success');
+        setConnectStatus('Logged in! Navigate to a page and capture.', 'success');
+        detectCurrentDomain();
       } catch (err) {
         setAuthStatus('Error: ' + err.message, 'error');
       } finally {
@@ -369,21 +454,36 @@
       }
     });
 
-    resyncBtn.addEventListener('click', async () => {
-      resyncBtn.disabled = true;
-      setConnectStatus('Syncing session...', 'info', true);
+    captureBtn.addEventListener('click', async function() {
+      if (!currentTabDomain) {
+        setConnectStatus('No domain detected. Navigate to a website first.', 'error');
+        return;
+      }
+
+      captureBtn.disabled = true;
+      setConnectStatus('Capturing session for ' + currentTabDomain + '...', 'info', true);
 
       try {
-        await captureAndSendSession(savedBackendUrl, savedToken);
-        setConnectStatus('Session synced!', 'success');
+        await captureAndSendSession(savedBackendUrl, savedToken, currentTabDomain);
+
+        // Save domain to captured list
+        chrome.storage.local.get(['capturedDomains'], function(result) {
+          var domains = result.capturedDomains || [];
+          if (domains.indexOf(currentTabDomain) === -1) {
+            domains.unshift(currentTabDomain);
+            if (domains.length > 10) domains = domains.slice(0, 10);
+            chrome.storage.local.set({ capturedDomains: domains });
+          }
+          renderCapturedDomains(domains);
+        });
       } catch (err) {
         setConnectStatus('Error: ' + err.message, 'error');
       } finally {
-        resyncBtn.disabled = false;
+        captureBtn.disabled = false;
       }
     });
 
-    extLogoutBtn.addEventListener('click', () => {
+    extLogoutBtn.addEventListener('click', function() {
       savedToken = '';
       savedBackendUrl = '';
       chrome.storage.local.remove(['authToken', 'userName']);
@@ -393,55 +493,78 @@
       setAuthStatus('', '');
     });
 
-    async function captureAndSendSession(backendUrl, token) {
-      // 1. Get all Uber cookies
-      const cookies = await chrome.cookies.getAll({ domain: '.uber.com' });
+    async function captureAndSendSession(backendUrl, token, domain) {
+      // 1. Get cookies for the current domain (with leading dot for subdomains)
+      var cookieDomain = domain.startsWith('.') ? domain : '.' + domain;
+      // Also get exact-match cookies
+      var [dotCookies, exactCookies] = await Promise.all([
+        chrome.cookies.getAll({ domain: cookieDomain }),
+        chrome.cookies.getAll({ domain: domain }),
+      ]);
+
+      // Merge and deduplicate by name+domain+path
+      var seen = {};
+      var cookies = [];
+      [].concat(dotCookies, exactCookies).forEach(function(c) {
+        var key = c.name + '|' + c.domain + '|' + c.path;
+        if (!seen[key]) {
+          seen[key] = true;
+          cookies.push(c);
+        }
+      });
 
       if (cookies.length === 0) {
-        throw new Error('No Uber cookies found. Are you logged in to uber.com?');
+        throw new Error('No cookies found for ' + domain + '. Are you logged in?');
       }
 
-      // 2. Get the active tab
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      // 2. Get the active tab and inject script to capture storage
+      var [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-      let storageData = { localStorage: {}, sessionStorage: {}, url: '', userAgent: '' };
+      var storageData = { localStorage: {}, sessionStorage: {}, url: '', userAgent: '' };
 
-      if (tab && tab.url && tab.url.includes('uber.com')) {
-        const injectionResults = await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          func: () => {
-            const ls = {};
-            for (let i = 0; i < localStorage.length; i++) {
-              const key = localStorage.key(i);
-              ls[key] = localStorage.getItem(key);
-            }
-            const ss = {};
-            for (let i = 0; i < sessionStorage.length; i++) {
-              const key = sessionStorage.key(i);
-              ss[key] = sessionStorage.getItem(key);
-            }
-            return {
-              localStorage: ls,
-              sessionStorage: ss,
-              url: window.location.href,
-              userAgent: navigator.userAgent,
-            };
-          },
-        });
-        storageData = injectionResults[0].result;
+      if (tab && tab.id) {
+        try {
+          var injectionResults = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: function() {
+              var ls = {};
+              for (var i = 0; i < localStorage.length; i++) {
+                var key = localStorage.key(i);
+                ls[key] = localStorage.getItem(key);
+              }
+              var ss = {};
+              for (var i = 0; i < sessionStorage.length; i++) {
+                var key = sessionStorage.key(i);
+                ss[key] = sessionStorage.getItem(key);
+              }
+              return {
+                localStorage: ls,
+                sessionStorage: ss,
+                url: window.location.href,
+                userAgent: navigator.userAgent,
+              };
+            },
+          });
+          storageData = injectionResults[0].result;
+        } catch (e) {
+          // Script injection may fail on restricted pages — still send cookies
+        }
       }
 
-      // 3. Package and send
-      const payload = {
+      // 3. Package and send to backend
+      var payload = {
+        domain: domain,
         cookies: cookies,
         localStorage: storageData.localStorage,
         sessionStorage: storageData.sessionStorage,
         url: storageData.url,
-        userAgent: storageData.userAgent,
+        userAgent: storageData.userAgent || navigator.userAgent,
         timestamp: new Date().toISOString(),
       };
 
-      const response = await fetch(backendUrl.replace(/\/+$/, '') + '/api/profile/import', {
+      var cookieCount = cookies.length;
+
+      var response = await fetch(backendUrl.replace(/\/+$/, '') + '/api/sessions/capture', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -451,10 +574,11 @@
       });
 
       if (!response.ok) {
-        const errText = await response.text();
+        var errText = await response.text();
         throw new Error(errText || response.statusText);
       }
 
+      setConnectStatus('Captured ' + cookieCount + ' cookies for ' + domain, 'success');
       return await response.json();
     }
   </script>

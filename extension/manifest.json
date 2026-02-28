@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "uber-bookr connector",
-  "version": "1.0.0",
-  "description": "Connect your Uber account to uber-bookr",
+  "name": "Browser Automation Connector",
+  "version": "2.0.0",
+  "description": "Capture browser sessions from any domain for automation",
   "permissions": ["cookies", "storage", "activeTab", "scripting"],
-  "host_permissions": ["https://*.uber.com/*"],
+  "host_permissions": ["<all_urls>"],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
