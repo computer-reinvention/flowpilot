@@ -10,12 +10,10 @@ import aiosqlite
 import bcrypt
 import jwt
 from fastapi import Request, HTTPException
-from pathlib import Path
+
+from .config import DB_PATH
 
 logger = logging.getLogger(__name__)
-
-PROFILES_DIR = Path(os.environ.get("PROFILES_DIR", "/app/profiles"))
-DB_PATH = PROFILES_DIR / "users.db"
 
 JWT_SECRET = os.environ.get("JWT_SECRET", "")
 if not JWT_SECRET:

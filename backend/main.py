@@ -1,6 +1,7 @@
-"""FastAPI backend for uber-bookr — browser automation for Uber booking."""
+"""FastAPI backend for browser automation platform."""
 
 import os
+import json
 import uuid
 import asyncio
 import logging
@@ -15,9 +16,11 @@ from pydantic import BaseModel
 
 from .sandbox import SandboxManager
 from .profile import ProfileManager
-from .booking import UberBookingAgent, BookingStatus, get_booking
+from .runner import FlowRunner, RunStatus
 from .config import PROFILES_DIR
 from . import auth
+from . import db as platform_db
+from .models import Flow, Run, Session
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -25,7 +28,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-DEFAULT_PROFILE = os.environ.get("DEFAULT_PROFILE", "default")
 FRONTEND_DIR = Path(os.environ.get("FRONTEND_DIR", "/app/frontend"))
 
 # ---------------------------------------------------------------------------
@@ -34,14 +36,14 @@ FRONTEND_DIR = Path(os.environ.get("FRONTEND_DIR", "/app/frontend"))
 
 sandbox_mgr = SandboxManager(profiles_host_dir=str(PROFILES_DIR))
 profile_mgr = ProfileManager(profiles_dir=PROFILES_DIR)
-booking_agent = UberBookingAgent()
+flow_runner = FlowRunner()
 
 # ---------------------------------------------------------------------------
 # WebSocket connection registry
 # ---------------------------------------------------------------------------
 
-_ws_connections: dict[str, list[WebSocket]] = {}  # booking_id -> [websocket, ...]
-_booking_tasks: dict[str, asyncio.Task] = {}  # booking_id -> background task
+_ws_connections: dict[str, list[WebSocket]] = {}  # run_id -> [websocket, ...]
+_run_tasks: dict[str, asyncio.Task] = {}  # run_id -> background task
 
 
 # ---------------------------------------------------------------------------
@@ -51,16 +53,15 @@ _booking_tasks: dict[str, asyncio.Task] = {}  # booking_id -> background task
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     PROFILES_DIR.mkdir(parents=True, exist_ok=True)
-    await auth.init_db()
-    # H3: Clean up orphaned sandbox containers from previous runs
+    await platform_db.init_db()
+    await platform_db.seed_default_flows()
     removed = sandbox_mgr.cleanup_orphans()
     if removed:
         logger.info("Cleaned up %d orphaned sandbox containers", removed)
-    logger.info("uber-bookr backend starting. Profiles dir: %s", PROFILES_DIR)
+    logger.info("Platform backend starting. Profiles dir: %s", PROFILES_DIR)
     yield
-    # H3: Stop all tracked sandboxes on shutdown
     sandbox_mgr.stop_all()
-    logger.info("uber-bookr backend shutting down.")
+    logger.info("Platform backend shutting down.")
 
 
 # ---------------------------------------------------------------------------
@@ -68,13 +69,12 @@ async def lifespan(app: FastAPI):
 # ---------------------------------------------------------------------------
 
 app = FastAPI(
-    title="uber-bookr",
-    description="Self-hosted browser automation for Uber booking",
-    version="0.2.0",
+    title="Browser Automation Platform",
+    description="Generic browser automation via flow definitions",
+    version="1.0.0",
     lifespan=lifespan,
 )
 
-# CORS — restrict origins (set ALLOWED_ORIGINS env var for production)
 _allowed_origins = [
     o.strip()
     for o in os.environ.get("ALLOWED_ORIGINS", "http://localhost:8080,http://localhost:3000").split(",")
@@ -117,11 +117,35 @@ class ProfileSaveRequest(BaseModel):
     profile_name: str = "default"
 
 
-class BookingStartRequest(BaseModel):
-    pickup: str
-    dropoff: str
-    ride_type: str = "UberGo"
-    profile_name: str = "default"
+class FlowCreateRequest(BaseModel):
+    name: str
+    domain: str
+    description: str
+    entry_url: str | None = None
+    inputs: list[dict] = []
+    icon: str | None = None
+
+
+class FlowUpdateRequest(BaseModel):
+    name: str | None = None
+    domain: str | None = None
+    description: str | None = None
+    entry_url: str | None = None
+    inputs: list[dict] | None = None
+    icon: str | None = None
+
+
+class RunStartRequest(BaseModel):
+    flow_id: str
+    inputs: dict = {}
+
+
+class SessionCaptureRequest(BaseModel):
+    domain: str
+    cookies: list[dict] = []
+    localStorage: dict = {}
+    sessionStorage: dict = {}
+    userAgent: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -139,35 +163,29 @@ async def health():
 
 @app.post("/api/auth/signup")
 async def signup(req: SignupRequest):
-    """Create a new user account."""
     if not req.email or not req.password or not req.name:
         raise HTTPException(status_code=400, detail="email, password, and name are required")
     if len(req.password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
-
     try:
         user = await auth.create_user(req.email, req.password, req.name)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
-
     token = auth.create_token(user["id"])
     return {"token": token, "user": user}
 
 
 @app.post("/api/auth/login")
 async def login(req: LoginRequest):
-    """Log in with email and password."""
     user = await auth.authenticate(req.email, req.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password")
-
     token = auth.create_token(user["id"])
     return {"token": token, "user": user}
 
 
 @app.get("/api/auth/me")
 async def auth_me(user: dict = Depends(auth.get_current_user)):
-    """Get current user info."""
     return {"user": user}
 
 
@@ -177,161 +195,172 @@ async def auth_me(user: dict = Depends(auth.get_current_user)):
 
 @app.post("/api/sandbox/start")
 async def sandbox_start(req: SandboxStartRequest, user: dict = Depends(auth.get_current_user)):
-    """Start a new browser sandbox container."""
     user_id = user["id"]
     profile_name = req.profile_name or "default"
-
-    # H5: Validate profile name
     if not SandboxManager.validate_profile_name(profile_name):
-        raise HTTPException(status_code=400, detail="Invalid profile name. Use only alphanumeric, hyphens, underscores.")
-
+        raise HTTPException(status_code=400, detail="Invalid profile name.")
     profile_path = None
     if profile_mgr.has_profile(user_id, profile_name):
         profile_path = str(PROFILES_DIR / user_id / profile_name)
-        logger.info("Will restore profile '%s' for user %s into new sandbox", profile_name, user_id)
-
     try:
         result = sandbox_mgr.start(profile_path=profile_path, user_id=user_id)
     except RuntimeError as e:
-        # H2: Per-user limit exceeded returns 429
         if "already has" in str(e) and "active sandboxes" in str(e):
             raise HTTPException(status_code=429, detail=str(e))
         raise HTTPException(status_code=500, detail=str(e))
-
     if profile_mgr.has_profile(user_id, profile_name):
         try:
             profile_mgr.restore_profile(user_id, profile_name, result["sandbox_id"])
         except Exception as e:
-            logger.warning("Tar-based profile restore failed: %s", e)
-
+            logger.warning("Profile restore failed: %s", e)
     return result
 
 
 @app.post("/api/sandbox/stop")
 async def sandbox_stop(req: SandboxStopRequest, user: dict = Depends(auth.get_current_user)):
-    """Stop and remove a sandbox container."""
     user_id = user["id"]
-
-    # H4: Verify sandbox belongs to the requesting user
     try:
         owner = sandbox_mgr.get_sandbox_owner(req.sandbox_id)
         if owner and owner != user_id:
             raise HTTPException(status_code=403, detail="Sandbox does not belong to you")
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-
     try:
         sandbox_mgr.stop(req.sandbox_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
     return {"status": "stopped", "sandbox_id": req.sandbox_id}
 
 
 # ---------------------------------------------------------------------------
-# Profile endpoints (auth required)
+# Flow endpoints
 # ---------------------------------------------------------------------------
 
-@app.post("/api/profile/save")
-async def profile_save(req: ProfileSaveRequest, user: dict = Depends(auth.get_current_user)):
-    """Save the browser profile from a running sandbox to host storage."""
-    user_id = user["id"]
+@app.post("/api/flows")
+async def flow_create(req: FlowCreateRequest, user: dict = Depends(auth.get_current_user)):
+    flow = Flow(
+        id=str(uuid.uuid4())[:12],
+        name=req.name,
+        domain=req.domain,
+        description=req.description,
+        entry_url=req.entry_url,
+        inputs=json.dumps(req.inputs),
+        icon=req.icon,
+        created_by=user["id"],
+    )
+    await platform_db.create_flow(flow)
+    return _flow_to_dict(flow)
 
-    # H5: Validate profile name
-    if not SandboxManager.validate_profile_name(req.profile_name):
-        raise HTTPException(status_code=400, detail="Invalid profile name. Use only alphanumeric, hyphens, underscores.")
 
-    # H4: Verify sandbox belongs to the requesting user
-    try:
-        owner = sandbox_mgr.get_sandbox_owner(req.sandbox_id)
-        if owner and owner != user_id:
-            raise HTTPException(status_code=403, detail="Sandbox does not belong to you")
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+@app.get("/api/flows")
+async def flow_list():
+    rows = await platform_db.list_flows()
+    for r in rows:
+        r["inputs"] = json.loads(r.get("inputs", "[]"))
+    return rows
 
-    try:
-        saved_path = profile_mgr.save_profile(req.sandbox_id, req.profile_name, user_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/flows/{flow_id}")
+async def flow_get(flow_id: str):
+    flow = await platform_db.get_flow(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return _flow_to_dict(flow)
+
+
+@app.put("/api/flows/{flow_id}")
+async def flow_update(flow_id: str, req: FlowUpdateRequest, user: dict = Depends(auth.get_current_user)):
+    updates = req.model_dump(exclude_none=True)
+    if "inputs" in updates:
+        updates["inputs"] = json.dumps(updates["inputs"])
+    flow = await platform_db.update_flow(flow_id, updates)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return _flow_to_dict(flow)
+
+
+@app.delete("/api/flows/{flow_id}")
+async def flow_delete(flow_id: str, user: dict = Depends(auth.get_current_user)):
+    deleted = await platform_db.delete_flow(flow_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return {"status": "deleted"}
+
+
+def _flow_to_dict(flow: Flow) -> dict:
     return {
-        "profile_name": req.profile_name,
-        "path": str(saved_path),
-        "status": "saved",
-    }
-
-
-@app.get("/api/profile/status")
-async def profile_status(profile_name: str = "default", user: dict = Depends(auth.get_current_user)):
-    """Check if a saved profile exists and return its metadata."""
-    user_id = user["id"]
-    info = profile_mgr.get_profile_info(user_id, profile_name)
-
-    return {
-        "connected": info["exists"],
-        "profile_name": profile_name if info["exists"] else None,
-        "last_saved": info.get("last_modified"),
-        "source": info.get("source"),
-    }
-
-
-@app.post("/api/profile/import")
-async def profile_import(request: Request, user: dict = Depends(auth.get_current_user)):
-    """Import session data from the Chrome extension."""
-    user_id = user["id"]
-    try:
-        session_data = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
-
-    profile_name = session_data.pop("profile_name", "default") if "profile_name" in session_data else "default"
-
-    # H5: Validate profile name
-    if not SandboxManager.validate_profile_name(profile_name):
-        raise HTTPException(status_code=400, detail="Invalid profile name. Use only alphanumeric, hyphens, underscores.")
-
-    cookies = session_data.get("cookies", [])
-    if not cookies:
-        raise HTTPException(status_code=400, detail="No cookies in payload")
-
-    try:
-        profile_mgr.import_session(user_id, profile_name, session_data)
-    except Exception as e:
-        logger.error("Failed to import session: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
-
-    logger.info("Imported session for user %s profile '%s': %d cookies", user_id, profile_name, len(cookies))
-
-    return {
-        "status": "imported",
-        "profile_name": profile_name,
-        "cookie_count": len(cookies),
+        "id": flow.id,
+        "name": flow.name,
+        "domain": flow.domain,
+        "description": flow.description,
+        "entry_url": flow.entry_url,
+        "inputs": json.loads(flow.inputs),
+        "icon": flow.icon,
+        "created_by": flow.created_by,
+        "created_at": flow.created_at,
     }
 
 
 # ---------------------------------------------------------------------------
-# Booking endpoints (auth required)
+# Session endpoints (extension capture)
 # ---------------------------------------------------------------------------
 
-@app.post("/api/booking/start")
-async def booking_start(req: BookingStartRequest, user: dict = Depends(auth.get_current_user)):
-    """Start an Uber booking."""
+@app.post("/api/sessions/capture")
+async def session_capture(req: SessionCaptureRequest, user: dict = Depends(auth.get_current_user)):
+    session = Session(
+        id=str(uuid.uuid4())[:12],
+        user_id=user["id"],
+        domain=req.domain,
+        cookies=json.dumps(req.cookies),
+        local_storage=json.dumps(req.localStorage),
+        session_storage=json.dumps(req.sessionStorage),
+        user_agent=req.userAgent,
+    )
+    await platform_db.create_session(session)
+    return {"id": session.id, "domain": session.domain, "captured_at": session.captured_at}
+
+
+@app.get("/api/sessions")
+async def session_list(user: dict = Depends(auth.get_current_user)):
+    return await platform_db.list_sessions(user["id"])
+
+
+@app.delete("/api/sessions/{session_id}")
+async def session_delete(session_id: str, user: dict = Depends(auth.get_current_user)):
+    deleted = await platform_db.delete_session(session_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"status": "deleted"}
+
+
+# ---------------------------------------------------------------------------
+# Run endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/api/runs")
+async def run_start(req: RunStartRequest, user: dict = Depends(auth.get_current_user)):
     user_id = user["id"]
-    booking_id = str(uuid.uuid4())[:12]
-    profile_name = req.profile_name or "default"
 
-    # H5: Validate profile name
-    if not SandboxManager.validate_profile_name(profile_name):
-        raise HTTPException(status_code=400, detail="Invalid profile name. Use only alphanumeric, hyphens, underscores.")
+    flow = await platform_db.get_flow(req.flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
 
+    run_id = str(uuid.uuid4())[:12]
+    run = Run(
+        id=run_id,
+        flow_id=flow.id,
+        user_id=user_id,
+        status="pending",
+        inputs=json.dumps(req.inputs),
+    )
+    await platform_db.create_run(run)
+
+    # Start sandbox
     profile_path = None
-    if profile_mgr.has_profile(user_id, profile_name):
-        profile_path = str(PROFILES_DIR / user_id / profile_name)
-
+    if profile_mgr.has_profile(user_id, "default"):
+        profile_path = str(PROFILES_DIR / user_id / "default")
     try:
         sandbox_result = sandbox_mgr.start(profile_path=profile_path, user_id=user_id)
     except RuntimeError as e:
@@ -342,72 +371,101 @@ async def booking_start(req: BookingStartRequest, user: dict = Depends(auth.get_
     sandbox_id = sandbox_result["sandbox_id"]
     cdp_url = sandbox_result.get("cdp_url", "ws://localhost:9222")
 
-    if profile_mgr.has_profile(user_id, profile_name):
+    await platform_db.update_run(run_id, {"sandbox_id": sandbox_id, "status": "connecting"})
+
+    if profile_mgr.has_profile(user_id, "default"):
         try:
-            profile_mgr.restore_profile(user_id, profile_name, sandbox_id)
+            profile_mgr.restore_profile(user_id, "default", sandbox_id)
         except Exception as e:
             logger.warning("Profile restore failed: %s", e)
 
-    async def on_progress(status: BookingStatus, message: str):
-        await _broadcast_booking_progress(booking_id, {
-            "booking_id": booking_id,
+    # Build storage_state from saved session for the flow's domain
+    storage_state = None
+    domain_session = await platform_db.get_session_for_domain(user_id, flow.domain)
+    if domain_session:
+        cookies = json.loads(domain_session.cookies)
+        local_storage = json.loads(domain_session.local_storage)
+        storage_state = {"cookies": cookies, "origins": []}
+        if local_storage and flow.entry_url:
+            storage_state["origins"].append({
+                "origin": flow.entry_url.rstrip("/"),
+                "localStorage": [{"name": k, "value": v} for k, v in local_storage.items()],
+            })
+
+    async def on_progress(status: RunStatus, message: str):
+        steps = json.loads((await platform_db.get_run(run_id)).steps) if await platform_db.get_run(run_id) else []
+        steps.append({"status": status.value, "message": message, "timestamp": datetime.now(timezone.utc).isoformat()})
+        await platform_db.update_run(run_id, {
+            "status": status.value,
+            "current_step": message,
+            "steps": json.dumps(steps),
+        })
+        await _broadcast_run_progress(run_id, {
+            "run_id": run_id,
             "status": status.value,
             "message": message,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
     task = asyncio.create_task(
-        _run_booking(
-            booking_id=booking_id,
-            pickup=req.pickup,
-            dropoff=req.dropoff,
-            ride_type=req.ride_type,
+        _execute_run(
+            run_id=run_id,
+            flow=flow,
+            inputs=req.inputs,
+            user_id=user_id,
             sandbox_id=sandbox_id,
             cdp_url=cdp_url,
+            storage_state=storage_state,
             progress_callback=on_progress,
-            user_id=user_id,
-            profile_name=profile_name,
         )
     )
-    _booking_tasks[booking_id] = task
-    task.add_done_callback(lambda t: _booking_tasks.pop(booking_id, None))
+    _run_tasks[run_id] = task
+    task.add_done_callback(lambda t: _run_tasks.pop(run_id, None))
 
     return {
-        "booking_id": booking_id,
+        "run_id": run_id,
         "sandbox_id": sandbox_id,
         "novnc_url": sandbox_result.get("novnc_url"),
-        "status": "starting",
+        "status": "connecting",
     }
 
 
-async def _run_booking(
-    booking_id: str,
-    pickup: str,
-    dropoff: str,
-    ride_type: str,
+async def _execute_run(
+    run_id: str,
+    flow: Flow,
+    inputs: dict,
+    user_id: str,
     sandbox_id: str,
     cdp_url: str,
+    storage_state: dict | None,
     progress_callback,
-    user_id: str,
-    profile_name: str = "default",
 ):
-    """Background task that runs the booking agent."""
+    """Background task that runs the flow."""
     try:
-        await booking_agent.book_ride(
-            pickup=pickup,
-            dropoff=dropoff,
-            ride_type=ride_type,
+        result = await flow_runner.run_flow(
+            flow=flow,
+            inputs=inputs,
+            user_id=user_id,
             sandbox_id=sandbox_id,
             cdp_url=cdp_url,
-            booking_id=booking_id,
+            run_id=run_id,
             progress_callback=progress_callback,
-            user_id=user_id,
-            profile_name=profile_name,
+            storage_state=storage_state,
         )
+        await platform_db.update_run(run_id, {
+            "status": "completed",
+            "result": json.dumps(result),
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        })
     except Exception as e:
-        logger.error("Booking %s failed: %s", booking_id, e)
-        await _broadcast_booking_progress(booking_id, {
-            "booking_id": booking_id,
+        logger.error("Run %s failed: %s", run_id, e)
+        await platform_db.update_run(run_id, {
+            "status": "failed",
+            "error": str(e),
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        })
+        await _broadcast_run_progress(run_id, {
+            "run_id": run_id,
             "status": "failed",
             "message": str(e),
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -419,47 +477,55 @@ async def _run_booking(
             logger.warning("Failed to stop sandbox %s: %s", sandbox_id, e)
 
 
-@app.get("/api/booking/{booking_id}/status")
-async def booking_status(booking_id: str, user: dict = Depends(auth.get_current_user)):
-    """Get the current status of a booking."""
-    state = get_booking(booking_id)
-    if not state:
-        raise HTTPException(status_code=404, detail=f"Booking {booking_id} not found")
+@app.get("/api/runs")
+async def run_list(user: dict = Depends(auth.get_current_user)):
+    return await platform_db.list_runs(user["id"])
 
+
+@app.get("/api/runs/{run_id}")
+async def run_get(run_id: str, user: dict = Depends(auth.get_current_user)):
+    run = await platform_db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
     return {
-        "booking_id": state.booking_id,
-        "status": state.status.value,
-        "steps_completed": state.steps_completed,
-        "current_step": state.current_step,
-        "error": state.error,
-        "result": state.result,
+        "id": run.id,
+        "flow_id": run.flow_id,
+        "user_id": run.user_id,
+        "status": run.status,
+        "inputs": json.loads(run.inputs),
+        "sandbox_id": run.sandbox_id,
+        "steps": json.loads(run.steps),
+        "current_step": run.current_step,
+        "result": json.loads(run.result) if run.result else None,
+        "error": run.error,
+        "created_at": run.created_at,
+        "completed_at": run.completed_at,
     }
 
 
 # ---------------------------------------------------------------------------
-# WebSocket
+# WebSocket for run progress
 # ---------------------------------------------------------------------------
 
-@app.websocket("/ws/booking/{booking_id}")
-async def ws_booking(websocket: WebSocket, booking_id: str):
-    """Real-time booking progress updates."""
+@app.websocket("/ws/runs/{run_id}")
+async def ws_run(websocket: WebSocket, run_id: str):
     await websocket.accept()
 
-    if booking_id not in _ws_connections:
-        _ws_connections[booking_id] = []
-    _ws_connections[booking_id].append(websocket)
+    if run_id not in _ws_connections:
+        _ws_connections[run_id] = []
+    _ws_connections[run_id].append(websocket)
 
-    logger.info("WebSocket client connected for booking %s", booking_id)
+    logger.info("WebSocket client connected for run %s", run_id)
 
     try:
-        state = get_booking(booking_id)
-        if state:
+        run = await platform_db.get_run(run_id)
+        if run:
             await websocket.send_json({
-                "booking_id": state.booking_id,
-                "status": state.status.value,
-                "steps_completed": state.steps_completed,
-                "current_step": state.current_step,
-                "error": state.error,
+                "run_id": run.id,
+                "status": run.status,
+                "current_step": run.current_step,
+                "steps": json.loads(run.steps),
+                "error": run.error,
             })
 
         while True:
@@ -468,31 +534,65 @@ async def ws_booking(websocket: WebSocket, booking_id: str):
                 await websocket.send_text("pong")
 
     except WebSocketDisconnect:
-        logger.info("WebSocket client disconnected for booking %s", booking_id)
+        logger.info("WebSocket client disconnected for run %s", run_id)
     finally:
-        if booking_id in _ws_connections:
-            _ws_connections[booking_id] = [
-                ws for ws in _ws_connections[booking_id] if ws != websocket
+        if run_id in _ws_connections:
+            _ws_connections[run_id] = [
+                ws for ws in _ws_connections[run_id] if ws != websocket
             ]
-            if not _ws_connections[booking_id]:
-                del _ws_connections[booking_id]
+            if not _ws_connections[run_id]:
+                del _ws_connections[run_id]
 
 
-async def _broadcast_booking_progress(booking_id: str, data: dict):
-    """Send a progress update to all WebSocket clients watching a booking."""
-    clients = _ws_connections.get(booking_id, [])
+async def _broadcast_run_progress(run_id: str, data: dict):
+    clients = _ws_connections.get(run_id, [])
     dead = []
     for ws in clients:
         try:
             await ws.send_json(data)
         except Exception:
             dead.append(ws)
-
     for ws in dead:
-        if booking_id in _ws_connections:
-            _ws_connections[booking_id] = [
-                w for w in _ws_connections[booking_id] if w != ws
+        if run_id in _ws_connections:
+            _ws_connections[run_id] = [
+                w for w in _ws_connections[run_id] if w != ws
             ]
+
+
+# ---------------------------------------------------------------------------
+# Profile endpoints (auth required) — tar-based profile save/restore
+# ---------------------------------------------------------------------------
+
+@app.post("/api/profile/save")
+async def profile_save(req: ProfileSaveRequest, user: dict = Depends(auth.get_current_user)):
+    user_id = user["id"]
+    if not SandboxManager.validate_profile_name(req.profile_name):
+        raise HTTPException(status_code=400, detail="Invalid profile name.")
+    try:
+        owner = sandbox_mgr.get_sandbox_owner(req.sandbox_id)
+        if owner and owner != user_id:
+            raise HTTPException(status_code=403, detail="Sandbox does not belong to you")
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    try:
+        saved_path = profile_mgr.save_profile(req.sandbox_id, req.profile_name, user_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"profile_name": req.profile_name, "path": str(saved_path), "status": "saved"}
+
+
+@app.get("/api/profile/status")
+async def profile_status(profile_name: str = "default", user: dict = Depends(auth.get_current_user)):
+    user_id = user["id"]
+    info = profile_mgr.get_profile_info(user_id, profile_name)
+    return {
+        "connected": info["exists"],
+        "profile_name": profile_name if info["exists"] else None,
+        "last_saved": info.get("last_modified"),
+        "source": info.get("source"),
+    }
 
 
 # ---------------------------------------------------------------------------

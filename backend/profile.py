@@ -1,7 +1,6 @@
 """Browser profile management — save/restore Chromium profiles to/from sandbox containers."""
 
 import logging
-import json
 import tarfile
 import tempfile
 from datetime import datetime, timezone
@@ -166,78 +165,3 @@ class ProfileManager:
 
         return profiles
 
-    # ------------------------------------------------------------------
-    # Extension-based session import
-    # ------------------------------------------------------------------
-
-    def import_session(self, user_id: str, profile_name: str, session_data: dict) -> Path:
-        """Import session data captured by the Chrome extension."""
-        profile_dir = self._user_profile_dir(user_id, profile_name)
-        profile_dir.mkdir(parents=True, exist_ok=True)
-
-        raw_cookies = session_data.get("cookies", [])
-        playwright_cookies = []
-        for c in raw_cookies:
-            cookie = {
-                "name": c.get("name", ""),
-                "value": c.get("value", ""),
-                "domain": c.get("domain", ""),
-                "path": c.get("path", "/"),
-            }
-            if c.get("secure"):
-                cookie["secure"] = True
-            if c.get("httpOnly"):
-                cookie["httpOnly"] = True
-            if c.get("sameSite"):
-                sam = c["sameSite"].lower()
-                if sam == "no_restriction":
-                    cookie["sameSite"] = "None"
-                elif sam == "lax":
-                    cookie["sameSite"] = "Lax"
-                elif sam == "strict":
-                    cookie["sameSite"] = "Strict"
-                elif sam == "unspecified":
-                    cookie["sameSite"] = "Lax"
-            if c.get("expirationDate"):
-                cookie["expires"] = c["expirationDate"]
-            playwright_cookies.append(cookie)
-
-        cookies_path = profile_dir / "cookies.json"
-        cookies_path.write_text(json.dumps(playwright_cookies, indent=2))
-
-        session_path = profile_dir / "session.json"
-        session_path.write_text(json.dumps(session_data, indent=2))
-
-        meta_path = profile_dir / "metadata.txt"
-        meta_path.write_text(
-            f"profile_name={profile_name}\n"
-            f"user_id={user_id}\n"
-            f"source=extension\n"
-            f"imported_at={datetime.now(timezone.utc).isoformat()}\n"
-            f"url={session_data.get('url', '')}\n"
-            f"cookie_count={len(playwright_cookies)}\n"
-        )
-
-        logger.info(
-            "Imported session for user %s profile '%s': %d cookies",
-            user_id, profile_name, len(playwright_cookies),
-        )
-        return profile_dir
-
-    def get_session_cookies(self, user_id: str, profile_name: str) -> list[dict] | None:
-        """Load cookies from an imported session profile."""
-        cookies_path = self._user_profile_dir(user_id, profile_name) / "cookies.json"
-        if not cookies_path.exists():
-            return None
-        return json.loads(cookies_path.read_text())
-
-    def get_session_storage(self, user_id: str, profile_name: str) -> dict | None:
-        """Load localStorage and sessionStorage from an imported session profile."""
-        session_path = self._user_profile_dir(user_id, profile_name) / "session.json"
-        if not session_path.exists():
-            return None
-        data = json.loads(session_path.read_text())
-        return {
-            "localStorage": data.get("localStorage", {}),
-            "sessionStorage": data.get("sessionStorage", {}),
-        }
