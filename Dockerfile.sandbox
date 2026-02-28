@@ -6,7 +6,6 @@ FROM python:3.12-slim
 
 ENV DEBIAN_FRONTEND=noninteractive \
     DISPLAY=:1 \
-    VNC_PASSWORD=bookr \
     RESOLUTION=1280x720x24 \
     NOVNC_PORT=6080 \
     VNC_PORT=5900
@@ -67,13 +66,17 @@ RUN pip install --no-cache-dir \
     && playwright install chromium \
     && playwright install-deps chromium
 
+# ── Non-root user ────────────────────────────────────────────────────
+RUN useradd -m -s /bin/bash sandboxuser
+
 # ── Directory structure ──────────────────────────────────────────────
 RUN mkdir -p \
     /profiles \
     /tmp/chrome-profile \
-    /root/.vnc \
+    /home/sandboxuser/.vnc \
     /var/log/supervisor \
-    /var/run/supervisor
+    /var/run/supervisor \
+    && chown -R sandboxuser:sandboxuser /tmp/chrome-profile /home/sandboxuser/.vnc /profiles
 
 # ── Supervisord config ───────────────────────────────────────────────
 COPY sandbox/supervisord.conf /etc/supervisor/conf.d/sandbox.conf

@@ -52,8 +52,14 @@ _booking_tasks: dict[str, asyncio.Task] = {}  # booking_id -> background task
 async def lifespan(app: FastAPI):
     PROFILES_DIR.mkdir(parents=True, exist_ok=True)
     await auth.init_db()
+    # H3: Clean up orphaned sandbox containers from previous runs
+    removed = sandbox_mgr.cleanup_orphans()
+    if removed:
+        logger.info("Cleaned up %d orphaned sandbox containers", removed)
     logger.info("uber-bookr backend starting. Profiles dir: %s", PROFILES_DIR)
     yield
+    # H3: Stop all tracked sandboxes on shutdown
+    sandbox_mgr.stop_all()
     logger.info("uber-bookr backend shutting down.")
 
 
@@ -174,7 +180,10 @@ async def sandbox_start(req: SandboxStartRequest, user: dict = Depends(auth.get_
     """Start a new browser sandbox container."""
     user_id = user["id"]
     profile_name = req.profile_name or "default"
-    profile_path_key = f"{user_id}/{profile_name}"
+
+    # H5: Validate profile name
+    if not SandboxManager.validate_profile_name(profile_name):
+        raise HTTPException(status_code=400, detail="Invalid profile name. Use only alphanumeric, hyphens, underscores.")
 
     profile_path = None
     if profile_mgr.has_profile(user_id, profile_name):
@@ -182,8 +191,11 @@ async def sandbox_start(req: SandboxStartRequest, user: dict = Depends(auth.get_
         logger.info("Will restore profile '%s' for user %s into new sandbox", profile_name, user_id)
 
     try:
-        result = sandbox_mgr.start(profile_path=profile_path)
+        result = sandbox_mgr.start(profile_path=profile_path, user_id=user_id)
     except RuntimeError as e:
+        # H2: Per-user limit exceeded returns 429
+        if "already has" in str(e) and "active sandboxes" in str(e):
+            raise HTTPException(status_code=429, detail=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
     if profile_mgr.has_profile(user_id, profile_name):
@@ -198,6 +210,16 @@ async def sandbox_start(req: SandboxStartRequest, user: dict = Depends(auth.get_
 @app.post("/api/sandbox/stop")
 async def sandbox_stop(req: SandboxStopRequest, user: dict = Depends(auth.get_current_user)):
     """Stop and remove a sandbox container."""
+    user_id = user["id"]
+
+    # H4: Verify sandbox belongs to the requesting user
+    try:
+        owner = sandbox_mgr.get_sandbox_owner(req.sandbox_id)
+        if owner and owner != user_id:
+            raise HTTPException(status_code=403, detail="Sandbox does not belong to you")
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
     try:
         sandbox_mgr.stop(req.sandbox_id)
     except ValueError as e:
@@ -216,6 +238,19 @@ async def sandbox_stop(req: SandboxStopRequest, user: dict = Depends(auth.get_cu
 async def profile_save(req: ProfileSaveRequest, user: dict = Depends(auth.get_current_user)):
     """Save the browser profile from a running sandbox to host storage."""
     user_id = user["id"]
+
+    # H5: Validate profile name
+    if not SandboxManager.validate_profile_name(req.profile_name):
+        raise HTTPException(status_code=400, detail="Invalid profile name. Use only alphanumeric, hyphens, underscores.")
+
+    # H4: Verify sandbox belongs to the requesting user
+    try:
+        owner = sandbox_mgr.get_sandbox_owner(req.sandbox_id)
+        if owner and owner != user_id:
+            raise HTTPException(status_code=403, detail="Sandbox does not belong to you")
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
     try:
         saved_path = profile_mgr.save_profile(req.sandbox_id, req.profile_name, user_id)
     except ValueError as e:
@@ -255,6 +290,10 @@ async def profile_import(request: Request, user: dict = Depends(auth.get_current
 
     profile_name = session_data.pop("profile_name", "default") if "profile_name" in session_data else "default"
 
+    # H5: Validate profile name
+    if not SandboxManager.validate_profile_name(profile_name):
+        raise HTTPException(status_code=400, detail="Invalid profile name. Use only alphanumeric, hyphens, underscores.")
+
     cookies = session_data.get("cookies", [])
     if not cookies:
         raise HTTPException(status_code=400, detail="No cookies in payload")
@@ -285,13 +324,19 @@ async def booking_start(req: BookingStartRequest, user: dict = Depends(auth.get_
     booking_id = str(uuid.uuid4())[:12]
     profile_name = req.profile_name or "default"
 
+    # H5: Validate profile name
+    if not SandboxManager.validate_profile_name(profile_name):
+        raise HTTPException(status_code=400, detail="Invalid profile name. Use only alphanumeric, hyphens, underscores.")
+
     profile_path = None
     if profile_mgr.has_profile(user_id, profile_name):
         profile_path = str(PROFILES_DIR / user_id / profile_name)
 
     try:
-        sandbox_result = sandbox_mgr.start(profile_path=profile_path)
+        sandbox_result = sandbox_mgr.start(profile_path=profile_path, user_id=user_id)
     except RuntimeError as e:
+        if "already has" in str(e) and "active sandboxes" in str(e):
+            raise HTTPException(status_code=429, detail=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to start sandbox: {e}")
 
     sandbox_id = sandbox_result["sandbox_id"]

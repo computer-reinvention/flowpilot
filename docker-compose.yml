@@ -1,4 +1,20 @@
+networks:
+  sandbox-net:
+    driver: bridge
+
 services:
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy
+    environment:
+      CONTAINERS: 1
+      POST: 1
+      NETWORKS: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    privileged: true
+    networks:
+      - sandbox-net
+
   backend:
     build:
       context: .
@@ -7,11 +23,15 @@ services:
       - "8080:8080"
     volumes:
       - ./profiles:/app/profiles
-      - /var/run/docker.sock:/var/run/docker.sock
     environment:
+      - DOCKER_HOST=tcp://docker-proxy:2375
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
       - PROFILES_DIR=/app/profiles
       - JWT_SECRET=${JWT_SECRET:-}
+    depends_on:
+      - docker-proxy
+    networks:
+      - sandbox-net
