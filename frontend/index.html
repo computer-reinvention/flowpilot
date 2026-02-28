@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>uber-bookr</title>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --black: #000;
+      --white: #fff;
+      --gray-100: #f6f6f6;
+      --gray-200: #e2e2e2;
+      --gray-400: #afafaf;
+      --gray-600: #6b6b6b;
+      --gray-800: #282828;
+      --gray-900: #1a1a1a;
+      --green: #06C167;
+      --red: #e74c3c;
+      --radius: 12px;
+      --transition: 0.3s ease;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: var(--black);
+      color: var(--white);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 480px;
+      padding: 24px;
+    }
+
+    .logo {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .logo h1 {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    .logo span {
+      color: var(--gray-400);
+      font-weight: 400;
+    }
+
+    /* -- Card ---------------------------------------- */
+
+    .card {
+      background: var(--gray-900);
+      border-radius: var(--radius);
+      padding: 32px 28px;
+      transition: opacity var(--transition), transform var(--transition);
+    }
+
+    .card.hidden {
+      display: none;
+    }
+
+    .card.fade-in {
+      animation: fadeIn 0.4s ease forwards;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* -- Buttons ------------------------------------- */
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      padding: 16px 24px;
+      font-size: 16px;
+      font-weight: 600;
+      border: none;
+      border-radius: 500px;
+      cursor: pointer;
+      transition: background var(--transition), opacity var(--transition);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--white);
+      color: var(--black);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--gray-200);
+    }
+
+    .btn-success {
+      background: var(--green);
+      color: var(--white);
+    }
+
+    .btn-success:hover:not(:disabled) {
+      opacity: 0.9;
+    }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--white);
+      border: 1px solid var(--gray-600);
+    }
+
+    .btn-outline:hover:not(:disabled) {
+      border-color: var(--white);
+    }
+
+    /* -- Inputs -------------------------------------- */
+
+    .input-group {
+      margin-bottom: 16px;
+    }
+
+    .input-group input {
+      width: 100%;
+      padding: 16px 20px;
+      font-size: 16px;
+      font-family: inherit;
+      background: var(--gray-800);
+      color: var(--white);
+      border: 1px solid transparent;
+      border-radius: var(--radius);
+      outline: none;
+      transition: border-color var(--transition);
+    }
+
+    .input-group input::placeholder {
+      color: var(--gray-400);
+    }
+
+    .input-group input:focus {
+      border-color: var(--white);
+    }
+
+    /* -- Dot separator ------------------------------- */
+
+    .dot-separator {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px 0;
+    }
+
+    .dot-separator span {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--gray-600);
+    }
+
+    /* -- Status area --------------------------------- */
+
+    .status-connected {
+      text-align: center;
+      padding: 20px 0 4px;
+      color: var(--green);
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .progress-area {
+      margin-top: 24px;
+    }
+
+    .progress-step {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 0;
+      font-size: 14px;
+      color: var(--gray-400);
+      transition: color var(--transition);
+    }
+
+    .progress-step.active {
+      color: var(--white);
+    }
+
+    .progress-step.done {
+      color: var(--green);
+    }
+
+    .progress-step.error {
+      color: var(--red);
+    }
+
+    .progress-step .icon {
+      width: 20px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--gray-600);
+      border-top-color: var(--white);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* -- noVNC iframe -------------------------------- */
+
+    .vnc-wrapper {
+      margin-top: 20px;
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--gray-800);
+    }
+
+    .vnc-wrapper iframe {
+      width: 100%;
+      height: 400px;
+      border: none;
+      background: var(--gray-800);
+    }
+
+    .vnc-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 16px;
+      font-size: 13px;
+      color: var(--gray-400);
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0;
+      font-family: inherit;
+    }
+
+    .vnc-toggle:hover {
+      color: var(--white);
+    }
+
+    /* -- Misc ---------------------------------------- */
+
+    .spacer {
+      height: 16px;
+    }
+
+    .text-center {
+      text-align: center;
+    }
+
+    .text-muted {
+      color: var(--gray-400);
+      font-size: 13px;
+    }
+
+    .mt-12 {
+      margin-top: 12px;
+    }
+
+    .mt-20 {
+      margin-top: 20px;
+    }
+
+    @media (max-width: 520px) {
+      .container {
+        padding: 16px;
+      }
+      .card {
+        padding: 24px 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">
+      <h1>uber<span>-bookr</span></h1>
+    </div>
+
+    <!-- State 1: Not Connected -->
+    <div id="connect-card" class="card hidden">
+      <!-- Phase A: Connect button -->
+      <div id="connect-prompt">
+        <p class="text-center text-muted" style="margin-bottom: 24px;">
+          Connect your Uber account to get started
+        </p>
+        <button id="connect-btn" class="btn btn-primary" onclick="startSandbox()">
+          Connect Uber
+        </button>
+      </div>
+
+      <!-- Phase B: VNC + Save -->
+      <div id="connect-vnc" class="hidden">
+        <p class="text-center text-muted" style="margin-bottom: 12px;">
+          Log in to your Uber account in the browser below
+        </p>
+        <div class="vnc-wrapper">
+          <iframe id="connect-vnc-iframe" src="about:blank"></iframe>
+        </div>
+        <div class="spacer"></div>
+        <button id="save-btn" class="btn btn-success" onclick="saveProfile()">
+          Save &amp; Done
+        </button>
+      </div>
+
+      <!-- Phase C: Connected confirmation -->
+      <div id="connect-done" class="hidden">
+        <div class="status-connected">Uber Connected &#10003;</div>
+        <p class="text-center text-muted mt-12">Profile saved. You can now book rides.</p>
+        <div class="spacer"></div>
+        <button class="btn btn-primary" onclick="showBookingCard()">
+          Book a Ride
+        </button>
+      </div>
+    </div>
+
+    <!-- State 2: Booking -->
+    <div id="booking-card" class="card hidden">
+      <div id="booking-form">
+        <div class="input-group">
+          <input type="text" id="pickup" placeholder="Pickup location" autocomplete="off" />
+        </div>
+        <div class="dot-separator"><span></span></div>
+        <div class="input-group">
+          <input type="text" id="dropoff" placeholder="Drop-off location" autocomplete="off" />
+        </div>
+        <div class="spacer"></div>
+        <button id="book-btn" class="btn btn-primary" onclick="startBooking()">
+          Book Ride
+        </button>
+      </div>
+
+      <div id="booking-progress" class="hidden">
+        <div class="progress-area" id="progress-steps"></div>
+
+        <button class="vnc-toggle mt-12" onclick="toggleBookingVnc()">
+          <span id="vnc-toggle-icon">&#9654;</span> Watch live browser
+        </button>
+        <div id="booking-vnc-container" class="hidden">
+          <div class="vnc-wrapper">
+            <iframe id="booking-vnc-iframe" src="about:blank"></iframe>
+          </div>
+        </div>
+
+        <div id="booking-done-actions" class="hidden">
+          <div class="spacer"></div>
+          <button class="btn btn-outline" onclick="resetBooking()">
+            Book Another Ride
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading state -->
+    <div id="loading-card" class="card text-center">
+      <div class="spinner" style="margin: 20px auto;"></div>
+      <p class="text-muted mt-12">Loading...</p>
+    </div>
+  </div>
+
+  <script>
+    // -- API helpers --
+    const API = '';
+
+    async function api(method, path, body) {
+      const opts = {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+      };
+      if (body) opts.body = JSON.stringify(body);
+      const res = await fetch(API + path, opts);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || res.statusText);
+      }
+      return res.json();
+    }
+
+    // -- DOM helpers --
+    function show(id) {
+      const el = document.getElementById(id);
+      el.classList.remove('hidden');
+      el.classList.add('fade-in');
+    }
+
+    function hide(id) {
+      const el = document.getElementById(id);
+      el.classList.add('hidden');
+      el.classList.remove('fade-in');
+    }
+
+    // -- Initialization --
+    let sandboxInfo = null;
+    let bookingVncVisible = false;
+
+    async function init() {
+      try {
+        const status = await api('GET', '/api/profile/status');
+        hide('loading-card');
+
+        if (status.connected) {
+          show('booking-card');
+        } else {
+          show('connect-card');
+          show('connect-prompt');
+        }
+      } catch (err) {
+        hide('loading-card');
+        show('connect-card');
+        show('connect-prompt');
+      }
+    }
+
+    // -- Connect flow --
+    async function startSandbox() {
+      const btn = document.getElementById('connect-btn');
+      btn.disabled = true;
+      btn.textContent = 'Starting sandbox...';
+
+      try {
+        sandboxInfo = await api('POST', '/api/sandbox/start');
+        const vncUrl = sandboxInfo.novnc_url || sandboxInfo.vnc_url;
+        document.getElementById('connect-vnc-iframe').src = vncUrl;
+
+        hide('connect-prompt');
+        show('connect-vnc');
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = 'Connect Uber';
+        alert('Failed to start sandbox: ' + err.message);
+      }
+    }
+
+    async function saveProfile() {
+      const btn = document.getElementById('save-btn');
+      btn.disabled = true;
+      btn.textContent = 'Saving profile...';
+
+      try {
+        await api('POST', '/api/profile/save', { sandbox_id: sandboxInfo.sandbox_id, profile_name: 'default' });
+        await api('POST', '/api/sandbox/stop', { sandbox_id: sandboxInfo.sandbox_id });
+
+        hide('connect-vnc');
+        show('connect-done');
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = 'Save & Done';
+        alert('Failed to save profile: ' + err.message);
+      }
+    }
+
+    function showBookingCard() {
+      hide('connect-card');
+      show('booking-card');
+    }
+
+    // -- Booking flow --
+    const BOOKING_STEPS = [
+      'Starting sandbox...',
+      'Restoring profile...',
+      'Navigating to Uber...',
+      'Entering pickup...',
+      'Entering dropoff...',
+      'Selecting UberGo...',
+      'Confirming booking...',
+    ];
+
+    let ws = null;
+
+    function renderSteps() {
+      const container = document.getElementById('progress-steps');
+      container.innerHTML = '';
+
+      BOOKING_STEPS.forEach(function(label, i) {
+        const step = document.createElement('div');
+        step.className = 'progress-step';
+        step.id = 'step-' + i;
+        step.innerHTML =
+          '<div class="icon">' +
+            '<span class="spinner" style="display:none"></span>' +
+            '<span class="check"></span>' +
+          '</div>' +
+          '<span class="label">' + label + '</span>';
+        container.appendChild(step);
+      });
+    }
+
+    function updateStep(index, state, message) {
+      var step = document.getElementById('step-' + index);
+      if (!step) return;
+
+      step.className = 'progress-step ' + state;
+      var spinner = step.querySelector('.spinner');
+      var check = step.querySelector('.check');
+
+      if (state === 'active') {
+        spinner.style.display = 'inline-block';
+        check.textContent = '';
+      } else if (state === 'done') {
+        spinner.style.display = 'none';
+        check.textContent = '\u2713';
+      } else if (state === 'error') {
+        spinner.style.display = 'none';
+        check.textContent = '\u2717';
+      } else {
+        spinner.style.display = 'none';
+        check.textContent = '';
+      }
+
+      if (message) {
+        step.querySelector('.label').textContent = message;
+      }
+    }
+
+    function addFinalStep(success, message) {
+      var container = document.getElementById('progress-steps');
+      var step = document.createElement('div');
+      step.className = 'progress-step ' + (success ? 'done' : 'error');
+      step.innerHTML =
+        '<div class="icon"><span class="check">' +
+        (success ? '\u2713' : '\u2717') +
+        '</span></div><span class="label">' + message + '</span>';
+      container.appendChild(step);
+      show('booking-done-actions');
+    }
+
+    async function startBooking() {
+      var pickup = document.getElementById('pickup').value.trim();
+      var dropoff = document.getElementById('dropoff').value.trim();
+
+      if (!pickup || !dropoff) {
+        alert('Please enter both pickup and drop-off locations.');
+        return;
+      }
+
+      var btn = document.getElementById('book-btn');
+      btn.disabled = true;
+
+      hide('booking-form');
+      renderSteps();
+      show('booking-progress');
+
+      try {
+        var result = await api('POST', '/api/booking/start', { pickup: pickup, dropoff: dropoff });
+        var bookingId = result.booking_id;
+
+        if (result.novnc_url) {
+          document.getElementById('booking-vnc-iframe').src = result.novnc_url;
+        }
+
+        var protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        ws = new WebSocket(protocol + '//' + location.host + '/ws/booking/' + bookingId);
+
+        ws.onmessage = function(event) {
+          var data = JSON.parse(event.data);
+          handleBookingEvent(data);
+        };
+
+        ws.onerror = function() {
+          addFinalStep(false, 'Connection lost');
+        };
+
+        ws.onclose = function() {};
+      } catch (err) {
+        addFinalStep(false, 'Booking failed: ' + err.message);
+      }
+    }
+
+    var STATUS_TO_STEP = {
+      'starting': 0,
+      'connecting': 1,
+      'navigating': 2,
+      'entering_pickup': 3,
+      'entering_dropoff': 4,
+      'selecting_ride': 5,
+      'confirming': 6,
+    };
+
+    function handleBookingEvent(data) {
+      var stepIndex = STATUS_TO_STEP[data.status];
+
+      if (data.status === 'completed') {
+        // Mark all steps done
+        for (var i = 0; i < BOOKING_STEPS.length; i++) {
+          updateStep(i, 'done');
+        }
+        addFinalStep(true, 'Ride booked!');
+        if (ws) ws.close();
+      } else if (data.status === 'failed') {
+        addFinalStep(false, data.message || 'Booking failed');
+        if (ws) ws.close();
+      } else if (stepIndex !== undefined) {
+        // Mark previous steps as done
+        for (var i = 0; i < stepIndex; i++) {
+          updateStep(i, 'done');
+        }
+        // Mark current step as active
+        updateStep(stepIndex, 'active', data.message);
+      }
+    }
+
+    function toggleBookingVnc() {
+      bookingVncVisible = !bookingVncVisible;
+      var container = document.getElementById('booking-vnc-container');
+      var icon = document.getElementById('vnc-toggle-icon');
+
+      if (bookingVncVisible) {
+        show('booking-vnc-container');
+        icon.textContent = '\u25BC';
+      } else {
+        hide('booking-vnc-container');
+        icon.textContent = '\u25B6';
+      }
+    }
+
+    function resetBooking() {
+      hide('booking-progress');
+      hide('booking-done-actions');
+      hide('booking-vnc-container');
+      bookingVncVisible = false;
+      document.getElementById('vnc-toggle-icon').textContent = '\u25B6';
+      document.getElementById('pickup').value = '';
+      document.getElementById('dropoff').value = '';
+      document.getElementById('book-btn').disabled = false;
+      show('booking-form');
+    }
+
+    // -- Boot --
+    init();
+  </script>
+</body>
+</html>
