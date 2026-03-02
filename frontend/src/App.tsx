@@ -45,7 +45,7 @@ export default function App() {
         <div className="w-full space-y-6">
           <div className="text-center">
             <h1 className="text-2xl font-bold tracking-tight">
-              uber<span className="text-muted-foreground font-normal">-bookr</span>
+              Flow<span className="text-muted-foreground font-normal">Pilot</span>
             </h1>
           </div>
           {authView === "login" ? (

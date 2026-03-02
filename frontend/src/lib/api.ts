@@ -1,4 +1,4 @@
-const TOKEN_KEY = "uber_bookr_token";
+const TOKEN_KEY = "flowpilot_token";
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
