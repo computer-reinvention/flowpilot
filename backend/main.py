@@ -457,6 +457,18 @@ async def _execute_run(
             "result": json.dumps(result),
             "completed_at": datetime.now(timezone.utc).isoformat(),
         })
+    except asyncio.CancelledError:
+        logger.info("Run %s cancelled", run_id)
+        await platform_db.update_run(run_id, {
+            "status": "cancelled",
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        })
+        await _broadcast_run_progress(run_id, {
+            "run_id": run_id,
+            "status": "cancelled",
+            "message": "Run cancelled by user",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
     except Exception as e:
         logger.error("Run %s failed: %s", run_id, e)
         await platform_db.update_run(run_id, {
@@ -501,6 +513,43 @@ async def run_get(run_id: str, user: dict = Depends(auth.get_current_user)):
         "created_at": run.created_at,
         "completed_at": run.completed_at,
     }
+
+
+@app.post("/api/runs/{run_id}/cancel")
+async def run_cancel(run_id: str, user: dict = Depends(auth.get_current_user)):
+    run = await platform_db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if run.user_id != user["id"]:
+        raise HTTPException(status_code=403, detail="Run does not belong to you")
+    if run.status in ("completed", "failed", "cancelled"):
+        raise HTTPException(status_code=409, detail=f"Run already {run.status}")
+
+    # Cancel the asyncio background task
+    task = _run_tasks.get(run_id)
+    if task and not task.done():
+        task.cancel()
+
+    # Stop the sandbox container
+    if run.sandbox_id:
+        try:
+            sandbox_mgr.stop(run.sandbox_id)
+        except (ValueError, Exception) as e:
+            logger.warning("Failed to stop sandbox %s during cancel: %s", run.sandbox_id, e)
+
+    # Update DB and broadcast
+    await platform_db.update_run(run_id, {
+        "status": "cancelled",
+        "completed_at": datetime.now(timezone.utc).isoformat(),
+    })
+    await _broadcast_run_progress(run_id, {
+        "run_id": run_id,
+        "status": "cancelled",
+        "message": "Run cancelled by user",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+    return {"run_id": run_id, "status": "cancelled"}
 
 
 # ---------------------------------------------------------------------------
