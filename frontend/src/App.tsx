@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useFlows } from "@/hooks/useFlows";
 import { useRun } from "@/hooks/useRun";
+import { useRuns } from "@/hooks/useRuns";
 import { useSessions } from "@/hooks/useSessions";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { SignupForm } from "@/components/auth/SignupForm";
@@ -12,7 +13,9 @@ import { FlowGrid } from "@/components/flows/FlowGrid";
 import { FlowForm } from "@/components/flows/FlowForm";
 import { FlowRunner } from "@/components/flows/FlowRunner";
 import { CreateFlowForm } from "@/components/flows/CreateFlowForm";
+import { RunHistory } from "@/components/runs/RunHistory";
 import { SessionList } from "@/components/sessions/SessionList";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import type { Flow } from "@/lib/types";
 
@@ -23,6 +26,7 @@ export default function App() {
   const auth = useAuth();
   const flows = useFlows();
   const run = useRun();
+  const runs = useRuns();
   const sessions = useSessions();
 
   const [authView, setAuthView] = useState<AuthView>("login");
@@ -120,20 +124,36 @@ export default function App() {
       <Separator className="mb-6" />
 
       {appView === "grid" && (
-        <div className="space-y-6">
-          <FlowGrid
-            flows={flows.flows}
-            loading={flows.loading}
-            error={flows.error}
-            onSelect={selectFlow}
-            onCreate={() => setAppView("create")}
-          />
-          <SessionList
-            sessions={sessions.sessions}
-            loading={sessions.loading}
-            onDelete={sessions.deleteSession}
-          />
-        </div>
+        <Tabs defaultValue="flows">
+          <TabsList className="w-full">
+            <TabsTrigger value="flows">Flows</TabsTrigger>
+            <TabsTrigger value="history">History</TabsTrigger>
+          </TabsList>
+          <TabsContent value="flows">
+            <div className="space-y-6">
+              <FlowGrid
+                flows={flows.flows}
+                loading={flows.loading}
+                error={flows.error}
+                onSelect={selectFlow}
+                onCreate={() => setAppView("create")}
+              />
+              <SessionList
+                sessions={sessions.sessions}
+                loading={sessions.loading}
+                onDelete={sessions.deleteSession}
+              />
+            </div>
+          </TabsContent>
+          <TabsContent value="history">
+            <RunHistory
+              runs={runs.runs}
+              flows={flows.flows}
+              loading={runs.loading}
+              error={runs.error}
+            />
+          </TabsContent>
+        </Tabs>
       )}
 
       {appView === "create" && (
