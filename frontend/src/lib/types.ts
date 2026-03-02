@@ -6,6 +6,7 @@ export interface User {
 
 export interface FlowInput {
   name: string;
+  key?: string;
   label: string;
   type: "text" | "select" | "textarea" | "number" | "date" | "time";
   placeholder?: string;

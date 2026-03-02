@@ -21,6 +21,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import type { Flow, FlowInput } from "@/lib/types";
 
+/** Resolve a stable identifier for a flow input (supports both `name` and legacy `key` fields). */
+function inputId(input: FlowInput): string {
+  return input.name || input.key || input.label;
+}
+
 interface FlowFormProps {
   flow: Flow;
   onSubmit: (values: Record<string, string>) => void;
@@ -33,7 +38,7 @@ function renderInput(
   value: string,
   onChange: (val: string) => void,
 ) {
-  const id = `flow-input-${input.name}`;
+  const id = `flow-input-${inputId(input)}`;
 
   switch (input.type) {
     case "textarea":
@@ -111,7 +116,7 @@ export function FlowForm({ flow, onSubmit, onBack, submitting }: FlowFormProps) 
   const [values, setValues] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
     for (const input of flow.inputs) {
-      initial[input.name] = "";
+      initial[inputId(input)] = "";
     }
     return initial;
   });
@@ -146,12 +151,12 @@ export function FlowForm({ flow, onSubmit, onBack, submitting }: FlowFormProps) 
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           {flow.inputs.map((input) => (
-            <div key={input.name} className="space-y-2">
-              <Label htmlFor={`flow-input-${input.name}`}>
+            <div key={inputId(input)} className="space-y-2">
+              <Label htmlFor={`flow-input-${inputId(input)}`}>
                 {input.label}
               </Label>
-              {renderInput(input, values[input.name] ?? "", (val) =>
-                handleChange(input.name, val),
+              {renderInput(input, values[inputId(input)] ?? "", (val) =>
+                handleChange(inputId(input), val),
               )}
             </div>
           ))}

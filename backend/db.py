@@ -259,9 +259,9 @@ async def seed_default_flows():
         ),
         entry_url="https://m.uber.com",
         inputs=json.dumps([
-            {"key": "pickup", "label": "Pickup location", "type": "text", "placeholder": "e.g. Koramangala 5th Block"},
-            {"key": "dropoff", "label": "Drop-off location", "type": "text", "placeholder": "e.g. Indiranagar Metro"},
-            {"key": "ride_type", "label": "Ride type", "type": "select", "options": ["UberGo", "Premier", "Auto", "UberXL"]},
+            {"name": "pickup", "label": "Pickup location", "type": "text", "placeholder": "e.g. Koramangala 5th Block"},
+            {"name": "dropoff", "label": "Drop-off location", "type": "text", "placeholder": "e.g. Indiranagar Metro"},
+            {"name": "ride_type", "label": "Ride type", "type": "select", "options": ["UberGo", "Premier", "Auto", "UberXL"]},
         ]),
         icon="🚗",
         created_by="system",
