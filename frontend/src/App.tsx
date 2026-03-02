@@ -108,6 +108,7 @@ export default function App() {
     domain: string;
     description: string;
     entry_url?: string;
+    inputs?: Array<{ name: string; label: string; type: string; placeholder?: string }>;
   }) {
     setSubmitting(true);
     try {

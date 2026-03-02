@@ -37,8 +37,9 @@ function renderInput(
   input: FlowInput,
   value: string,
   onChange: (val: string) => void,
+  index: number,
 ) {
-  const id = `flow-input-${inputId(input)}`;
+  const id = `flow-input-${index}`;
 
   switch (input.type) {
     case "textarea":
@@ -113,21 +114,23 @@ function renderInput(
 }
 
 export function FlowForm({ flow, onSubmit, onBack, submitting }: FlowFormProps) {
-  const [values, setValues] = useState<Record<string, string>>(() => {
-    const initial: Record<string, string> = {};
-    for (const input of flow.inputs) {
-      initial[inputId(input)] = "";
-    }
-    return initial;
-  });
+  // Use array-indexed state — bulletproof, no key collision possible
+  const [values, setValues] = useState<string[]>(() =>
+    flow.inputs.map(() => "")
+  );
 
-  function handleChange(name: string, value: string) {
-    setValues((prev) => ({ ...prev, [name]: value }));
+  function handleChange(index: number, value: string) {
+    setValues(prev => prev.map((v, i) => i === index ? value : v));
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    onSubmit(values);
+    // Map back to named keys for the backend
+    const result: Record<string, string> = {};
+    flow.inputs.forEach((input, i) => {
+      result[inputId(input)] = values[i] ?? "";
+    });
+    onSubmit(result);
   }
 
   return (
@@ -150,14 +153,14 @@ export function FlowForm({ flow, onSubmit, onBack, submitting }: FlowFormProps) 
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {flow.inputs.map((input) => (
-            <div key={inputId(input)} className="space-y-2">
-              <Label htmlFor={`flow-input-${inputId(input)}`}>
+          {flow.inputs.map((input, index) => (
+            <div key={index} className="space-y-2">
+              <Label htmlFor={`flow-input-${index}`}>
                 {input.label}
               </Label>
-              {renderInput(input, values[inputId(input)] ?? "", (val) =>
-                handleChange(inputId(input), val),
-              )}
+              {renderInput(input, values[index] ?? "", (val) =>
+                handleChange(index, val),
+              index)}
             </div>
           ))}
           <Button type="submit" className="w-full" disabled={submitting}>
