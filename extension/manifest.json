@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Browser Automation Connector",
+  "name": "FlowPilot Session Connector",
   "version": "2.0.0",
-  "description": "Capture browser sessions from any domain for automation",
+  "description": "Capture browser sessions for FlowPilot automation",
   "permissions": ["cookies", "storage", "activeTab", "scripting"],
   "host_permissions": ["<all_urls>"],
   "action": {

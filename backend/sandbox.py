@@ -13,10 +13,10 @@ from docker.errors import NotFound, APIError
 
 logger = logging.getLogger(__name__)
 
-SANDBOX_IMAGE = "uber-bookr-sandbox"
+SANDBOX_IMAGE = "flowpilot-sandbox"
 NOVNC_CONTAINER_PORT = 6080
 CDP_CONTAINER_PORT = 9222
-SANDBOX_NETWORK = "uber-bookr_sandbox-net"
+SANDBOX_NETWORK = "flowpilot_sandbox-net"
 MAX_SANDBOXES_PER_USER = 2
 PROFILE_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
@@ -89,7 +89,7 @@ class SandboxManager:
         try:
             container = self.client.containers.run(
                 image=SANDBOX_IMAGE,
-                name=f"uber-bookr-{sandbox_id}",
+                name=f"flowpilot-{sandbox_id}",
                 detach=True,
                 ports={
                     f"{NOVNC_CONTAINER_PORT}/tcp": None,  # random host port — noVNC only
@@ -99,7 +99,7 @@ class SandboxManager:
                 environment=environment,
                 network=SANDBOX_NETWORK,
                 labels={
-                    "uber-bookr": "sandbox",
+                    "flowpilot": "sandbox",
                     "sandbox-id": sandbox_id,
                     "user-id": user_id,
                 },
@@ -119,7 +119,7 @@ class SandboxManager:
         novnc_port = self._get_host_port(container, NOVNC_CONTAINER_PORT)
 
         # C2: CDP accessible via container name on the internal network
-        cdp_host = f"uber-bookr-{sandbox_id}"
+        cdp_host = f"flowpilot-{sandbox_id}"
         cdp_port = CDP_CONTAINER_PORT  # internal port, not published
 
         # If a profile was provided, copy it into the container
@@ -253,12 +253,12 @@ class SandboxManager:
         return info.user_id
 
     def cleanup_orphans(self) -> int:
-        """H3: Stop and remove any orphaned uber-bookr sandbox containers."""
+        """H3: Stop and remove any orphaned flowpilot sandbox containers."""
         removed = 0
         try:
             containers = self.client.containers.list(
                 all=True,
-                filters={"label": "uber-bookr=sandbox"},
+                filters={"label": "flowpilot=sandbox"},
             )
             for container in containers:
                 sandbox_id = container.labels.get("sandbox-id", "unknown")

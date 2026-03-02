@@ -35,7 +35,7 @@ class ProfileManager:
 
     def save_profile(self, sandbox_id: str, profile_name: str, user_id: str) -> Path:
         """Extract the Chrome profile directory from a running container and save as tar.gz."""
-        container_name = f"uber-bookr-{sandbox_id}"
+        container_name = f"flowpilot-{sandbox_id}"
         profile_dir = self._user_profile_dir(user_id, profile_name)
         profile_dir.mkdir(parents=True, exist_ok=True)
         archive_path = profile_dir / "profile.tar.gz"
@@ -84,7 +84,7 @@ class ProfileManager:
             logger.warning("No saved profile found at %s", archive_path)
             return False
 
-        container_name = f"uber-bookr-{sandbox_id}"
+        container_name = f"flowpilot-{sandbox_id}"
 
         try:
             container = self.client.containers.get(container_name)
