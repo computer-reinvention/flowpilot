@@ -182,6 +182,7 @@ export default function App() {
           error={run.error}
           novncUrl={run.novncUrl}
           onReset={handleRunReset}
+          onResume={run.resumeRun}
         />
       )}
     </Container>

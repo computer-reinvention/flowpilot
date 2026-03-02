@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Callable, Awaitable
 from datetime import datetime, timezone
 
-from browser_use import Agent, Browser
+from browser_use import Agent, Browser, ActionResult
 
 from .models import Flow, Run
 
@@ -19,6 +19,7 @@ class RunStatus(str, Enum):
     PENDING = "pending"
     CONNECTING = "connecting"
     RUNNING = "running"
+    PAUSED_FOR_AUTH = "paused_for_auth"
     COMPLETED = "completed"
     FAILED = "failed"
 
@@ -88,6 +89,7 @@ class FlowRunner:
         run_id: str,
         progress_callback: Callable[[RunStatus, str], Awaitable[None]] | None = None,
         storage_state: dict | None = None,
+        agent_ready_callback: Callable | None = None,
     ) -> dict:
         """Execute a flow and return the result."""
 
@@ -115,15 +117,42 @@ class FlowRunner:
             def _on_step(state_summary, agent_output, step_num):
                 nonlocal step_count
                 step_count += 1
-                msg = f'Step {step_num}: {agent_output.current_state.next_step if hasattr(agent_output, "current_state") else "processing"}'
+                try:
+                    state = getattr(agent_output, "current_state", None)
+                    goal = getattr(state, "next_goal", None) or getattr(state, "next_step", None) or "processing"
+                    msg = f"Step {step_num}: {goal}"
+                except Exception:
+                    msg = f"Step {step_num}: processing"
                 asyncio.create_task(_update(RunStatus.RUNNING, msg))
+
+            # Build HITL tool: request_human_login
+            from browser_use import Controller
+            controller = Controller()
+
+            @controller.action(
+                description=(
+                    "Request human help to log in. Call this when you encounter a login page, "
+                    "auth wall, or captcha that you cannot bypass. The human will log in via "
+                    "the browser and then resume you."
+                ),
+            )
+            async def request_human_login(reason: str) -> ActionResult:
+                await _update(RunStatus.PAUSED_FOR_AUTH, f"Login needed: {reason}")
+                agent.pause()
+                return ActionResult(
+                    extracted_content="Human has logged in. You can now continue with the authenticated session.",
+                )
 
             agent = Agent(
                 task=task,
                 llm=llm,
                 browser=browser,
                 register_new_step_callback=_on_step,
+                controller=controller,
             )
+
+            if agent_ready_callback:
+                await agent_ready_callback(agent, browser, flow)
 
             await _update(RunStatus.RUNNING, f"Agent running flow '{flow.name}'")
 

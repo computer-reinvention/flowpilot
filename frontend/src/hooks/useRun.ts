@@ -62,17 +62,37 @@ export function useRun() {
               },
             ]);
             ws.close();
-          } else {
-            setStatus(data.status || "running");
-            setCurrentStep(data.message || data.status);
+          } else if (data.status === "paused_for_auth") {
+            setStatus("paused_for_auth");
+            setCurrentStep(data.message || "Login required");
             setSteps((prev) => [
               ...prev,
               {
-                status: data.status,
-                message: data.message || data.status,
+                status: "paused_for_auth",
+                message: data.message || "Login required",
                 timestamp: data.timestamp || new Date().toISOString(),
               },
             ]);
+            // Do NOT close WebSocket — we need it for resume updates
+          } else {
+            setStatus(data.status || "running");
+            setCurrentStep(data.message || data.status);
+            // Mark previous running/connecting steps as done, append new one
+            setSteps((prev) => {
+              const settled = prev.map((s) =>
+                s.status === "running" || s.status === "connecting"
+                  ? { ...s, status: "done" }
+                  : s,
+              );
+              return [
+                ...settled,
+                {
+                  status: data.status,
+                  message: data.message || data.status,
+                  timestamp: data.timestamp || new Date().toISOString(),
+                },
+              ];
+            });
           }
         } catch {
           // ignore malformed messages
@@ -111,6 +131,15 @@ export function useRun() {
     [connectWs],
   );
 
+  const resumeRun = useCallback(async () => {
+    if (!runId) return;
+    try {
+      await apiFetch(`/api/runs/${runId}/resume`, { method: "POST" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to resume run");
+    }
+  }, [runId]);
+
   const reset = useCallback(() => {
     cleanup();
     setRunId(null);
@@ -129,6 +158,7 @@ export function useRun() {
     error,
     novncUrl,
     startRun,
+    resumeRun,
     reset,
   };
 }

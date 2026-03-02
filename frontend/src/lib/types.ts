@@ -36,7 +36,7 @@ export interface Run {
   id: string;
   flow_id: string;
   user_id: string;
-  status: "pending" | "connecting" | "running" | "completed" | "failed";
+  status: "pending" | "connecting" | "running" | "paused_for_auth" | "completed" | "failed";
   inputs: Record<string, string>;
   sandbox_id?: string;
   steps: RunStep[];

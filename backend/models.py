@@ -22,7 +22,7 @@ class Run:
     id: str
     flow_id: str
     user_id: str
-    status: str = "pending"  # pending/connecting/running/completed/failed/cancelled
+    status: str = "pending"  # pending/connecting/running/paused_for_auth/completed/failed/cancelled
     inputs: str = "{}"  # JSON dict of user-provided values
     sandbox_id: str | None = None
     steps: str = "[]"  # JSON array of step messages

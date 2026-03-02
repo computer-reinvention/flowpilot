@@ -44,6 +44,7 @@ flow_runner = FlowRunner()
 
 _ws_connections: dict[str, list[WebSocket]] = {}  # run_id -> [websocket, ...]
 _run_tasks: dict[str, asyncio.Task] = {}  # run_id -> background task
+_run_agents: dict[str, tuple] = {}  # run_id -> (agent, browser, flow)
 
 
 # ---------------------------------------------------------------------------
@@ -441,6 +442,10 @@ async def _execute_run(
     progress_callback,
 ):
     """Background task that runs the flow."""
+
+    async def _agent_ready(agent, browser, flow_obj):
+        _run_agents[run_id] = (agent, browser, flow_obj)
+
     try:
         result = await flow_runner.run_flow(
             flow=flow,
@@ -451,6 +456,7 @@ async def _execute_run(
             run_id=run_id,
             progress_callback=progress_callback,
             storage_state=storage_state,
+            agent_ready_callback=_agent_ready,
         )
         await platform_db.update_run(run_id, {
             "status": "completed",
@@ -483,6 +489,7 @@ async def _execute_run(
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
     finally:
+        _run_agents.pop(run_id, None)
         try:
             sandbox_mgr.stop(sandbox_id)
         except Exception as e:
@@ -550,6 +557,82 @@ async def run_cancel(run_id: str, user: dict = Depends(auth.get_current_user)):
     })
 
     return {"run_id": run_id, "status": "cancelled"}
+
+
+@app.post("/api/runs/{run_id}/resume")
+async def run_resume(run_id: str, user: dict = Depends(auth.get_current_user)):
+    run = await platform_db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if run.user_id != user["id"]:
+        raise HTTPException(status_code=403, detail="Run does not belong to you")
+    if run.status != "paused_for_auth":
+        raise HTTPException(status_code=409, detail=f"Run is not paused for auth (status: {run.status})")
+
+    agent_info = _run_agents.get(run_id)
+    if not agent_info:
+        raise HTTPException(status_code=404, detail="Agent not found for this run — it may have already finished")
+
+    agent, browser, flow = agent_info
+
+    # Capture cookies from the browser and persist as a session
+    try:
+        storage_state = await browser.get_storage_state()
+        cookies = storage_state.get("cookies", [])
+        if cookies:
+            session = Session(
+                id=str(uuid.uuid4())[:12],
+                user_id=user["id"],
+                domain=flow.domain,
+                cookies=json.dumps(cookies),
+            )
+            await platform_db.create_session(session)
+            logger.info("Captured %d cookies for domain %s (run %s)", len(cookies), flow.domain, run_id)
+    except Exception as e:
+        logger.warning("Failed to capture storage state on resume (run %s): %s", run_id, e)
+
+    # Resume the agent
+    agent.resume()
+
+    # Update DB and broadcast
+    await platform_db.update_run(run_id, {"status": "running", "current_step": "Resumed after human login"})
+    await _broadcast_run_progress(run_id, {
+        "run_id": run_id,
+        "status": "running",
+        "message": "Resumed after human login",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+    return {"run_id": run_id, "status": "running"}
+
+
+@app.post("/api/runs/{run_id}/pause")
+async def run_pause(run_id: str, user: dict = Depends(auth.get_current_user)):
+    """Manual pause — user can trigger pause from the UI as a fallback."""
+    run = await platform_db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if run.user_id != user["id"]:
+        raise HTTPException(status_code=403, detail="Run does not belong to you")
+    if run.status != "running":
+        raise HTTPException(status_code=409, detail=f"Run is not running (status: {run.status})")
+
+    agent_info = _run_agents.get(run_id)
+    if not agent_info:
+        raise HTTPException(status_code=404, detail="Agent not found for this run")
+
+    agent = agent_info[0]
+    agent.pause()
+
+    await platform_db.update_run(run_id, {"status": "paused_for_auth", "current_step": "Paused by user"})
+    await _broadcast_run_progress(run_id, {
+        "run_id": run_id,
+        "status": "paused_for_auth",
+        "message": "Paused by user",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+    return {"run_id": run_id, "status": "paused_for_auth"}
 
 
 # ---------------------------------------------------------------------------
