@@ -11,12 +11,13 @@ import { Container } from "@/components/layout/Container";
 import { FlowGrid } from "@/components/flows/FlowGrid";
 import { FlowForm } from "@/components/flows/FlowForm";
 import { FlowRunner } from "@/components/flows/FlowRunner";
+import { CreateFlowForm } from "@/components/flows/CreateFlowForm";
 import { SessionList } from "@/components/sessions/SessionList";
 import { Separator } from "@/components/ui/separator";
 import type { Flow } from "@/lib/types";
 
 type AuthView = "login" | "signup";
-type AppView = "grid" | "form" | "running";
+type AppView = "grid" | "form" | "running" | "create";
 
 export default function App() {
   const auth = useAuth();
@@ -98,6 +99,21 @@ export default function App() {
     }
   }
 
+  async function handleCreateFlow(data: {
+    name: string;
+    domain: string;
+    description: string;
+    entry_url?: string;
+  }) {
+    setSubmitting(true);
+    try {
+      await flows.createFlow(data);
+      setAppView("grid");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <Container>
       <Header user={auth.user} onLogout={auth.logout} />
@@ -110,6 +126,7 @@ export default function App() {
             loading={flows.loading}
             error={flows.error}
             onSelect={selectFlow}
+            onCreate={() => setAppView("create")}
           />
           <SessionList
             sessions={sessions.sessions}
@@ -117,6 +134,14 @@ export default function App() {
             onDelete={sessions.deleteSession}
           />
         </div>
+      )}
+
+      {appView === "create" && (
+        <CreateFlowForm
+          onSubmit={handleCreateFlow}
+          onBack={handleBack}
+          submitting={submitting}
+        />
       )}
 
       {appView === "form" && selectedFlow && (

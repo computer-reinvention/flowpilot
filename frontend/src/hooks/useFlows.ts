@@ -24,5 +24,24 @@ export function useFlows() {
     fetchFlows();
   }, [fetchFlows]);
 
-  return { flows, loading, error, refetch: fetchFlows };
+  const createFlow = useCallback(
+    async (data: {
+      name: string;
+      domain: string;
+      description: string;
+      entry_url?: string;
+      inputs?: Array<Record<string, unknown>>;
+      icon?: string;
+    }) => {
+      const created = await apiFetch<Flow>("/api/flows", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+      setFlows((prev) => [...prev, created]);
+      return created;
+    },
+    [],
+  );
+
+  return { flows, loading, error, refetch: fetchFlows, createFlow };
 }
