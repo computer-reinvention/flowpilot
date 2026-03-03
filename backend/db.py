@@ -67,9 +67,15 @@ async def init_db():
                 local_storage TEXT NOT NULL DEFAULT '{}',
                 session_storage TEXT NOT NULL DEFAULT '{}',
                 user_agent TEXT,
+                profile_name TEXT NOT NULL DEFAULT 'default',
                 captured_at TEXT NOT NULL
             )
         """)
+        # Migration: add profile_name column if missing (existing DBs)
+        try:
+            await db.execute("ALTER TABLE sessions ADD COLUMN profile_name TEXT NOT NULL DEFAULT 'default'")
+        except Exception:
+            pass  # column already exists
         await db.commit()
     logger.info("Platform DB initialized at %s", DB_PATH)
 
@@ -185,11 +191,11 @@ async def create_session(session: Session) -> Session:
     async with aiosqlite.connect(str(DB_PATH)) as db:
         await db.execute(
             """INSERT INTO sessions (id, user_id, domain, cookies, local_storage,
-               session_storage, user_agent, captured_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+               session_storage, user_agent, profile_name, captured_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (session.id, session.user_id, session.domain, session.cookies,
              session.local_storage, session.session_storage, session.user_agent,
-             session.captured_at),
+             session.profile_name, session.captured_at),
         )
         await db.commit()
     return session
@@ -199,7 +205,7 @@ async def list_sessions(user_id: str) -> list[dict]:
     async with aiosqlite.connect(str(DB_PATH)) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            "SELECT id, user_id, domain, captured_at FROM sessions WHERE user_id = ? ORDER BY captured_at DESC",
+            "SELECT id, user_id, domain, profile_name, captured_at FROM sessions WHERE user_id = ? ORDER BY captured_at DESC",
             (user_id,),
         )
         rows = await cursor.fetchall()
@@ -216,14 +222,20 @@ async def get_session(session_id: str) -> Session | None:
     return Session(**dict(row))
 
 
-async def get_session_for_domain(user_id: str, domain: str) -> Session | None:
-    """Get the most recent session for a user+domain combo."""
+async def get_session_for_domain(user_id: str, domain: str, profile_name: str | None = None) -> Session | None:
+    """Get the most recent session for a user+domain combo, optionally filtered by profile."""
     async with aiosqlite.connect(str(DB_PATH)) as db:
         db.row_factory = aiosqlite.Row
-        cursor = await db.execute(
-            "SELECT * FROM sessions WHERE user_id = ? AND domain = ? ORDER BY captured_at DESC LIMIT 1",
-            (user_id, domain),
-        )
+        if profile_name:
+            cursor = await db.execute(
+                "SELECT * FROM sessions WHERE user_id = ? AND domain = ? AND profile_name = ? ORDER BY captured_at DESC LIMIT 1",
+                (user_id, domain, profile_name),
+            )
+        else:
+            cursor = await db.execute(
+                "SELECT * FROM sessions WHERE user_id = ? AND domain = ? ORDER BY captured_at DESC LIMIT 1",
+                (user_id, domain),
+            )
         row = await cursor.fetchone()
     if not row:
         return None

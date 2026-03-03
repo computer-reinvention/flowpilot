@@ -15,6 +15,36 @@ from .models import Flow, Run
 logger = logging.getLogger(__name__)
 
 
+class _LLMWithProvider:
+    """Proxy that adds .provider/.model_name attrs browser-use requires.
+
+    browser-use accesses llm.provider and llm.model_name, and its token tracker
+    monkey-patches llm.ainvoke. LangChain LLMs are Pydantic models with
+    extra="ignore", so we can't set arbitrary attrs on them. This proxy stores
+    overrides locally and delegates everything else to the real LLM.
+    """
+
+    def __init__(self, llm: object, provider: str):
+        object.__setattr__(self, "_llm", llm)
+        model = getattr(llm, "model", None) or getattr(llm, "model_name", "unknown")
+        object.__setattr__(self, "_overrides", {
+            "provider": provider,
+            "model_name": model,
+        })
+
+    def __getattr__(self, name: str):
+        overrides = object.__getattribute__(self, "_overrides")
+        if name in overrides:
+            return overrides[name]
+        return getattr(object.__getattribute__(self, "_llm"), name)
+
+    def __setattr__(self, name: str, value: object):
+        if name in ("_llm", "_overrides"):
+            object.__setattr__(self, name, value)
+        else:
+            object.__getattribute__(self, "_overrides")[name] = value
+
+
 class RunStatus(str, Enum):
     PENDING = "pending"
     CONNECTING = "connecting"
@@ -33,10 +63,11 @@ def _get_llm():
         api_key = os.environ.get("GOOGLE_API_KEY")
         if not api_key:
             raise ValueError("GOOGLE_API_KEY environment variable is required when LLM_PROVIDER=gemini")
-        return ChatGoogleGenerativeAI(
+        llm = ChatGoogleGenerativeAI(
             model=os.environ.get("GEMINI_MODEL", "gemini-2.0-flash"),
             google_api_key=api_key,
         )
+        return _LLMWithProvider(llm, "google")
     elif provider in ("claude", "anthropic"):
         from langchain_anthropic import ChatAnthropic
         api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -99,9 +130,43 @@ class FlowRunner:
             logger.info("Run %s: [%s] %s", run_id, status.value, message)
 
         try:
+            await _update(RunStatus.CONNECTING, "Waiting for sandbox browser...")
+
+            # Wait for CDP to be reachable (sandbox needs time to start Chromium + socat)
+            import socket as _socket
+            _cdp_hp = cdp_url.split("//")[1].split("/")[0]
+            _cdp_h, _cdp_p = _cdp_hp.rsplit(":", 1)
+            for _attempt in range(20):
+                try:
+                    _s = _socket.create_connection((_cdp_h, int(_cdp_p)), timeout=2)
+                    _s.close()
+                    break
+                except (OSError, ConnectionRefusedError):
+                    pass
+                if _attempt < 19:
+                    await asyncio.sleep(2)
+                    await _update(RunStatus.CONNECTING, f"Waiting for sandbox browser (attempt {_attempt + 2}/20)...")
+            else:
+                raise RuntimeError(f"CDP not reachable at {cdp_url} after 40s")
+
+            # Resolve the full CDP WebSocket URL from /json/version
+            # Chromium returns ws://localhost/devtools/browser/<GUID> — we need to
+            # rewrite the host:port to match the socat-forwarded address.
+            import http.client as _http
+            _cdp_conn = _http.HTTPConnection(_cdp_h, int(_cdp_p), timeout=5)
+            _cdp_conn.request("GET", "/json/version", headers={"Host": "localhost"})
+            _cdp_resp = _cdp_conn.getresponse()
+            _cdp_info = json.loads(_cdp_resp.read())
+            _ws_debugger_url = _cdp_info["webSocketDebuggerUrl"]
+            # Extract path (/devtools/browser/GUID) and rebuild with correct host:port
+            _ws_path = "/" + "/".join(_ws_debugger_url.split("/")[3:])
+            cdp_url = f"ws://{_cdp_h}:{_cdp_p}{_ws_path}"
+
             await _update(RunStatus.CONNECTING, "Connecting to sandbox browser via CDP")
 
-            browser = Browser(cdp_url=cdp_url, storage_state=storage_state)
+            # Chromium rejects CDP WebSocket upgrades with non-localhost Host headers.
+            # Pass Host: localhost so the connection succeeds across containers.
+            browser = Browser(cdp_url=cdp_url, storage_state=storage_state, headers={"Host": "localhost"})
 
             if storage_state:
                 cookie_count = len(storage_state.get("cookies", []))

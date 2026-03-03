@@ -52,6 +52,7 @@ export interface Session {
   id: string;
   user_id: string;
   domain: string;
+  profile_name?: string;
   captured_at: string;
 }
 

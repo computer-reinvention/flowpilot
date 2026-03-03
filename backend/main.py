@@ -34,7 +34,8 @@ FRONTEND_DIR = Path(os.environ.get("FRONTEND_DIR", "/app/frontend"))
 # Singleton services
 # ---------------------------------------------------------------------------
 
-sandbox_mgr = SandboxManager(profiles_host_dir=str(PROFILES_DIR))
+_profiles_host_dir = os.environ.get("PROFILES_HOST_DIR", str(PROFILES_DIR))
+sandbox_mgr = SandboxManager(profiles_host_dir=_profiles_host_dir)
 profile_mgr = ProfileManager(profiles_dir=PROFILES_DIR)
 flow_runner = FlowRunner()
 
@@ -147,6 +148,7 @@ class SessionCaptureRequest(BaseModel):
     localStorage: dict = {}
     sessionStorage: dict = {}
     userAgent: str | None = None
+    profile_name: str = "default"
 
 
 # ---------------------------------------------------------------------------
@@ -318,9 +320,10 @@ async def session_capture(req: SessionCaptureRequest, user: dict = Depends(auth.
         local_storage=json.dumps(req.localStorage),
         session_storage=json.dumps(req.sessionStorage),
         user_agent=req.userAgent,
+        profile_name=req.profile_name,
     )
     await platform_db.create_session(session)
-    return {"id": session.id, "domain": session.domain, "captured_at": session.captured_at}
+    return {"id": session.id, "domain": session.domain, "profile_name": session.profile_name, "captured_at": session.captured_at}
 
 
 @app.get("/api/sessions")
@@ -498,7 +501,17 @@ async def _execute_run(
 
 @app.get("/api/runs")
 async def run_list(user: dict = Depends(auth.get_current_user)):
-    return await platform_db.list_runs(user["id"])
+    runs = await platform_db.list_runs(user["id"])
+    active_statuses = {"pending", "connecting", "running", "paused_for_auth"}
+    for r in runs:
+        if r.get("status") in active_statuses and r.get("sandbox_id"):
+            try:
+                r["novnc_url"] = sandbox_mgr.get_novnc_url(r["sandbox_id"])
+            except Exception:
+                r["novnc_url"] = None
+        else:
+            r["novnc_url"] = None
+    return runs
 
 
 @app.get("/api/runs/{run_id}")
@@ -506,6 +519,13 @@ async def run_get(run_id: str, user: dict = Depends(auth.get_current_user)):
     run = await platform_db.get_run(run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
+    novnc_url = None
+    active_statuses = {"pending", "connecting", "running", "paused_for_auth"}
+    if run.status in active_statuses and run.sandbox_id:
+        try:
+            novnc_url = sandbox_mgr.get_novnc_url(run.sandbox_id)
+        except Exception:
+            pass
     return {
         "id": run.id,
         "flow_id": run.flow_id,
@@ -517,6 +537,7 @@ async def run_get(run_id: str, user: dict = Depends(auth.get_current_user)):
         "current_step": run.current_step,
         "result": json.loads(run.result) if run.result else None,
         "error": run.error,
+        "novnc_url": novnc_url,
         "created_at": run.created_at,
         "completed_at": run.completed_at,
     }
@@ -585,6 +606,7 @@ async def run_resume(run_id: str, user: dict = Depends(auth.get_current_user)):
                 user_id=user["id"],
                 domain=flow.domain,
                 cookies=json.dumps(cookies),
+                profile_name=flow.domain,
             )
             await platform_db.create_session(session)
             logger.info("Captured %d cookies for domain %s (run %s)", len(cookies), flow.domain, run_id)

@@ -30,6 +30,8 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
       - PROFILES_DIR=/app/profiles
+      - PROFILES_HOST_DIR=${PROFILES_HOST_DIR:-${PWD}/profiles}
+      - SANDBOX_NETWORK=flowpilot_flowpilot_sandbox-net
       - JWT_SECRET=${JWT_SECRET:-}
     depends_on:
       - docker-proxy

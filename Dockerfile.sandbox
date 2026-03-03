@@ -22,8 +22,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # VNC server
     tigervnc-standalone-server \
     tigervnc-common \
+    tigervnc-tools \
     # Process manager
     supervisor \
+    # TCP forwarder (Chromium ignores --remote-debugging-address on ARM)
+    socat \
     # Utilities needed for noVNC build / general use
     git \
     curl \

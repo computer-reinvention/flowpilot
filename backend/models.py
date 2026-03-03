@@ -42,4 +42,5 @@ class Session:
     local_storage: str = "{}"  # JSON
     session_storage: str = "{}"  # JSON
     user_agent: str | None = None
+    profile_name: str = "default"  # Named auth profile (e.g., "test-user-1")
     captured_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())

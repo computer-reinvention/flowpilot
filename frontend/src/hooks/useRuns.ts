@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import type { Run, RunStep } from "@/lib/types";
 import { apiFetch } from "@/lib/api";
 
@@ -13,6 +13,7 @@ interface RawRun {
   current_step?: string;
   result?: string;
   error?: string;
+  novnc_url?: string;
   created_at: string;
   completed_at?: string;
 }
@@ -36,6 +37,7 @@ function parseRun(raw: RawRun): Run {
     inputs,
     steps,
     result,
+    novnc_url: raw.novnc_url ?? undefined,
   };
 }
 
@@ -61,5 +63,10 @@ export function useRuns() {
     fetchRuns();
   }, [fetchRuns]);
 
-  return { runs, loading, error, refetch: fetchRuns };
+  const activeRuns = useMemo(() => {
+    const activeStatuses = new Set(["pending", "connecting", "running", "paused_for_auth"]);
+    return runs.filter((r) => activeStatuses.has(r.status));
+  }, [runs]);
+
+  return { runs, activeRuns, loading, error, refetch: fetchRuns };
 }

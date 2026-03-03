@@ -1,12 +1,33 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { RunStep } from "@/lib/types";
 import { apiFetch } from "@/lib/api";
+import {
+  requestNotificationPermission,
+  sendHITLNotification,
+  stopTitleFlash,
+} from "@/lib/notifications";
 
 interface StartRunResponse {
   run_id: string;
   sandbox_id?: string;
   novnc_url?: string;
   status: string;
+}
+
+interface RunDetailResponse {
+  id: string;
+  flow_id: string;
+  user_id: string;
+  status: string;
+  inputs: Record<string, string>;
+  sandbox_id?: string;
+  steps: RunStep[];
+  current_step?: string;
+  result?: Record<string, unknown>;
+  error?: string;
+  novnc_url?: string;
+  created_at: string;
+  completed_at?: string;
 }
 
 export function useRun() {
@@ -39,8 +60,19 @@ export function useRun() {
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+
+          // Handle initial state message from reconnection (has steps array)
+          if (data.steps && Array.isArray(data.steps)) {
+            setSteps(data.steps);
+            setStatus(data.status || "running");
+            setCurrentStep(data.current_step || null);
+            if (data.error) setError(data.error);
+            return;
+          }
+
           if (data.status === "completed") {
             setStatus("completed");
+            stopTitleFlash();
             setSteps((prev) => [
               ...prev,
               {
@@ -52,6 +84,7 @@ export function useRun() {
             ws.close();
           } else if (data.status === "failed") {
             setStatus("failed");
+            stopTitleFlash();
             setError(data.message || "Run failed");
             setSteps((prev) => [
               ...prev,
@@ -63,6 +96,7 @@ export function useRun() {
             ]);
             ws.close();
           } else if (data.status === "paused_for_auth") {
+            sendHITLNotification(data.message || "Login required");
             setStatus("paused_for_auth");
             setCurrentStep(data.message || "Login required");
             setSteps((prev) => [
@@ -74,8 +108,13 @@ export function useRun() {
               },
             ]);
             // Do NOT close WebSocket — we need it for resume updates
+          } else if (data.status === "cancelled") {
+            setStatus("cancelled");
+            stopTitleFlash();
+            ws.close();
           } else {
             setStatus(data.status || "running");
+            stopTitleFlash();
             setCurrentStep(data.message || data.status);
             // Mark previous running/connecting steps as done, append new one
             setSteps((prev) => {
@@ -114,6 +153,9 @@ export function useRun() {
       setCurrentStep(null);
       setStatus("starting");
 
+      // Request notification permission on first run
+      requestNotificationPermission();
+
       try {
         const data = await apiFetch<StartRunResponse>("/api/runs", {
           method: "POST",
@@ -131,17 +173,56 @@ export function useRun() {
     [connectWs],
   );
 
+  const reconnectToRun = useCallback(
+    async (id: string) => {
+      setError(null);
+      setStatus("connecting");
+
+      try {
+        const data = await apiFetch<RunDetailResponse>(`/api/runs/${id}`);
+        setRunId(data.id);
+        setSteps(data.steps || []);
+        setStatus(data.status);
+        setCurrentStep(data.current_step || null);
+        setNovncUrl(data.novnc_url || null);
+        if (data.error) setError(data.error);
+
+        // Connect WS if run is still active
+        const activeStatuses = ["pending", "connecting", "running", "paused_for_auth"];
+        if (activeStatuses.includes(data.status)) {
+          connectWs(data.id);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to reconnect");
+        setStatus("failed");
+      }
+    },
+    [connectWs],
+  );
+
   const resumeRun = useCallback(async () => {
     if (!runId) return;
     try {
+      stopTitleFlash();
       await apiFetch(`/api/runs/${runId}/resume`, { method: "POST" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to resume run");
     }
   }, [runId]);
 
+  const cancelRun = useCallback(async () => {
+    if (!runId) return;
+    try {
+      stopTitleFlash();
+      await apiFetch(`/api/runs/${runId}/cancel`, { method: "POST" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to cancel run");
+    }
+  }, [runId]);
+
   const reset = useCallback(() => {
     cleanup();
+    stopTitleFlash();
     setRunId(null);
     setStatus("idle");
     setSteps([]);
@@ -158,7 +239,9 @@ export function useRun() {
     error,
     novncUrl,
     startRun,
+    reconnectToRun,
     resumeRun,
+    cancelRun,
     reset,
   };
 }

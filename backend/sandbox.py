@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 
 SANDBOX_IMAGE = "flowpilot-sandbox"
 NOVNC_CONTAINER_PORT = 6080
-CDP_CONTAINER_PORT = 9222
-SANDBOX_NETWORK = "flowpilot_sandbox-net"
+CDP_CONTAINER_PORT = 9223  # socat: 0.0.0.0:9223 → 127.0.0.1:9222 (Chromium ignores --remote-debugging-address on ARM)
+SANDBOX_NETWORK = os.environ.get("SANDBOX_NETWORK", "flowpilot_sandbox-net")
 MAX_SANDBOXES_PER_USER = 2
 PROFILE_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 

@@ -72,6 +72,7 @@ async def test_resume_paused_run(client, auth_headers, test_user_id):
         db_mod.create_session.assert_called_once()
         session_arg = db_mod.create_session.call_args[0][0]
         assert session_arg.domain == "example.com"
+        assert session_arg.profile_name == "example.com"  # profile_name set to flow domain on resume
         cookies = json.loads(session_arg.cookies)
         assert len(cookies) == 1
         assert cookies[0]["name"] == "session_id"
