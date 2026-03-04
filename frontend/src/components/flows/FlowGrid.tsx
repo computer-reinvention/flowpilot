@@ -1,5 +1,5 @@
-import { Loader2, Plus } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Plus } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { FlowCard } from "./FlowCard";
 import type { Flow } from "@/lib/types";
 
@@ -14,32 +14,56 @@ interface FlowGridProps {
 export function FlowGrid({ flows, loading, error, onSelect, onCreate }: FlowGridProps) {
   if (loading) {
     return (
-      <div className="flex justify-center py-12">
-        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      <div className="border rounded-lg overflow-hidden divide-y">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="flex items-start gap-3 px-4 py-3">
+            <Skeleton className="size-5 rounded shrink-0 mt-px" />
+            <div className="flex-1 space-y-1.5">
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-3.5 w-28" />
+                <Skeleton className="h-3.5 w-16 rounded" />
+              </div>
+              <Skeleton className="h-3 w-2/3" />
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="text-center py-12 text-destructive text-sm">{error}</div>
+      <p className="py-8 text-center text-sm text-destructive">{error}</p>
     );
   }
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      {flows.map((flow) => (
-        <FlowCard key={flow.id} flow={flow} onClick={() => onSelect(flow)} />
-      ))}
-      <Card
-        className="cursor-pointer border-dashed transition-colors hover:bg-accent"
-        onClick={onCreate}
-      >
-        <CardContent className="flex items-center justify-center gap-2 py-10 text-muted-foreground">
-          <Plus className="size-5" />
-          <span className="text-sm font-medium">New Flow</span>
-        </CardContent>
-      </Card>
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-xs text-muted-foreground tabular-nums">
+          {flows.length} flow{flows.length !== 1 ? "s" : ""}
+        </p>
+        <button
+          onClick={onCreate}
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Plus className="size-3.5" />
+          New flow
+        </button>
+      </div>
+      <div className="border rounded-lg overflow-hidden divide-y">
+        {flows.map((flow) => (
+          <FlowCard key={flow.id} flow={flow} onClick={() => onSelect(flow)} />
+        ))}
+        {flows.length === 0 && (
+          <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+            No flows yet.{" "}
+            <button onClick={onCreate} className="underline underline-offset-2 hover:text-foreground">
+              Create your first flow
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

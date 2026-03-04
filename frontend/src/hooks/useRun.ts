@@ -103,14 +103,14 @@ export function useRun() {
               },
             ]);
             ws.close();
-          } else if (data.status === "paused_for_auth") {
+          } else if (data.status === "paused_for_hitl") {
             sendHITLNotification(data.message || "Login required");
-            setStatus("paused_for_auth");
+            setStatus("paused_for_hitl");
             setCurrentStep(data.message || "Login required");
             setSteps((prev) => [
               ...prev,
               {
-                status: "paused_for_auth",
+                status: "paused_for_hitl",
                 message: data.message || "Login required",
                 timestamp: data.timestamp || new Date().toISOString(),
               },
@@ -156,7 +156,7 @@ export function useRun() {
   );
 
   const startRun = useCallback(
-    async (flowId: string, inputs: Record<string, string>): Promise<string | null> => {
+    async (flowId: string, inputs: Record<string, string>, profileId?: string): Promise<string | null> => {
       setSteps([]);
       setError(null);
       setCurrentStep(null);
@@ -168,7 +168,7 @@ export function useRun() {
       try {
         const data = await apiFetch<StartRunResponse>("/api/runs", {
           method: "POST",
-          body: JSON.stringify({ flow_id: flowId, inputs }),
+          body: JSON.stringify({ flow_id: flowId, inputs, profile_id: profileId }),
         });
         const id = data.run_id;
         if (!id) throw new Error("Server did not return a run_id");

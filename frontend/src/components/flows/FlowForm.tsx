@@ -28,9 +28,10 @@ function inputId(input: FlowInput): string {
 
 interface FlowFormProps {
   flow: Flow;
-  onSubmit: (values: Record<string, string>) => void;
+  onSubmit: (values: Record<string, string>, profileId: string) => void;
   onBack: () => void;
   submitting: boolean;
+  defaultProfileId?: string;
 }
 
 function renderInput(
@@ -113,11 +114,12 @@ function renderInput(
   }
 }
 
-export function FlowForm({ flow, onSubmit, onBack, submitting }: FlowFormProps) {
+export function FlowForm({ flow, onSubmit, onBack, submitting, defaultProfileId = "" }: FlowFormProps) {
   // Use array-indexed state — bulletproof, no key collision possible
   const [values, setValues] = useState<string[]>(() =>
     flow.inputs.map(() => "")
   );
+  const [profileId, setProfileId] = useState(defaultProfileId);
 
   function handleChange(index: number, value: string) {
     setValues(prev => prev.map((v, i) => i === index ? value : v));
@@ -130,7 +132,7 @@ export function FlowForm({ flow, onSubmit, onBack, submitting }: FlowFormProps) 
     flow.inputs.forEach((input, i) => {
       result[inputId(input)] = values[i] ?? "";
     });
-    onSubmit(result);
+    onSubmit(result, profileId);
   }
 
   return (
@@ -163,6 +165,18 @@ export function FlowForm({ flow, onSubmit, onBack, submitting }: FlowFormProps) 
               index)}
             </div>
           ))}
+          <div className="space-y-2 border-t pt-4">
+            <Label htmlFor="flow-profile-id" className="text-muted-foreground text-xs">
+              Profile ID <span className="font-normal">(session scope — isolates saved cookies per entity)</span>
+            </Label>
+            <Input
+              id="flow-profile-id"
+              type="text"
+              value={profileId}
+              onChange={(e) => setProfileId(e.target.value)}
+              placeholder="defaults to your user ID"
+            />
+          </div>
           <Button type="submit" className="w-full" disabled={submitting}>
             {submitting ? "Starting..." : "Run"}
           </Button>

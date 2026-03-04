@@ -36,15 +36,37 @@ export interface Run {
   id: string;
   flow_id: string;
   user_id: string;
-  status: "pending" | "connecting" | "starting" | "running" | "paused_for_auth" | "completed" | "failed" | "cancelled";
+  status: "pending" | "connecting" | "starting" | "running" | "paused_for_hitl" | "completed" | "failed" | "cancelled";
   inputs: Record<string, string>;
   sandbox_id?: string;
+  browser_cdp_url?: string;
   steps: RunStep[];
   current_step?: string;
   result?: Record<string, unknown>;
   error?: string;
   created_at: string;
   completed_at?: string;
+  profile_id?: string;
+}
+
+export interface ApiKey {
+  id: string;
+  user_id: string;
+  name: string;
+  key_prefix: string;
+  created_at: string;
+  last_used_at?: string;
+  key?: string; // only present on creation
+}
+
+export interface Webhook {
+  id: string;
+  user_id: string;
+  url: string;
+  events: string[];
+  enabled: boolean;
+  created_at: string;
+  secret?: string; // only present on creation
 }
 
 export interface Session {
@@ -60,4 +82,4 @@ export interface AuthResponse {
   user: User;
 }
 
-export const ACTIVE_RUN_STATUSES = ["pending", "connecting", "running", "paused_for_auth"] as const;
+export const ACTIVE_RUN_STATUSES = ["pending", "connecting", "running", "paused_for_hitl"] as const;
