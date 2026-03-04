@@ -1,6 +1,5 @@
-"""Tests for run reconnection: novnc_url in GET /api/runs and GET /api/runs/{run_id}."""
+"""Tests for run reconnection: browser_cdp_url in GET /api/runs and GET /api/runs/{run_id}."""
 
-import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -55,45 +54,45 @@ def _make_run(run_id="run-1", user_id="user-1", status="running", sandbox_id="sb
 
 
 @pytest.mark.asyncio
-async def test_run_get_active_includes_novnc_url(auth_override):
-    """GET /api/runs/{id} for an active run should include novnc_url."""
-    from backend.main import app, sandbox_mgr
+async def test_run_get_active_includes_browser_cdp_url(auth_override):
+    """GET /api/runs/{id} for an active run should include browser_cdp_url."""
+    from backend.main import app
     import backend.db as db_mod
 
     run = _make_run(status="running")
     db_mod.get_run = AsyncMock(return_value=run)
-    sandbox_mgr.get_novnc_url = MagicMock(return_value="http://localhost:6080/vnc.html?auto=true")
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/api/runs/run-1")
 
     assert resp.status_code == 200
     data = resp.json()
-    assert data["novnc_url"] == "http://localhost:6080/vnc.html?auto=true"
-    sandbox_mgr.get_novnc_url.assert_called_once_with("sb-1")
+    assert data["browser_cdp_url"] is not None
+    assert "sb-1" in data["browser_cdp_url"]
 
 
 @pytest.mark.asyncio
-async def test_run_get_paused_includes_novnc_url(auth_override):
-    """GET /api/runs/{id} for a paused_for_auth run should include novnc_url."""
-    from backend.main import app, sandbox_mgr
+async def test_run_get_paused_includes_browser_cdp_url(auth_override):
+    """GET /api/runs/{id} for a paused_for_hitl run should include browser_cdp_url."""
+    from backend.main import app
     import backend.db as db_mod
 
-    run = _make_run(status="paused_for_auth")
+    run = _make_run(status="paused_for_hitl")
     db_mod.get_run = AsyncMock(return_value=run)
-    sandbox_mgr.get_novnc_url = MagicMock(return_value="http://localhost:6080/vnc.html")
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/api/runs/run-1")
 
     assert resp.status_code == 200
-    assert resp.json()["novnc_url"] == "http://localhost:6080/vnc.html"
+    data = resp.json()
+    assert data["browser_cdp_url"] is not None
+    assert "sb-1" in data["browser_cdp_url"]
 
 
 @pytest.mark.asyncio
-async def test_run_get_completed_no_novnc_url(auth_override):
-    """GET /api/runs/{id} for a completed run should have novnc_url=null."""
-    from backend.main import app, sandbox_mgr
+async def test_run_get_completed_no_browser_cdp_url(auth_override):
+    """GET /api/runs/{id} for a completed run should have browser_cdp_url=null."""
+    from backend.main import app
     import backend.db as db_mod
 
     run = _make_run(status="completed")
@@ -103,34 +102,34 @@ async def test_run_get_completed_no_novnc_url(auth_override):
         resp = await client.get("/api/runs/run-1")
 
     assert resp.status_code == 200
-    assert resp.json()["novnc_url"] is None
-    sandbox_mgr.get_novnc_url.assert_not_called()
+    assert resp.json()["browser_cdp_url"] is None
 
 
 @pytest.mark.asyncio
-async def test_run_get_active_sandbox_gone(auth_override):
-    """GET /api/runs/{id} for an active run whose sandbox is gone should have novnc_url=null."""
-    from backend.main import app, sandbox_mgr
+async def test_run_get_connecting_includes_browser_cdp_url(auth_override):
+    """GET /api/runs/{id} for a connecting run should include browser_cdp_url."""
+    from backend.main import app
     import backend.db as db_mod
 
-    run = _make_run(status="running")
+    run = _make_run(status="connecting")
     db_mod.get_run = AsyncMock(return_value=run)
-    sandbox_mgr.get_novnc_url = MagicMock(side_effect=ValueError("Sandbox not found"))
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/api/runs/run-1")
 
     assert resp.status_code == 200
-    assert resp.json()["novnc_url"] is None
+    data = resp.json()
+    assert data["browser_cdp_url"] is not None
+    assert "sb-1" in data["browser_cdp_url"]
 
 
 # ── GET /api/runs (list) ──────────────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_run_list_active_includes_novnc_url(auth_override, fake_user):
-    """GET /api/runs list should include novnc_url for active runs."""
-    from backend.main import app, sandbox_mgr
+async def test_run_list_active_includes_browser_cdp_url(auth_override, fake_user):
+    """GET /api/runs list should include browser_cdp_url for active runs."""
+    from backend.main import app
     import backend.db as db_mod
 
     db_mod.list_runs = AsyncMock(return_value=[
@@ -138,18 +137,17 @@ async def test_run_list_active_includes_novnc_url(auth_override, fake_user):
             "id": "run-1", "flow_id": "f1", "user_id": "user-1",
             "status": "running", "sandbox_id": "sb-1",
             "inputs": "{}", "steps": "[]", "current_step": None,
-            "result": None, "error": None,
+            "result": None, "error": None, "profile_id": "",
             "created_at": "2025-01-01T00:00:00Z", "completed_at": None,
         },
         {
             "id": "run-2", "flow_id": "f1", "user_id": "user-1",
             "status": "completed", "sandbox_id": "sb-2",
             "inputs": "{}", "steps": "[]", "current_step": None,
-            "result": None, "error": None,
+            "result": None, "error": None, "profile_id": "",
             "created_at": "2025-01-01T00:00:00Z", "completed_at": "2025-01-01T00:05:00Z",
         },
     ])
-    sandbox_mgr.get_novnc_url = MagicMock(return_value="http://localhost:6080/vnc.html")
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/api/runs")
@@ -158,38 +156,37 @@ async def test_run_list_active_includes_novnc_url(auth_override, fake_user):
     runs = resp.json()
     assert len(runs) == 2
 
-    # Active run should have novnc_url
     active = next(r for r in runs if r["id"] == "run-1")
-    assert active["novnc_url"] == "http://localhost:6080/vnc.html"
+    assert active["browser_cdp_url"] is not None
+    assert "sb-1" in active["browser_cdp_url"]
 
-    # Completed run should have novnc_url=None
     completed = next(r for r in runs if r["id"] == "run-2")
-    assert completed["novnc_url"] is None
+    assert completed["browser_cdp_url"] is None
 
 
 @pytest.mark.asyncio
-async def test_run_list_paused_for_auth_includes_novnc_url(auth_override, fake_user):
-    """GET /api/runs should include novnc_url for paused_for_auth runs."""
-    from backend.main import app, sandbox_mgr
+async def test_run_list_paused_for_hitl_includes_browser_cdp_url(auth_override, fake_user):
+    """GET /api/runs should include browser_cdp_url for paused_for_hitl runs."""
+    from backend.main import app
     import backend.db as db_mod
 
     db_mod.list_runs = AsyncMock(return_value=[
         {
             "id": "run-3", "flow_id": "f1", "user_id": "user-1",
-            "status": "paused_for_auth", "sandbox_id": "sb-3",
-            "inputs": "{}", "steps": "[]", "current_step": "Login required",
-            "result": None, "error": None,
+            "status": "paused_for_hitl", "sandbox_id": "sb-3",
+            "inputs": "{}", "steps": "[]", "current_step": "Needs input",
+            "result": None, "error": None, "profile_id": "",
             "created_at": "2025-01-01T00:00:00Z", "completed_at": None,
         },
     ])
-    sandbox_mgr.get_novnc_url = MagicMock(return_value="http://localhost:6080/vnc.html")
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/api/runs")
 
     assert resp.status_code == 200
     runs = resp.json()
-    assert runs[0]["novnc_url"] == "http://localhost:6080/vnc.html"
+    assert runs[0]["browser_cdp_url"] is not None
+    assert "sb-3" in runs[0]["browser_cdp_url"]
 
 
 @pytest.mark.asyncio
@@ -204,20 +201,3 @@ async def test_run_get_not_found(auth_override):
         resp = await client.get("/api/runs/nonexistent")
 
     assert resp.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_run_get_connecting_includes_novnc_url(auth_override):
-    """GET /api/runs/{id} for a connecting run should include novnc_url."""
-    from backend.main import app, sandbox_mgr
-    import backend.db as db_mod
-
-    run = _make_run(status="connecting")
-    db_mod.get_run = AsyncMock(return_value=run)
-    sandbox_mgr.get_novnc_url = MagicMock(return_value="http://localhost:6080/vnc.html")
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/api/runs/run-1")
-
-    assert resp.status_code == 200
-    assert resp.json()["novnc_url"] == "http://localhost:6080/vnc.html"

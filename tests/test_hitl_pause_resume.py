@@ -5,7 +5,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 
 
-def _make_run(run_id="run-1", user_id="user-1", status="paused_for_auth", sandbox_id="sb-1"):
+def _make_run(run_id="run-1", user_id="user-1", status="paused_for_hitl", sandbox_id="sb-1"):
     from backend.models import Run
     return Run(
         id=run_id, flow_id="flow-1", user_id=user_id,
@@ -30,11 +30,11 @@ async def test_user_id(client, auth_headers):
 
 @pytest.mark.asyncio
 async def test_resume_paused_run(client, auth_headers, test_user_id):
-    """Resume a paused_for_auth run — should capture cookies, create session, resume agent."""
+    """Resume a paused_for_hitl run — should capture cookies, create session, resume agent."""
     from backend.main import _run_agents
     import backend.db as db_mod
 
-    run = _make_run(status="paused_for_auth", user_id=test_user_id)
+    run = _make_run(status="paused_for_hitl", user_id=test_user_id)
     flow = _make_flow()
 
     original_get_run = db_mod.get_run
@@ -88,7 +88,7 @@ async def test_resume_paused_run(client, auth_headers, test_user_id):
 
 @pytest.mark.asyncio
 async def test_resume_not_paused(client, auth_headers, test_user_id):
-    """Resume a run that is not paused_for_auth — should return 409."""
+    """Resume a run that is not paused_for_hitl — should return 409."""
     import backend.db as db_mod
 
     run = _make_run(status="running", user_id=test_user_id)
@@ -159,12 +159,12 @@ async def test_pause_fallback(client, auth_headers, test_user_id):
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data["status"] == "paused_for_auth"
+        assert data["status"] == "paused_for_hitl"
 
         mock_agent.pause.assert_called_once()
 
         db_mod.update_run.assert_called_once()
-        assert db_mod.update_run.call_args[0][1]["status"] == "paused_for_auth"
+        assert db_mod.update_run.call_args[0][1]["status"] == "paused_for_hitl"
     finally:
         _run_agents.pop("run-1", None)
         db_mod.get_run = original_get_run

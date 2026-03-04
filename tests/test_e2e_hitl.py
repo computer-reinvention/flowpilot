@@ -97,7 +97,7 @@ async def poll_run(client: httpx.AsyncClient, run_id: str, headers: dict,
 async def test_e2e_full_run(client: httpx.AsyncClient, auth_headers: dict, test_flow: dict):
     """
     Real end-to-end: signup → create flow → start run (real sandbox + real LLM) →
-    poll until completed → verify steps, result, novnc_url, session list.
+    poll until completed → verify steps, result, browser_cdp_url, session list.
     """
     flow = test_flow
 
@@ -110,15 +110,15 @@ async def test_e2e_full_run(client: httpx.AsyncClient, auth_headers: dict, test_
     run_data = resp.json()
     run_id = run_data["run_id"]
     assert run_data["status"] == "connecting"
-    assert run_data.get("novnc_url"), "Expected novnc_url on run start response"
+    assert run_data.get("browser_cdp_url"), "Expected browser_cdp_url on run start response"
 
-    # ── 2. Verify run appears in list with novnc_url ──────────────────
+    # ── 2. Verify run appears in list with browser_cdp_url ──────────────────
     resp = await client.get("/api/runs", headers=auth_headers)
     assert resp.status_code == 200
     runs = resp.json()
     active = [r for r in runs if r["id"] == run_id]
     assert len(active) == 1, f"Run {run_id} not in list"
-    assert active[0].get("novnc_url"), "Expected novnc_url in run list for active run"
+    assert active[0].get("browser_cdp_url"), "Expected browser_cdp_url in run list for active run"
 
     # ── 3. Poll until completion ──────────────────────────────────────
     final = await poll_run(client, run_id, auth_headers)
@@ -136,8 +136,8 @@ async def test_e2e_full_run(client: httpx.AsyncClient, auth_headers: dict, test_
     assert "running" in statuses, "Missing running step"
     assert "completed" in statuses, "Missing completed step"
 
-    # ── 5. novnc_url should be gone for completed runs ────────────────
-    assert final.get("novnc_url") is None, "novnc_url should be null for completed run"
+    # ── 5. browser_cdp_url should be gone for completed runs ────────────────
+    assert final.get("browser_cdp_url") is None, "browser_cdp_url should be null for completed run"
 
     # ── 6. Verify run list shows completed status ─────────────────────
     resp = await client.get("/api/runs", headers=auth_headers)
@@ -193,19 +193,19 @@ async def test_e2e_reconnect_active_run(client: httpx.AsyncClient, auth_headers:
     })
     assert resp.status_code == 200
     run_id = resp.json()["run_id"]
-    original_novnc = resp.json().get("novnc_url")
+    original_novnc = resp.json().get("browser_cdp_url")
 
     # Wait for it to be running
     await asyncio.sleep(5)
 
-    # Reconnect: GET the run — should have novnc_url + steps
+    # Reconnect: GET the run — should have browser_cdp_url + steps
     resp = await client.get(f"/api/runs/{run_id}", headers=auth_headers)
     assert resp.status_code == 200
     data = resp.json()
-    assert data["status"] in ("connecting", "running", "paused_for_auth", "completed", "failed")
+    assert data["status"] in ("connecting", "running", "paused_for_hitl", "completed", "failed")
 
-    if data["status"] in ("connecting", "running", "paused_for_auth"):
-        assert data.get("novnc_url"), "Active run should have novnc_url on reconnect"
+    if data["status"] in ("connecting", "running", "paused_for_hitl"):
+        assert data.get("browser_cdp_url"), "Active run should have browser_cdp_url on reconnect"
 
     # Let it finish
     final = await poll_run(client, run_id, auth_headers)

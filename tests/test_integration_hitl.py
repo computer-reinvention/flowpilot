@@ -41,12 +41,12 @@ async def e2e_client(tmp_path):
         mock_sandbox.start.return_value = {
             "sandbox_id": "sb-e2e-1",
             "cdp_url": "ws://localhost:19222",
-            "novnc_url": "http://localhost:16080/vnc.html",
+            "browser_cdp_url": "http://localhost:16080/vnc.html",
         }
         mock_sandbox.cleanup_orphans.return_value = 0
         mock_sandbox.stop_all = MagicMock()
         mock_sandbox.stop = MagicMock()
-        mock_sandbox.get_novnc_url = MagicMock(return_value="http://localhost:16080/vnc.html")
+        mock_sandbox.get_browser_cdp_url = MagicMock(return_value="http://localhost:16080/vnc.html")
 
         mock_profile.has_profile.return_value = False
 
@@ -102,7 +102,7 @@ async def test_e2e_hitl_full_lifecycle(e2e_client, e2e_user, e2e_flow):
     """
     Full lifecycle test:
     1. Start a run via the API
-    2. Simulate the agent reaching paused_for_auth state
+    2. Simulate the agent reaching paused_for_hitl state
     3. Resume the agent via the API
     4. Verify cookies are captured and session is persisted
     5. Verify the run transitions back to running
@@ -135,7 +135,7 @@ async def test_e2e_hitl_full_lifecycle(e2e_client, e2e_user, e2e_flow):
         """Simulates an agent that pauses for auth mid-run."""
         run_id_holder["id"] = run_id
 
-        # Simulate: connecting → running → paused_for_auth
+        # Simulate: connecting → running → paused_for_hitl
         if progress_callback:
             await progress_callback(RunStatus.CONNECTING, "Connecting to sandbox...")
             await progress_callback(RunStatus.RUNNING, "Agent started")
@@ -153,11 +153,12 @@ async def test_e2e_hitl_full_lifecycle(e2e_client, e2e_user, e2e_flow):
 
         # Register agent via callback (same as real run_flow does)
         if agent_ready_callback:
-            await agent_ready_callback(mock_agent, mock_browser, flow)
+            paused_ref = [False]
+            await agent_ready_callback(mock_agent, mock_browser, flow, paused_ref)
 
         # Agent hits a login wall → pauses
         if progress_callback:
-            await progress_callback(RunStatus.PAUSED_FOR_AUTH, "Login needed: This site requires authentication")
+            await progress_callback(RunStatus.PAUSED_FOR_HITL, "Login needed: This site requires authentication")
 
         run_started.set()
 
@@ -197,18 +198,18 @@ async def test_e2e_hitl_full_lifecycle(e2e_client, e2e_user, e2e_flow):
         # Small delay to let DB update propagate
         await asyncio.sleep(0.2)
 
-        # ── Step 2: Verify run is paused + has novnc_url ──────────────
+        # ── Step 2: Verify run is paused + has browser_cdp_url ──────────────
         resp = await e2e_client.get(f"/api/runs/{run_id}", headers=headers)
         assert resp.status_code == 200
         run_state = resp.json()
-        assert run_state["status"] == "paused_for_auth", f"Expected paused_for_auth, got {run_state['status']}"
-        # novnc_url should be present for active runs (mocked sandbox returns it)
-        assert "novnc_url" in run_state
+        assert run_state["status"] == "paused_for_hitl", f"Expected paused_for_hitl, got {run_state['status']}"
+        # browser_cdp_url should be present for active runs (mocked sandbox returns it)
+        assert "browser_cdp_url" in run_state
 
         # Check steps include the pause message
         steps = run_state["steps"]
-        pause_steps = [s for s in steps if s["status"] == "paused_for_auth"]
-        assert len(pause_steps) > 0, "No paused_for_auth step found in run steps"
+        pause_steps = [s for s in steps if s["status"] == "paused_for_hitl"]
+        assert len(pause_steps) > 0, "No paused_for_hitl step found in run steps"
         assert "Login needed" in pause_steps[0]["message"]
 
         # ── Step 3: Verify no sessions exist yet ─────────────────────
@@ -255,7 +256,7 @@ async def test_e2e_hitl_full_lifecycle(e2e_client, e2e_user, e2e_flow):
         statuses = [s["status"] for s in steps]
         assert "connecting" in statuses, "Missing connecting step"
         assert "running" in statuses, "Missing running step"
-        assert "paused_for_auth" in statuses, "Missing paused_for_auth step"
+        assert "paused_for_hitl" in statuses, "Missing paused_for_hitl step"
         assert "completed" in statuses, "Missing completed step"
 
     finally:
@@ -288,7 +289,7 @@ async def test_e2e_hitl_resume_wrong_user(e2e_client, e2e_user, e2e_flow):
         id="run-authz-test",
         flow_id=flow["id"],
         user_id=user["id"],
-        status="paused_for_auth",
+        status="paused_for_hitl",
         sandbox_id="sb-1",
     )
     await db_mod.create_run(run)
@@ -314,7 +315,7 @@ async def test_e2e_hitl_resume_wrong_user(e2e_client, e2e_user, e2e_flow):
         # Verify run is still paused after attacker's failed attempt
         resp = await e2e_client.get("/api/runs/run-authz-test", headers=headers)
         assert resp.status_code == 200
-        assert resp.json()["status"] == "paused_for_auth", "Run should still be paused after 403"
+        assert resp.json()["status"] == "paused_for_hitl", "Run should still be paused after 403"
         mock_agent.resume.assert_not_called()
 
         # Owner resumes — should succeed
@@ -383,13 +384,13 @@ async def test_e2e_hitl_manual_pause_then_resume(e2e_client, e2e_user, e2e_flow)
         # Step 1: Manually pause
         resp = await e2e_client.post("/api/runs/run-manual-pause/pause", headers=headers)
         assert resp.status_code == 200
-        assert resp.json()["status"] == "paused_for_auth"
+        assert resp.json()["status"] == "paused_for_hitl"
         mock_agent.pause.assert_called_once()
 
         # Step 2: Verify state in DB
         resp = await e2e_client.get("/api/runs/run-manual-pause", headers=headers)
         assert resp.status_code == 200
-        assert resp.json()["status"] == "paused_for_auth"
+        assert resp.json()["status"] == "paused_for_hitl"
 
         # Step 3: Resume
         resp = await e2e_client.post("/api/runs/run-manual-pause/resume", headers=headers)

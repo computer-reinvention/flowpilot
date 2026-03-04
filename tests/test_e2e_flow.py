@@ -217,14 +217,14 @@ async def test_full_run_with_sandbox(client: httpx.AsyncClient, auth_headers: di
     })
     assert resp.status_code == 200, f"Failed to start run: {resp.text}"
     run_id = resp.json()["run_id"]
-    novnc_url = resp.json().get("novnc_url")
-    assert novnc_url, "Expected novnc_url from run start"
+    browser_cdp_url = resp.json().get("browser_cdp_url")
+    assert browser_cdp_url, "Expected browser_cdp_url from run start"
     assert resp.json()["status"] == "connecting"
 
-    # Verify novnc_url resolves (best-effort — may fail if sandbox isn't ready yet)
+    # Verify browser_cdp_url resolves (best-effort — may fail if sandbox isn't ready yet)
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as raw:
-            vnc_resp = await raw.get(novnc_url)
+            vnc_resp = await raw.get(browser_cdp_url)
             assert vnc_resp.status_code == 200, f"noVNC not reachable: {vnc_resp.status_code}"
     except (httpx.ConnectError, httpx.ReadError, httpx.TimeoutException):
         pass  # OK — sandbox may still be starting or running on Docker network only
@@ -249,8 +249,8 @@ async def test_full_run_with_sandbox(client: httpx.AsyncClient, auth_headers: di
         f"Expected meaningful result, got: {result_str[:200]}"
     )
 
-    # novnc_url should be null now
-    assert final.get("novnc_url") is None
+    # browser_cdp_url should be null now
+    assert final.get("browser_cdp_url") is None
 
     # Cleanup flow
     await client.delete(f"/api/flows/{flow['id']}", headers=auth_headers)
