@@ -20,7 +20,9 @@ services:
       context: .
       dockerfile: Dockerfile.backend
     ports:
-      - "8080:8080"
+      # Bind to localhost only — Caddy/nginx proxies inbound traffic.
+      # Change to "8080:8080" for local development without a reverse proxy.
+      - "127.0.0.1:8080:8080"
     volumes:
       - ./profiles:/app/profiles
     environment:
@@ -29,10 +31,15 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
+      - GEMINI_MODEL=${GEMINI_MODEL:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-}
       - PROFILES_DIR=/app/profiles
       - PROFILES_HOST_DIR=${PROFILES_HOST_DIR:-${PWD}/profiles}
       - SANDBOX_NETWORK=flowpilot_flowpilot_sandbox-net
       - JWT_SECRET=${JWT_SECRET:-}
+      - FLOWPILOT_BASE_URL=${FLOWPILOT_BASE_URL:-http://localhost:8080}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:8080,http://localhost:3000}
     depends_on:
       - docker-proxy
     networks:

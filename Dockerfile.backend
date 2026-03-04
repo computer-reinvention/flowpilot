@@ -1,3 +1,15 @@
+# ── Stage 1: build frontend ──────────────────────────────────────────────────
+FROM node:20-slim AS frontend-builder
+
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm ci --prefer-offline
+
+COPY frontend/ ./
+RUN npm run build
+
+
+# ── Stage 2: Python backend ───────────────────────────────────────────────────
 FROM python:3.12-slim
 
 # Install uv
@@ -5,15 +17,15 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
 
-# Install dependencies from pyproject.toml (source of truth)
+# Install Python dependencies
 COPY pyproject.toml uv.lock* ./
 RUN uv sync --frozen --no-dev
 
-# Install Playwright browsers
+# Install Playwright's Chromium (used by the reflex runner)
 RUN uv run playwright install chromium && uv run playwright install-deps
 
 COPY backend/ ./backend/
-COPY frontend/dist/ ./frontend/
+COPY --from=frontend-builder /app/frontend/dist/ ./frontend/
 
 EXPOSE 8080
 CMD ["uv", "run", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8080"]
