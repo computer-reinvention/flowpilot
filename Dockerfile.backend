@@ -7,7 +7,7 @@ WORKDIR /app
 
 # Install dependencies from pyproject.toml (source of truth)
 COPY pyproject.toml uv.lock* ./
-RUN uv sync --frozen --no-dev --no-install-project
+RUN uv sync --frozen --no-dev
 
 # Install Playwright browsers
 RUN uv run playwright install chromium && uv run playwright install-deps
