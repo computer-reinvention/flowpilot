@@ -232,32 +232,30 @@ async def run_e2e() -> None:
             # ── Assertions ────────────────────────────────────────────────
 
             # 1. Run must have a sandbox_id (container was spun up)
-            assert run_data.get("sandbox_id"), "sandbox_id missing — container never started"
+            assert run_data.get("sandbox_id"), \
+                "sandbox_id missing — container never started"
 
             # 2. At least one step was recorded
             assert len(steps) > 0, "No steps recorded — agent never started"
 
-            # 3. Status is a known terminal state
-            assert persisted_status in TERMINAL, (
-                f"Unexpected status '{persisted_status}'"
+            # 3. Must have completed — not failed, not paused, not timed out.
+            #    Any other outcome means the agent didn't do the task.
+            assert persisted_status == "completed", (
+                f"Run did not complete. status='{persisted_status}'"
+                + (f"  error={run_data.get('error')}" if run_data.get("error") else "")
+                + (f"  last_step={steps[-1].get('message', '')[:120]}" if steps else "")
             )
 
-            # 4. If completed, result should mention "Example Domain"
-            if persisted_status == "completed":
-                result_str = json.dumps(run_data.get("result", "")).lower()
-                assert "example" in result_str, (
-                    f"Expected 'example' in result but got: {result_str[:200]}"
-                )
-                logger.info("PASS — agent found the expected page title")
+            # 4. Result must contain "Example Domain" — the actual <h1> on example.com.
+            #    This verifies the agent navigated the page and read the content,
+            #    not just that the plumbing worked.
+            result_str = json.dumps(run_data.get("result", {})).lower()
+            assert "example domain" in result_str, (
+                f"Agent completed but result doesn't contain 'Example Domain'.\n"
+                f"Result: {result_str[:400]}"
+            )
 
-            # 5. paused_for_hitl is acceptable (example.com shouldn't need auth,
-            #    but we don't fail the test if the agent decided to pause)
-            elif persisted_status == "paused_for_hitl":
-                logger.info("PASS (with note) — agent paused for human input")
-
-            elif persisted_status == "failed":
-                # Fail the test — something went wrong in the agent pipeline
-                raise AssertionError(f"Run failed: {run_data.get('error')}")
+            logger.info("PASS — agent completed and returned the correct page title")
 
         finally:
             # ── Cleanup ───────────────────────────────────────────────────
