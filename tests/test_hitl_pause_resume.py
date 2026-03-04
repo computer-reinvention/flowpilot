@@ -56,7 +56,8 @@ async def test_resume_paused_run(client, auth_headers, test_user_id):
         "origins": [],
     })
 
-    _run_agents["run-1"] = (mock_agent, mock_browser, flow)
+    paused_ref = [True]
+    _run_agents["run-1"] = (mock_agent, mock_browser, flow, paused_ref)
 
     try:
         resp = await client.post("/api/runs/run-1/resume", headers=auth_headers)
@@ -152,7 +153,8 @@ async def test_pause_fallback(client, auth_headers, test_user_id):
     mock_agent.pause = MagicMock()
     mock_browser = MagicMock()
 
-    _run_agents["run-1"] = (mock_agent, mock_browser, flow)
+    paused_ref = [False]
+    _run_agents["run-1"] = (mock_agent, mock_browser, flow, paused_ref)
 
     try:
         resp = await client.post("/api/runs/run-1/pause", headers=auth_headers)

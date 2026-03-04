@@ -1,20 +1,18 @@
-"""Flow runner — agent-first with reflex tools for known, stable page interactions.
+"""Flow runner — browser-use agent with reflex tools for cached interaction steps.
 
 Architecture
 ------------
-The agent always runs and retains full judgment over the task. It has access to its
-complete toolkit (click, fill, navigate, screenshot, etc.) plus three reflex tools:
+The agent uses browser-use's full toolkit (click, input, navigate, screenshot, etc.)
+plus custom reflex tools:
 
-  search_reflexes(use_case)         — discover relevant cached Playwright snippets
-  run_reflex(name)                  — fire a named reflex for the current domain
-  save_reflex(name, description,    — write or update a reflex after solving something
-              script, ...)
+  search_reflexes(use_case)  — find cached step-by-step instructions for this domain
+  run_reflex(name)           — retrieve saved steps to follow
+  save_reflex(name, ...)     — save steps after solving a repeatable interaction
+  request_human_help(...)    — pause for HITL (auth walls, CAPTCHAs, etc.)
 
-Reflexes are global, domain-scoped snippets (e.g. "uber.com/fill_booking_form") that
-accumulate across runs. They're like muscle memory: the agent fires them when it
-recognizes a situation it has already solved, skipping several slow LLM-driven steps.
-When a reflex fails (UI changed, auth state different), the agent handles it manually
-with its normal tools and can call save_reflex() to update the cached version.
+Reflexes are domain-scoped step descriptions (e.g. "uber.com/fill_booking_form") that
+accumulate across runs. The agent retrieves them as guidance and follows the steps
+using browser-use's built-in tools.
 
 Naming convention: {domain}/{name}
   uber.com/pre_auth             — navigate and fill the form before auth
@@ -28,12 +26,10 @@ import json
 import logging
 import os
 import re
-import traceback as _traceback
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Callable, Awaitable
 
-from playwright.async_api import async_playwright
 from browser_use import Agent, Browser, ActionResult, Tools
 from browser_use.llm.google import ChatGoogle
 from browser_use.llm.anthropic.chat import ChatAnthropic
@@ -120,53 +116,29 @@ def _build_task(flow: Flow, inputs: dict, domain_reflexes: list[dict]) -> str:
 
     lines += ["", "--- Workflow ---"]
     if domain_reflexes:
-        lines.append(f"Saved reflexes for {flow.domain} (try these first):")
+        lines.append(f"Saved reflexes for {flow.domain}:")
         for r in domain_reflexes:
             pause_note = " [pauses for auth after]" if r.get("pause_after") == "auth" else ""
             lines.append(f"  • {r['name']}{pause_note} — {r['description']}")
         lines += [
             "",
-            "1. Call search_reflexes() to find relevant saved scripts.",
-            "2. Run matching scripts with run_reflex().",
-            "3. For new interactions: take a screenshot, write a complete execute_script(), run it.",
+            "Strategy:",
+            "1. Call search_reflexes() to find cached steps for what you need to do.",
+            "2. If a match exists: call run_reflex() and follow the returned steps exactly.",
+            "3. If no match or the steps are outdated: handle it yourself, then save_reflex().",
         ]
     else:
         lines += [
             f"No reflexes saved yet for {flow.domain}.",
-            "1. Take a screenshot to understand each page.",
-            "2. Write a complete Playwright script for each phase via execute_script().",
-            "   The script is auto-saved as a reflex on success.",
-            "3. Break the task into phases: one script per logical step.",
-            "   e.g. 'fill_booking_form', 'select_ride_type', 'confirm_booking'",
+            "Strategy:",
+            "1. Screenshot → plan minimal steps → execute.",
+            "2. After each successful interaction, call save_reflex() to cache it for next time.",
         ]
 
     return "\n".join(lines)
 
 
 class FlowRunner:
-
-    @staticmethod
-    async def _exec_playwright(script: str, inputs: dict, cdp_url: str) -> str:
-        """Execute a Playwright script body against the existing Chromium via CDP.
-
-        Wraps the body in `async def _fn(page, inputs):` before exec()-ing so
-        top-level `await` works. Returns the stringified return value or "Completed".
-        """
-        async with async_playwright() as p:
-            browser = await p.chromium.connect_over_cdp(cdp_url)
-            try:
-                ctx = browser.contexts[0] if browser.contexts else await browser.new_context()
-                page = ctx.pages[0] if ctx.pages else await ctx.new_page()
-
-                indented = "\n".join(f"    {line}" for line in script.splitlines()) or "    pass"
-                wrapped = f"async def _fn(page, inputs):\n{indented}\n"
-
-                ns: dict = {}
-                exec(compile(wrapped, "<reflex>", "exec"), ns)  # noqa: S102
-                result = await ns["_fn"](page, inputs)
-                return str(result) if result is not None else "Completed"
-            finally:
-                await browser.disconnect()
 
     async def run_flow(
         self,
@@ -261,70 +233,15 @@ class FlowRunner:
 
                 asyncio.create_task(_send())
 
-            # Exclude direct one-at-a-time browser actions — the agent must write
-            # Playwright scripts via execute_script() instead of clicking/typing
-            # element by element. This prevents multi-step retry loops.
-            # Kept: screenshot, find_elements, evaluate, search_page, scroll, navigate
-            # — these are browser-use's built-in inspection tools, no need to replicate.
-            _DIRECT_ACTIONS = [
-                "click", "input", "send_keys", "find_text",
-                "upload_file", "dropdown_options", "select_dropdown",
-                "switch", "close",
-                "write_file", "read_file", "replace_file",
-            ]
-            tools = Tools(exclude_actions=_DIRECT_ACTIONS)
+            # Use browser-use's full toolkit — no action exclusions.
+            # The agent can click, type, scroll, navigate, etc. directly.
+            tools = Tools()
 
             @tools.action(
                 description=(
-                    "Write and execute a Playwright Python script against the live browser. "
-                    "The script receives `page` (Playwright Page) and `inputs` (dict of user values). "
-                    "Use inputs['key'] to reference user-provided values — never hardcode them. "
-                    "Always start with: await page.goto('<url>'). "
-                    "Use page.wait_for_load_state('networkidle') after navigations. "
-                    "For autocomplete fields: type the value, wait 1s, then click the first option: "
-                    "  await page.locator('[role=option]').first.click(). "
-                    "On success the script is automatically saved as a reflex for future runs."
-                )
-            )
-            async def execute_script(
-                name: str,
-                description: str,
-                script: str,
-                tags: list[str] | None = None,
-                pause_after_auth: bool = False,
-            ) -> ActionResult:
-                try:
-                    result_str = await asyncio.wait_for(
-                        FlowRunner._exec_playwright(script, inputs, cdp_url),
-                        timeout=120,
-                    )
-                    # Auto-save as reflex on success
-                    await _db.upsert_reflex(
-                        domain=flow.domain,
-                        name=name,
-                        description=description,
-                        script=script,
-                        pause_after="auth" if pause_after_auth else None,
-                        tags=tags or [],
-                    )
-                    return ActionResult(
-                        extracted_content=(
-                            f"Script executed successfully and saved as reflex '{flow.domain}/{name}'. "
-                            f"Result: {result_str}"
-                        ),
-                    )
-                except Exception:
-                    tb = _traceback.format_exc()
-                    return ActionResult(
-                        error=f"Script failed:\n{tb}\nRevise and retry with execute_script().",
-                    )
-
-            @tools.action(
-                description=(
-                    "Search for saved reflexes (cached Playwright snippets) relevant to your current step. "
+                    "Search for saved reflexes relevant to your current step. "
                     "Pass a short description of what you're trying to do, e.g. 'fill pickup and dropoff fields'. "
-                    "Returns only high-confidence matches — if nothing comes back, there are no useful reflexes "
-                    "for this step and you should handle it manually (and consider saving a new reflex)."
+                    "Returns matching reflexes with step-by-step instructions you can follow."
                 )
             )
             async def search_reflexes(use_case: str) -> ActionResult:
@@ -333,7 +250,6 @@ class FlowRunner:
                     r for r in candidates
                     if _relevance_score(use_case, r) >= _RELEVANCE_THRESHOLD
                 ]
-                # Sort by score descending
                 matches.sort(key=lambda r: _relevance_score(use_case, r), reverse=True)
                 if not matches:
                     return ActionResult(
@@ -346,15 +262,14 @@ class FlowRunner:
                 for r in matches:
                     pause_note = "  [expects auth after]" if r.get("pause_after") == "auth" else ""
                     lines.append(f"  • {r['name']}{pause_note} — {r['description']}  tags: {r['tags']}")
-                lines.append("Call run_reflex(name) to execute one.")
+                lines.append("Call run_reflex(name) to see the full steps.")
                 return ActionResult(extracted_content="\n".join(lines))
 
             @tools.action(
                 description=(
-                    "Execute a saved reflex by name. The reflex fires a pre-written Playwright script "
-                    "against the current browser — fast, no per-step LLM calls. "
-                    "If it fails, the error is returned so you can handle the step manually "
-                    "and update the reflex with save_reflex()."
+                    "Retrieve a saved reflex by name. Returns step-by-step instructions "
+                    "for a previously solved interaction on this domain. "
+                    "Follow the returned steps using your browser tools (click, input, navigate, etc.)."
                 )
             )
             async def run_reflex(name: str) -> ActionResult:
@@ -364,38 +279,29 @@ class FlowRunner:
                         error=f"No reflex named '{name}' for domain '{flow.domain}'. "
                               f"Use search_reflexes() to see what's available."
                     )
-                try:
-                    result_str = await asyncio.wait_for(
-                        FlowRunner._exec_playwright(reflex["script"], inputs, cdp_url),
-                        timeout=120,
+                return ActionResult(
+                    extracted_content=(
+                        f"Reflex '{name}' for {flow.domain}:\n"
+                        f"Description: {reflex['description']}\n"
+                        f"Steps:\n{reflex['script']}\n\n"
+                        "Follow these steps using your browser tools. "
+                        "If the steps are outdated, adapt and call save_reflex() to update."
                     )
-                    return ActionResult(
-                        extracted_content=f"Reflex '{name}' executed successfully. Result: {result_str}"
-                    )
-                except Exception:
-                    tb = _traceback.format_exc()
-                    return ActionResult(
-                        error=(
-                            f"Reflex '{name}' failed:\n{tb}\n"
-                            "Handle this step manually, then call save_reflex() to update it."
-                        )
-                    )
+                )
 
             @tools.action(
                 description=(
-                    "Save or update a reflex — a named, reusable Playwright Python snippet for this domain. "
-                    "Call this after you've successfully handled a repeatable browser interaction manually, "
-                    "or to update a reflex that broke because the UI changed. "
-                    "The script body receives `page` (Playwright Page) and `inputs` (dict of user values). "
-                    "Always start with: await page.goto('<url>'). "
-                    "Use inputs['key'] to reference user-provided values — never hardcode them. "
+                    "Save or update a reflex — a named, reusable set of steps for this domain. "
+                    "Call this after you've successfully completed a repeatable interaction. "
+                    "Write clear step-by-step instructions that a future agent can follow. "
+                    "Reference user inputs as inputs['key']. "
                     "Name should be snake_case and descriptive, e.g. 'fill_booking_form', 'confirm_ride'."
                 )
             )
             async def save_reflex(
                 name: str,
                 description: str,
-                script: str,
+                steps: str,
                 tags: list[str] | None = None,
                 pause_after_auth: bool = False,
             ) -> ActionResult:
@@ -404,7 +310,7 @@ class FlowRunner:
                     domain=flow.domain,
                     name=name,
                     description=description,
-                    script=script,
+                    script=steps,
                     pause_after=pause_after,
                     tags=tags or [],
                 )
@@ -443,26 +349,28 @@ class FlowRunner:
                 browser=browser,
                 register_new_step_callback=_on_step,
                 tools=tools,
+                max_actions_per_step=10,
                 extend_system_message=(
-                    "HOW TO WORK:\n"
-                    "You accomplish browser tasks by writing and running Playwright scripts via execute_script(). "
-                    "You cannot click or type directly — write a script that does the whole interaction, run it, "
-                    "and it is automatically saved as a reusable reflex.\n"
+                    "EFFICIENCY IS CRITICAL — you have limited steps. Do not waste them.\n"
+                    "\n"
+                    "STRATEGY (follow this order):\n"
+                    "1. REFLEXES FIRST: Call search_reflexes() before doing anything on a page. "
+                    "If a reflex exists, call run_reflex() and follow its steps exactly.\n"
+                    "2. IF NO REFLEX: Take a screenshot, plan the minimum steps, execute. "
+                    "Then call save_reflex() to cache what you did.\n"
                     "\n"
                     "MANDATORY RULES:\n"
-                    "1. AUTH WALLS: Any login page, CAPTCHA, or auth wall → call request_human_help(). "
-                    "Never call done() with failure. The human will act and resume you.\n"
-                    "2. SCRIPT FIRST: To interact with a page:\n"
-                    "   a) Use evaluate() to discover selectors:\n"
-                    "      evaluate('() => Array.from(document.querySelectorAll(\"input,button,[role=combobox]\")).map(el => ({tag:el.tagName,placeholder:el.placeholder,label:el.getAttribute(\"aria-label\"),id:el.id}))')\n"
-                    "   b) Use screenshot() to see the visual layout.\n"
-                    "   c) Then write a complete execute_script() call using the discovered selectors.\n"
-                    "   Never try individual click/input actions.\n"
-                    "3. AUTOCOMPLETE IN SCRIPTS: To fill a location/autocomplete field use this pattern:\n"
-                    "   await field.fill(value)\n"
-                    "   await page.wait_for_timeout(1000)\n"
-                    "   await page.locator('[role=option]').first.click()\n"
-                    "4. EXISTING REFLEXES: Call search_reflexes() first. If a match exists, run it with run_reflex()."
+                    "- AUTH/CAPTCHA/LOGIN: Any auth wall, CAPTCHA, or login page → "
+                    "immediately call request_human_help(). Never try to solve auth yourself. "
+                    "Never call done() with failure — the human will handle it and resume you.\n"
+                    "- AUTOCOMPLETE: When you type into a location/search field and a dropdown "
+                    "appears with suggestions, ACCEPT THE FIRST MATCHING SUGGESTION. "
+                    "Do not open new tabs to verify. Do not search for pin codes. "
+                    "Just click the suggestion — it's what a real user would do.\n"
+                    "- NO OVERTHINKING: Accept reasonable defaults. Don't verify obvious things. "
+                    "If a suggestion looks right, click it. If a button says what you need, click it.\n"
+                    "- USER VALUES: Use inputs['key'] for user-provided values — never hardcode them.\n"
+                    "- SPEED: Each step costs time and money. Finish in the fewest steps possible."
                 ),
             )
 

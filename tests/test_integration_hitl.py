@@ -40,6 +40,7 @@ async def e2e_client(tmp_path):
         # Configure sandbox mock to return plausible values
         mock_sandbox.start.return_value = {
             "sandbox_id": "sb-e2e-1",
+            "container_id": "ctr-e2e-1",
             "cdp_url": "ws://localhost:19222",
             "browser_cdp_url": "http://localhost:16080/vnc.html",
         }
@@ -232,8 +233,8 @@ async def test_e2e_hitl_full_lifecycle(e2e_client, e2e_user, e2e_flow):
         sessions_for_domain = [s for s in sessions_after if s.get("domain") == "protected.example.com"]
         assert len(sessions_for_domain) == 1, f"Expected 1 session, got {len(sessions_for_domain)}"
         assert sessions_for_domain[0]["domain"] == "protected.example.com"
-        # profile_name should be set to the flow domain on HITL resume
-        assert sessions_for_domain[0]["profile_name"] == "protected.example.com"
+        # profile_name defaults to user_id when no explicit profile_id is set on the run
+        assert sessions_for_domain[0]["profile_name"] == user_id
 
         # ── Step 6: Wait for run to complete ─────────────────────────
         # The fake_run_flow will continue after resume
@@ -305,7 +306,8 @@ async def test_e2e_hitl_resume_wrong_user(e2e_client, e2e_user, e2e_flow):
     mock_browser.get_storage_state = AsyncMock(return_value={
         "cookies": [{"name": "authz_cookie", "value": "secret", "domain": "protected.example.com"}],
     })
-    _run_agents["run-authz-test"] = (mock_agent, mock_browser, mock_flow)
+    paused_ref = [True]  # starts paused
+    _run_agents["run-authz-test"] = (mock_agent, mock_browser, mock_flow, paused_ref)
 
     try:
         # Attacker tries to resume — should be rejected
@@ -378,7 +380,8 @@ async def test_e2e_hitl_manual_pause_then_resume(e2e_client, e2e_user, e2e_flow)
     mock_browser.get_storage_state = AsyncMock(return_value={
         "cookies": [{"name": "manual_cookie", "value": "val", "domain": "protected.example.com"}],
     })
-    _run_agents["run-manual-pause"] = (mock_agent, mock_browser, mock_flow)
+    paused_ref = [False]
+    _run_agents["run-manual-pause"] = (mock_agent, mock_browser, mock_flow, paused_ref)
 
     try:
         # Step 1: Manually pause

@@ -193,7 +193,7 @@ export function BrowserCanvas({ sandboxId, isPaused, className }: BrowserCanvasP
     return () => canvas.removeEventListener("wheel", onWheel);
   }, []); // canvasRef is stable
 
-  // Throttle for drag/mousemove — only send while a button is held.
+  // Throttle for mousemove events (both hover and drag).
   const lastMoveRef = useRef(0);
 
   // ---------------------------------------------------------------------------
@@ -204,6 +204,19 @@ export function BrowserCanvas({ sandboxId, isPaused, className }: BrowserCanvasP
     // preventDefault suppresses default focus transfer — restore it manually.
     e.currentTarget.focus();
     const { x, y } = canvasCoords(e);
+    const mods = modifierBits(e);
+    // Send mouseMoved first — ensures the browser fires mouseover/mouseenter
+    // on the target element before the click, matching real user behaviour.
+    // (This is what Puppeteer/Playwright do internally before every click.)
+    send({
+      type: "mouse",
+      eventType: "mouseMoved",
+      x, y,
+      button: "none",
+      buttons: 0,
+      clickCount: 0,
+      modifiers: mods,
+    });
     send({
       type: "mouse",
       eventType: "mousePressed",
@@ -211,7 +224,7 @@ export function BrowserCanvas({ sandboxId, isPaused, className }: BrowserCanvasP
       button: BTN_MAP[e.button] ?? "left",
       buttons: e.buttons,
       clickCount: 1,
-      modifiers: modifierBits(e),
+      modifiers: mods,
     });
   }, []);
 
@@ -229,12 +242,14 @@ export function BrowserCanvas({ sandboxId, isPaused, className }: BrowserCanvasP
     });
   }, []);
 
-  // Only forward mousemove during drag (buttons held) — throttled to 30 fps.
-  // Idle hover moves add no value and flood the proxy.
+  // Forward mousemove for both hover and drag.
+  // Hover moves are essential — without them the browser never fires
+  // mouseover/mouseenter events and :hover CSS states don't apply.
+  // Throttle: ~16 fps (60 ms) for idle hover, ~30 fps (33 ms) for drag.
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (e.buttons === 0) return;
     const now = Date.now();
-    if (now - lastMoveRef.current < 33) return;
+    const throttle = e.buttons === 0 ? 60 : 33;
+    if (now - lastMoveRef.current < throttle) return;
     lastMoveRef.current = now;
     const { x, y } = canvasCoords(e);
     send({
@@ -343,7 +358,7 @@ export function BrowserCanvas({ sandboxId, isPaused, className }: BrowserCanvasP
           width={CANVAS_W}
           height={CANVAS_H}
           className={cn(
-            "w-full h-full block focus:outline-none cursor-crosshair",
+            "w-full h-full block focus:outline-none cursor-default",
             isPaused && "ring-2 ring-amber-400 ring-inset",
           )}
           tabIndex={0}

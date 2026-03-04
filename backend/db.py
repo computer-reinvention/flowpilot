@@ -72,7 +72,7 @@ async def init_db() -> None:
                 captured_at TEXT NOT NULL
             )
         """)
-        # Reflexes: global, domain-scoped Playwright snippets the agent builds over time.
+        # Reflexes: global, domain-scoped step-by-step instructions the agent builds over time.
         # Named within a domain (e.g., domain="uber.com", name="fill_booking_form").
         # The agent discovers them via search_reflexes(), fires them via run_reflex(),
         # and writes/updates them via save_reflex().
