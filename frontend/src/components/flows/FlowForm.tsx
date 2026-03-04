@@ -137,8 +137,8 @@ export function FlowForm({ flow, onSubmit, onBack, submitting }: FlowFormProps) 
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={onBack}>
-            <ArrowLeft className="h-4 w-4" />
+          <Button variant="ghost" size="icon" onClick={onBack} aria-label="Go back">
+            <ArrowLeft className="size-4" />
           </Button>
           <div>
             <div className="flex items-center gap-2">
@@ -154,7 +154,7 @@ export function FlowForm({ flow, onSubmit, onBack, submitting }: FlowFormProps) 
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           {flow.inputs.map((input, index) => (
-            <div key={index} className="space-y-2">
+            <div key={inputId(input)} className="space-y-2">
               <Label htmlFor={`flow-input-${index}`}>
                 {input.label}
               </Label>

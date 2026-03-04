@@ -90,8 +90,8 @@ export function CreateFlowForm({
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={onBack}>
-            <ArrowLeft className="h-4 w-4" />
+          <Button variant="ghost" size="icon" onClick={onBack} aria-label="Go back">
+            <ArrowLeft className="size-4" />
           </Button>
           <div>
             <CardTitle>New Flow</CardTitle>
@@ -164,7 +164,7 @@ export function CreateFlowForm({
               <div className="space-y-2">
                 {inputs.map((inp, index) => (
                   <div
-                    key={index}
+                    key={inp.name}
                     className="flex items-center gap-2 rounded-md border p-2 text-sm"
                   >
                     <span className="font-medium">{inp.label}</span>
@@ -178,10 +178,11 @@ export function CreateFlowForm({
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="ml-auto h-6 w-6"
+                      className="ml-auto size-6"
                       onClick={() => removeInput(index)}
+                      aria-label="Remove input"
                     >
-                      <X className="h-3 w-3" />
+                      <X className="size-3" />
                     </Button>
                   </div>
                 ))}
@@ -233,7 +234,7 @@ export function CreateFlowForm({
                 onClick={addInput}
                 disabled={!newInputName || !newInputLabel}
               >
-                <Plus className="h-3 w-3 mr-1" />
+                <Plus className="size-3 mr-1" />
                 Add Input
               </Button>
             </div>

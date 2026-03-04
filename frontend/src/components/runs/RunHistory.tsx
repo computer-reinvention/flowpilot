@@ -1,4 +1,5 @@
 import { Loader2, Radio } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,6 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type { Run, Flow } from "@/lib/types";
+import { ACTIVE_RUN_STATUSES } from "@/lib/types";
 
 interface RunHistoryProps {
   runs: Run[];
@@ -35,7 +37,7 @@ const STATUS_STYLES: Record<string, string> = {
     "bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/20",
 };
 
-const ACTIVE_STATUSES = new Set(["pending", "connecting", "running", "paused_for_auth"]);
+const ACTIVE_STATUSES = new Set<string>(ACTIVE_RUN_STATUSES);
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
@@ -93,7 +95,7 @@ export function RunHistory({ runs, flows, loading, error, onConnect }: RunHistor
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Run History</CardTitle>
+        <CardTitle className="text-base text-balance">Run History</CardTitle>
         <CardDescription>
           {runs.length} run{runs.length !== 1 && "s"}
         </CardDescription>
@@ -106,9 +108,10 @@ export function RunHistory({ runs, flows, loading, error, onConnect }: RunHistor
             return (
               <div
                 key={run.id}
-                className={`flex items-center justify-between rounded-md border px-3 py-2 ${
-                  isActive ? "border-l-2 border-l-green-500" : ""
-                }`}
+                className={cn(
+                  "flex items-center justify-between rounded-md border px-3 py-2",
+                  isActive && "border-l-2 border-l-green-500",
+                )}
               >
                 <div className="flex items-center gap-3 min-w-0">
                   {flow?.icon && (
@@ -118,7 +121,7 @@ export function RunHistory({ runs, flows, loading, error, onConnect }: RunHistor
                     <p className="text-sm font-medium truncate">
                       {flow?.name ?? run.flow_id}
                     </p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground tabular-nums">
                       {formatTime(run.created_at)}
                       {run.completed_at &&
                         ` \u00B7 ${duration(run.created_at, run.completed_at)}`}

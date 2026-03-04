@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import type { Session } from "@/lib/types";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, ApiError } from "@/lib/api";
 
 export function useSessions() {
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -14,11 +14,12 @@ export function useSessions() {
       const data = await apiFetch<Session[]>("/api/sessions");
       setSessions(data);
     } catch (err) {
-      // Sessions endpoint may not exist yet — that's fine
-      if (err instanceof Error && !err.message.includes("404")) {
-        setError(err.message);
+      if (err instanceof ApiError && err.status === 404) {
+        setSessions([]);
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to fetch sessions");
+        setSessions([]);
       }
-      setSessions([]);
     } finally {
       setLoading(false);
     }

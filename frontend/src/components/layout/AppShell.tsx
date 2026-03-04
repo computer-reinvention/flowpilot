@@ -1,6 +1,8 @@
+import type { ReactNode } from "react";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
-import { AppSidebar, type ActiveSection } from "./AppSidebar";
+import { AppSidebar } from "./AppSidebar";
+import type { ActiveSection } from "./AppSidebar";
 import { Badge } from "@/components/ui/badge";
 import type { Run, Flow } from "@/lib/types";
 
@@ -13,7 +15,7 @@ interface AppShellProps {
   onLogout: () => void;
   userName?: string;
   activeRunId: string | null;
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 const SECTION_LABELS: Record<ActiveSection, string> = {

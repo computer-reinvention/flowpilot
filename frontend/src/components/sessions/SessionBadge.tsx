@@ -11,7 +11,7 @@ export function SessionBadge({ session }: SessionBadgeProps) {
 
   return (
     <div className="flex items-center gap-2">
-      <Globe className="h-3 w-3 text-muted-foreground" />
+      <Globe className="size-3 text-muted-foreground" />
       <Badge variant="outline">{session.domain}</Badge>
       <span className="text-xs text-muted-foreground">{timeAgo}</span>
     </div>

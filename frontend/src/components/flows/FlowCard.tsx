@@ -26,9 +26,9 @@ export function FlowCard({ flow, onClick }: FlowCardProps) {
             {flow.icon ? (
               <span className="text-2xl">{flow.icon}</span>
             ) : (
-              <Globe className="h-5 w-5 text-muted-foreground" />
+              <Globe className="size-5 text-muted-foreground" />
             )}
-            <CardTitle className="text-lg">{flow.name}</CardTitle>
+            <CardTitle className="text-lg text-balance">{flow.name}</CardTitle>
           </div>
           <Badge variant="secondary">{flow.domain}</Badge>
         </div>

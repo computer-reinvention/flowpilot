@@ -39,7 +39,7 @@ export function sendHITLNotification(reason: string) {
 
 let visibilityHandler: (() => void) | null = null;
 
-export function startTitleFlash() {
+function startTitleFlash() {
   if (titleInterval) return;
   let toggle = false;
 
