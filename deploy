@@ -98,12 +98,29 @@ EOF
   fi
 
   systemctl enable caddy 2>/dev/null || true
-  if systemctl is-active --quiet caddy; then
-    systemctl reload caddy
+
+  # Stop first to release ports, then start fresh
+  systemctl stop caddy 2>/dev/null || true
+
+  if systemctl start caddy 2>&1; then
+    ok "Caddy configured → https://${domain}"
   else
-    systemctl start caddy
+    warn "Caddy failed to start. Diagnostics:"
+    echo ""
+    journalctl -xeu caddy.service --no-pager -n 20 2>/dev/null || true
+    echo ""
+    # Check common culprits
+    local port_80 port_443
+    port_80=$(ss -tlnp | grep ':80 ' | head -1 || true)
+    port_443=$(ss -tlnp | grep ':443 ' | head -1 || true)
+    if [[ -n "$port_80" ]]; then
+      warn "Port 80 is already in use: $port_80"
+    fi
+    if [[ -n "$port_443" ]]; then
+      warn "Port 443 is already in use: $port_443"
+    fi
+    die "Fix the issue above and run: sudo systemctl start caddy"
   fi
-  ok "Caddy configured → https://${domain}"
 }
 
 _create_env() {
