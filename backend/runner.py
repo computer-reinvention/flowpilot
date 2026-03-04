@@ -65,8 +65,9 @@ def _get_llm() -> ChatGoogle | ChatAnthropic | ChatOpenAI:
         api_key = os.environ.get("GOOGLE_API_KEY")
         if not api_key:
             raise ValueError("GOOGLE_API_KEY required when LLM_PROVIDER=gemini")
-        # Fallback order: flash-lite (fastest) → flash → pro (most capable)
-        return ChatGoogle(model=os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite-preview"), api_key=api_key)
+        # Fallback order: flash → pro (most capable). flash-lite was too weak to
+        # follow multi-step tool-use instructions reliably.
+        return ChatGoogle(model=os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview"), api_key=api_key)
     elif provider in ("claude", "anthropic"):
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
@@ -117,24 +118,23 @@ def _build_task(flow: Flow, inputs: dict, domain_reflexes: list[dict]) -> str:
     if input_keys:
         lines.append(f"Input keys available in reflexes: {input_keys}")
 
+    lines += ["", "--- Reflexes ---"]
     if domain_reflexes:
-        lines += [
-            "",
-            f"Reflexes available for {flow.domain}:",
-        ]
+        lines.append(f"Saved reflexes for {flow.domain}:")
         for r in domain_reflexes:
-            pause_note = "  [expects auth after]" if r.get("pause_after") == "auth" else ""
+            pause_note = " [pauses for auth after]" if r.get("pause_after") == "auth" else ""
             lines.append(f"  • {r['name']}{pause_note} — {r['description']}")
         lines += [
             "",
-            "Use search_reflexes(use_case) to find relevant ones for your current step.",
-            "Use run_reflex(name) to fire one. If it fails, handle manually and update it with save_reflex().",
+            "At each phase: call search_reflexes() first. If a match exists, run it with run_reflex().",
+            "After completing any phase manually: IMMEDIATELY call save_reflex() before moving on.",
         ]
     else:
         lines += [
-            "",
             f"No reflexes saved yet for {flow.domain}.",
-            "As you solve parts of this task, use save_reflex() to cache them for future runs.",
+            "After you complete each distinct phase of the task manually (e.g. filling the booking form,",
+            "selecting a ride type), IMMEDIATELY call save_reflex() with the script you just executed.",
+            "Name it descriptively, e.g. 'fill_booking_form' or 'select_ride_type'.",
         ]
 
     return "\n".join(lines)
@@ -386,14 +386,15 @@ class FlowRunner:
                 register_new_step_callback=_on_step,
                 tools=tools,
                 extend_system_message=(
-                    "You have reflex tools (search_reflexes, run_reflex, save_reflex) for fast, "
-                    "cached browser interactions. Use search_reflexes() at the start of each major "
-                    "phase to check if a reflex exists. Fire it with run_reflex() if relevant. "
-                    "If a reflex fails or doesn't exist, use your normal browser tools and then "
-                    "call save_reflex() to cache the solution for next time. "
-                    "When you hit any blocker requiring a human — login/auth, CAPTCHA, consent, "
-                    "ambiguous input — call request_human_help(reason, category) and pause. "
-                    "Your judgment always takes precedence — reflexes are an optimization, not a constraint."
+                    "MANDATORY RULES — follow these exactly:\n"
+                    "1. AUTH WALLS: When you encounter any login page, auth wall, or CAPTCHA, you MUST "
+                    "call request_human_help(reason, category). Never call done() to report failure. "
+                    "The human will handle it and resume you — this is always the correct action.\n"
+                    "2. SAVE REFLEXES: After completing each distinct phase manually (form filled, "
+                    "ride selected, booking confirmed, etc.), you MUST immediately call save_reflex() "
+                    "with a complete Playwright script reproducing that phase. Do not skip this.\n"
+                    "3. USE REFLEXES: At the start of each phase, call search_reflexes() to check "
+                    "for an existing solution before doing it manually."
                 ),
             )
 
