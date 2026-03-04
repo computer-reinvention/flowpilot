@@ -44,18 +44,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgtk-3-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# ── Python packages + Playwright Chromium ─────────────────────────────
-# Must be a single RUN so the Playwright cache is available for the symlink.
-# System chromium from apt crashes with SIGTRAP in Docker on some hosts;
-# Playwright's bundled binary is designed for containers.
+# ── Python packages ──────────────────────────────────────────────────
 RUN pip install --no-cache-dir \
     browser-use \
     playwright \
     && playwright install chromium \
-    && playwright install-deps chromium \
-    && echo "=== Playwright cache contents ===" \
-    && find /root/.cache/ms-playwright -type f -name 'chrome*' -o -name 'headless*' | head -20 \
-    && echo "=== end ==="
+    && playwright install-deps chromium
 
 # ── Non-root user ────────────────────────────────────────────────────
 RUN useradd -m -s /bin/bash sandboxuser

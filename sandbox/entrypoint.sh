@@ -14,6 +14,25 @@ else
     echo "No existing browser profile found — starting fresh."
 fi
 
+# ── Find Chromium binary ─────────────────────────────────────────────
+# Prefer Playwright's bundled Chromium (works reliably in containers).
+# Fall back to system chromium if Playwright's isn't found.
+PW_CHROME=$(find /root/.cache/ms-playwright -type f -name 'chrome' 2>/dev/null | head -1 || true)
+if [ -n "$PW_CHROME" ] && [ -x "$PW_CHROME" ]; then
+    echo "Using Playwright Chromium: $PW_CHROME"
+    CHROME_BIN="$PW_CHROME"
+elif command -v chromium &>/dev/null; then
+    echo "Using system chromium"
+    CHROME_BIN="chromium"
+elif command -v chromium-browser &>/dev/null; then
+    echo "Using system chromium-browser"
+    CHROME_BIN="chromium-browser"
+else
+    echo "ERROR: No Chromium binary found!" >&2
+    exit 1
+fi
+export CHROME_BIN
+
 # ── Export environment for supervisord children ──────────────────────
 export DISPLAY="${DISPLAY:-:1}"
 export RESOLUTION="${RESOLUTION:-1280x720x24}"
