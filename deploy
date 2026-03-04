@@ -69,17 +69,23 @@ _configure_caddy() {
 
   mkdir -p /etc/caddy/sites
 
-  # Caddy requires `import` at the top level. The default Caddyfile on Debian/Ubuntu
-  # typically starts with a comment block or a bare `:80` site. We prepend the import
-  # line at the very top so it's parsed before any site blocks.
+  # If the Caddyfile is the stock default (contains `:80` site block) or has
+  # never been customised, replace it entirely. Otherwise prepend the import.
   if ! grep -q "import /etc/caddy/sites" /etc/caddy/Caddyfile 2>/dev/null; then
-    local tmp
-    tmp=$(mktemp)
-    echo "import /etc/caddy/sites/*.caddy" > "$tmp"
-    echo "" >> "$tmp"
-    cat /etc/caddy/Caddyfile >> "$tmp"
-    mv "$tmp" /etc/caddy/Caddyfile
-    info "Added 'import /etc/caddy/sites/*.caddy' to top of Caddyfile."
+    if grep -qE '^\s*:80\s*\{' /etc/caddy/Caddyfile 2>/dev/null; then
+      # Stock Caddyfile — replace with just the import
+      info "Replacing default Caddyfile (had stock :80 block)."
+      echo "import /etc/caddy/sites/*.caddy" > /etc/caddy/Caddyfile
+    else
+      # Custom Caddyfile — prepend import at the top
+      local tmp
+      tmp=$(mktemp)
+      echo "import /etc/caddy/sites/*.caddy" > "$tmp"
+      echo "" >> "$tmp"
+      cat /etc/caddy/Caddyfile >> "$tmp"
+      mv "$tmp" /etc/caddy/Caddyfile
+    fi
+    info "Caddyfile now imports /etc/caddy/sites/*.caddy"
   fi
 
   cat > "$CADDY_SITE_FILE" << EOF
