@@ -24,7 +24,7 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_DAYS = 7
 
 
-async def init_db():
+async def init_db() -> None:
     """Create the users table if it doesn't exist."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(str(DB_PATH)) as db:

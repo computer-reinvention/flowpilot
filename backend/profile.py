@@ -13,6 +13,8 @@ from .config import PROFILES_DIR
 
 logger = logging.getLogger(__name__)
 CHROME_PROFILE_CONTAINER_PATH = "/tmp/chrome-profile"
+PROFILE_ARCHIVE_FILENAME = "profile.tar.gz"
+PROFILE_COOKIES_FILENAME = "cookies.json"
 
 
 class ProfileManager:
@@ -38,7 +40,7 @@ class ProfileManager:
         container_name = f"flowpilot-{sandbox_id}"
         profile_dir = self._user_profile_dir(user_id, profile_name)
         profile_dir.mkdir(parents=True, exist_ok=True)
-        archive_path = profile_dir / "profile.tar.gz"
+        archive_path = profile_dir / PROFILE_ARCHIVE_FILENAME
 
         try:
             container = self.client.containers.get(container_name)
@@ -78,7 +80,7 @@ class ProfileManager:
     def restore_profile(self, user_id: str, profile_name: str, sandbox_id: str) -> bool:
         """Untar a saved profile into a running container's Chrome profile directory."""
         profile_dir = self._user_profile_dir(user_id, profile_name)
-        archive_path = profile_dir / "profile.tar.gz"
+        archive_path = profile_dir / PROFILE_ARCHIVE_FILENAME
 
         if not archive_path.exists():
             logger.warning("No saved profile found at %s", archive_path)
@@ -115,15 +117,15 @@ class ProfileManager:
     def has_profile(self, user_id: str, profile_name: str) -> bool:
         """Check if a saved profile exists (tar archive or imported cookies)."""
         profile_dir = self._user_profile_dir(user_id, profile_name)
-        archive = profile_dir / "profile.tar.gz"
-        cookies = profile_dir / "cookies.json"
+        archive = profile_dir / PROFILE_ARCHIVE_FILENAME
+        cookies = profile_dir / PROFILE_COOKIES_FILENAME
         return archive.exists() or cookies.exists()
 
     def get_profile_info(self, user_id: str, profile_name: str) -> dict:
         """Get metadata about a saved profile."""
         profile_dir = self._user_profile_dir(user_id, profile_name)
-        archive_path = profile_dir / "profile.tar.gz"
-        cookies_path = profile_dir / "cookies.json"
+        archive_path = profile_dir / PROFILE_ARCHIVE_FILENAME
+        cookies_path = profile_dir / PROFILE_COOKIES_FILENAME
 
         check_path = None
         source = None
@@ -160,7 +162,7 @@ class ProfileManager:
             return profiles
 
         for entry in sorted(user_dir.iterdir()):
-            if entry.is_dir() and ((entry / "profile.tar.gz").exists() or (entry / "cookies.json").exists()):
+            if entry.is_dir() and ((entry / PROFILE_ARCHIVE_FILENAME).exists() or (entry / PROFILE_COOKIES_FILENAME).exists()):
                 profiles.append(self.get_profile_info(user_id, entry.name))
 
         return profiles
