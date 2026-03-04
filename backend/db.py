@@ -38,10 +38,7 @@ async def init_db() -> None:
                 inputs TEXT NOT NULL DEFAULT '[]',
                 icon TEXT,
                 created_by TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                script TEXT,
-                script_version INTEGER NOT NULL DEFAULT 0,
-                scripts TEXT NOT NULL DEFAULT '[]'
+                created_at TEXT NOT NULL
             )
         """)
         await db.execute("""
@@ -95,9 +92,6 @@ async def init_db() -> None:
         # Migrations: add columns that may be missing in existing DBs
         for migration in [
             "ALTER TABLE sessions ADD COLUMN profile_name TEXT NOT NULL DEFAULT 'default'",
-            "ALTER TABLE flows ADD COLUMN script TEXT",
-            "ALTER TABLE flows ADD COLUMN script_version INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE flows ADD COLUMN scripts TEXT NOT NULL DEFAULT '[]'",
         ]:
             try:
                 await db.execute(migration)
@@ -115,20 +109,22 @@ async def create_flow(flow: Flow) -> Flow:
     async with aiosqlite.connect(str(DB_PATH)) as db:
         await db.execute(
             """INSERT INTO flows
-               (id, name, domain, description, entry_url, inputs, icon, created_by, created_at, scripts, script_version)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (id, name, domain, description, entry_url, inputs, icon, created_by, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (flow.id, flow.name, flow.domain, flow.description, flow.entry_url,
-             flow.inputs, flow.icon, flow.created_by, flow.created_at,
-             flow.scripts, flow.script_version),
+             flow.inputs, flow.icon, flow.created_by, flow.created_at),
         )
         await db.commit()
     return flow
 
 
+_FLOW_COLS = "id, name, domain, description, entry_url, inputs, icon, created_by, created_at"
+
+
 async def get_flow(flow_id: str) -> Flow | None:
     async with aiosqlite.connect(str(DB_PATH)) as db:
         db.row_factory = aiosqlite.Row
-        cursor = await db.execute("SELECT * FROM flows WHERE id = ?", (flow_id,))
+        cursor = await db.execute(f"SELECT {_FLOW_COLS} FROM flows WHERE id = ?", (flow_id,))
         row = await cursor.fetchone()
     if not row:
         return None
@@ -138,13 +134,13 @@ async def get_flow(flow_id: str) -> Flow | None:
 async def list_flows() -> list[dict]:
     async with aiosqlite.connect(str(DB_PATH)) as db:
         db.row_factory = aiosqlite.Row
-        cursor = await db.execute("SELECT * FROM flows ORDER BY created_at DESC")
+        cursor = await db.execute(f"SELECT {_FLOW_COLS} FROM flows ORDER BY created_at DESC")
         rows = await cursor.fetchall()
     return [dict(r) for r in rows]
 
 
 async def update_flow(flow_id: str, updates: dict) -> Flow | None:
-    allowed = {"name", "domain", "description", "entry_url", "inputs", "icon", "scripts", "script_version"}
+    allowed = {"name", "domain", "description", "entry_url", "inputs", "icon"}
     filtered = {k: v for k, v in updates.items() if k in allowed}
     if not filtered:
         return await get_flow(flow_id)

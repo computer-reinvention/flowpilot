@@ -15,11 +15,6 @@ class Flow:
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     entry_url: str | None = None
     icon: str | None = None
-    # JSON array of segment dicts: [{"script": str, "pause_after": "auth" | null}, ...]
-    # Each segment is a self-contained Playwright script body. pause_after="auth" means
-    # execution pauses for human login before the next segment runs.
-    scripts: str = "[]"
-    script_version: int = 0            # increments on each successful synthesis
 
 
 @dataclass
