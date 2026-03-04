@@ -1,5 +1,6 @@
 """Authentication module — email/password auth with JWT tokens and SQLite storage."""
 
+import asyncio
 import os
 import uuid
 import logging
@@ -12,6 +13,7 @@ import jwt
 from fastapi import Request, HTTPException
 
 from .config import DB_PATH
+from . import db as _platform_db
 
 logger = logging.getLogger(__name__)
 
@@ -116,8 +118,53 @@ def decode_token(token: str) -> str | None:
         return None
 
 
+# ---------------------------------------------------------------------------
+# API Key helpers
+# ---------------------------------------------------------------------------
+
+_API_KEY_PREFIX_LEN = 12  # characters used for DB lookup
+
+
+def generate_api_key() -> str:
+    return f"fp_live_{secrets.token_hex(16)}"
+
+
+def hash_api_key(plaintext: str) -> str:
+    return bcrypt.hashpw(plaintext.encode(), bcrypt.gensalt()).decode()
+
+
+def verify_api_key(plaintext: str, key_hash: str) -> bool:
+    return bcrypt.checkpw(plaintext.encode(), key_hash.encode())
+
+
+async def _update_key_last_used(key_id: str) -> None:
+    try:
+        await _platform_db.update_api_key_last_used(key_id)
+    except Exception:
+        pass
+
+
+async def _resolve_api_key(token: str) -> dict:
+    """Look up an API key by prefix, verify hash, return user dict or raise 401."""
+    prefix = token[:_API_KEY_PREFIX_LEN]
+    row = await _platform_db.get_api_key_by_prefix(prefix)
+    if not row:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    if not verify_api_key(token, row["key_hash"]):
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    user = await get_user_by_id(row["user_id"])
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    asyncio.create_task(_update_key_last_used(row["id"]))
+    return user
+
+
+# ---------------------------------------------------------------------------
+# Request authentication
+# ---------------------------------------------------------------------------
+
 async def get_current_user(request: Request) -> dict:
-    """FastAPI dependency: extract and validate JWT from Authorization header or cookie.
+    """FastAPI dependency: extract and validate JWT or API key from Authorization header or cookie.
 
     Returns user dict or raises 401.
     """
@@ -135,6 +182,11 @@ async def get_current_user(request: Request) -> dict:
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
+    # API key path
+    if token.startswith("fp_live_"):
+        return await _resolve_api_key(token)
+
+    # JWT path
     user_id = decode_token(token)
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
