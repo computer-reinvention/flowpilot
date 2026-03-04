@@ -86,6 +86,8 @@ class SandboxManager:
                 cpu_quota=100000,
                 pids_limit=256,
                 shm_size="256m",
+                # Chromium needs relaxed seccomp to avoid SIGTRAP crashes
+                security_opt=["seccomp=unconfined"],
             )
         except APIError as e:
             logger.error("Failed to start sandbox container: %s", e)
