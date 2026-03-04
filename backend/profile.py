@@ -154,16 +154,4 @@ class ProfileManager:
             "source": source,
         }
 
-    def list_profiles(self, user_id: str) -> list[dict]:
-        """List all saved profiles for a user."""
-        profiles = []
-        user_dir = self.profiles_dir / user_id
-        if not user_dir.exists():
-            return profiles
-
-        for entry in sorted(user_dir.iterdir()):
-            if entry.is_dir() and ((entry / PROFILE_ARCHIVE_FILENAME).exists() or (entry / PROFILE_COOKIES_FILENAME).exists()):
-                profiles.append(self.get_profile_info(user_id, entry.name))
-
-        return profiles
 

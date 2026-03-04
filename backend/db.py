@@ -208,16 +208,17 @@ async def create_run(run: Run) -> Run:
     async with aiosqlite.connect(str(DB_PATH)) as db:
         await db.execute(
             """INSERT INTO runs (id, flow_id, user_id, status, inputs, sandbox_id,
-               steps, current_step, result, error, created_at, completed_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               steps, current_step, result, error, created_at, completed_at, profile_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (run.id, run.flow_id, run.user_id, run.status, run.inputs, run.sandbox_id,
-             run.steps, run.current_step, run.result, run.error, run.created_at, run.completed_at),
+             run.steps, run.current_step, run.result, run.error, run.created_at, run.completed_at,
+             run.profile_id),
         )
         await db.commit()
     return run
 
 
-_RUN_COLS = "id, flow_id, user_id, status, inputs, sandbox_id, steps, current_step, result, error, created_at, completed_at"
+_RUN_COLS = "id, flow_id, user_id, status, inputs, sandbox_id, steps, current_step, result, error, created_at, completed_at, profile_id"
 
 
 async def get_run(run_id: str) -> Run | None:
@@ -241,7 +242,7 @@ async def list_runs(user_id: str) -> list[dict]:
 
 
 async def update_run(run_id: str, updates: dict) -> None:
-    allowed = {"status", "sandbox_id", "steps", "current_step", "result", "error", "completed_at"}
+    allowed = {"status", "sandbox_id", "steps", "current_step", "result", "error", "completed_at", "profile_id"}
     filtered = {k: v for k, v in updates.items() if k in allowed}
     if not filtered:
         return
@@ -394,13 +395,166 @@ async def list_reflexes_for_domain(domain: str) -> list[dict]:
     return result
 
 
-async def delete_reflex(domain: str, name: str) -> bool:
+
+
+# ---------------------------------------------------------------------------
+# API Keys
+# ---------------------------------------------------------------------------
+
+async def create_api_key(user_id: str, name: str, key_hash: str, key_prefix: str) -> dict:
+    key_id = str(uuid.uuid4())[:12]
+    created_at = datetime.now(timezone.utc).isoformat()
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        await db.execute(
+            "INSERT INTO api_keys (id, user_id, name, key_hash, key_prefix, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (key_id, user_id, name, key_hash, key_prefix, created_at),
+        )
+        await db.commit()
+    return {"id": key_id, "user_id": user_id, "name": name, "key_prefix": key_prefix, "created_at": created_at, "last_used_at": None}
+
+
+async def list_api_keys(user_id: str) -> list[dict]:
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT id, user_id, name, key_prefix, created_at, last_used_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC",
+            (user_id,),
+        )
+        rows = await cursor.fetchall()
+    return [dict(r) for r in rows]
+
+
+async def get_api_key_by_prefix(key_prefix: str) -> dict | None:
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT id, user_id, name, key_hash, key_prefix, created_at, last_used_at FROM api_keys WHERE key_prefix = ?",
+            (key_prefix,),
+        )
+        row = await cursor.fetchone()
+    return dict(row) if row else None
+
+
+async def update_api_key_last_used(key_id: str) -> None:
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        await db.execute(
+            "UPDATE api_keys SET last_used_at = ? WHERE id = ?",
+            (datetime.now(timezone.utc).isoformat(), key_id),
+        )
+        await db.commit()
+
+
+async def delete_api_key(key_id: str, user_id: str) -> bool:
     async with aiosqlite.connect(str(DB_PATH)) as db:
         cursor = await db.execute(
-            "DELETE FROM reflexes WHERE domain = ? AND name = ?", (domain, name)
+            "DELETE FROM api_keys WHERE id = ? AND user_id = ?", (key_id, user_id)
         )
         await db.commit()
         return cursor.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# Webhooks
+# ---------------------------------------------------------------------------
+
+async def create_webhook(user_id: str, url: str, secret: str, events: list[str]) -> dict:
+    webhook_id = str(uuid.uuid4())[:12]
+    created_at = datetime.now(timezone.utc).isoformat()
+    events_json = json.dumps(events)
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        await db.execute(
+            "INSERT INTO webhooks (id, user_id, url, secret, events, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (webhook_id, user_id, url, secret, events_json, created_at),
+        )
+        await db.commit()
+    return {"id": webhook_id, "user_id": user_id, "url": url, "events": events, "enabled": True, "created_at": created_at}
+
+
+async def list_webhooks(user_id: str) -> list[dict]:
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT id, user_id, url, events, enabled, created_at FROM webhooks WHERE user_id = ? ORDER BY created_at DESC",
+            (user_id,),
+        )
+        rows = await cursor.fetchall()
+    result = []
+    for row in rows:
+        r = dict(row)
+        r["events"] = json.loads(r.get("events", "[]"))
+        r["enabled"] = bool(r["enabled"])
+        result.append(r)
+    return result
+
+
+async def get_webhooks_for_event(user_id: str, event: str) -> list[dict]:
+    """Return enabled webhooks subscribed to the given event (empty events list = all events)."""
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT id, url, secret, events FROM webhooks WHERE user_id = ? AND enabled = 1",
+            (user_id,),
+        )
+        rows = await cursor.fetchall()
+    result = []
+    for row in rows:
+        r = dict(row)
+        subscribed = json.loads(r.get("events", "[]"))
+        if not subscribed or event in subscribed:
+            result.append({"id": r["id"], "url": r["url"], "secret": r["secret"]})
+    return result
+
+
+async def get_webhook(webhook_id: str, user_id: str) -> dict | None:
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT id, user_id, url, secret, events, enabled, created_at FROM webhooks WHERE id = ? AND user_id = ?",
+            (webhook_id, user_id),
+        )
+        row = await cursor.fetchone()
+    if not row:
+        return None
+    r = dict(row)
+    r["events"] = json.loads(r.get("events", "[]"))
+    r["enabled"] = bool(r["enabled"])
+    return r
+
+
+async def delete_webhook(webhook_id: str, user_id: str) -> bool:
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        cursor = await db.execute(
+            "DELETE FROM webhooks WHERE id = ? AND user_id = ?", (webhook_id, user_id)
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# Webhook deliveries
+# ---------------------------------------------------------------------------
+
+async def create_webhook_delivery(webhook_id: str, run_id: str | None, event: str, payload: str) -> str:
+    delivery_id = str(uuid.uuid4())[:12]
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        await db.execute(
+            "INSERT INTO webhook_deliveries (id, webhook_id, run_id, event, payload) VALUES (?, ?, ?, ?, ?)",
+            (delivery_id, webhook_id, run_id, event, payload),
+        )
+        await db.commit()
+    return delivery_id
+
+
+async def update_webhook_delivery(delivery_id: str, updates: dict) -> None:
+    allowed = {"attempt", "status", "response_status", "response_body", "delivered_at"}
+    filtered = {k: v for k, v in updates.items() if k in allowed}
+    if not filtered:
+        return
+    sets = ", ".join(f"{k} = ?" for k in filtered)
+    vals = list(filtered.values()) + [delivery_id]
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        await db.execute(f"UPDATE webhook_deliveries SET {sets} WHERE id = ?", vals)
+        await db.commit()
 
 
 # ---------------------------------------------------------------------------

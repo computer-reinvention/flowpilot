@@ -166,33 +166,6 @@ class SandboxManager:
         del self._sandboxes[sandbox_id]
         logger.info("Stopped sandbox %s", sandbox_id)
 
-    def save_profile(self, sandbox_id: str, profile_name: str) -> str:
-        """Copy the Chromium profile out of a running container.
-
-        Returns the host path where the profile was saved.
-        """
-        info = self._sandboxes.get(sandbox_id)
-        if not info:
-            raise ValueError(f"Unknown sandbox: {sandbox_id}")
-
-        dest = Path(self.profiles_host_dir) / profile_name
-        dest.mkdir(parents=True, exist_ok=True)
-
-        chrome_profile_path = "/tmp/chrome-profile"
-
-        try:
-            subprocess.run(
-                ["docker", "cp", f"{info.container_id}:{chrome_profile_path}/.", str(dest)],
-                check=True,
-                capture_output=True,
-            )
-        except subprocess.CalledProcessError as e:
-            logger.error("Failed to save profile: %s", e.stderr.decode())
-            raise RuntimeError(f"Failed to save profile: {e}") from e
-
-        logger.info("Saved profile '%s' from sandbox %s to %s", profile_name, sandbox_id, dest)
-        return str(dest)
-
     def get_cdp_url(self, sandbox_id: str) -> str:
         """Return the internal CDP URL for a sandbox (accessible via Docker network)."""
         info = self._sandboxes.get(sandbox_id)
