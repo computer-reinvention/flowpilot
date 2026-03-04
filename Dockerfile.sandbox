@@ -50,7 +50,7 @@ RUN pip install --no-cache-dir \
     playwright \
     && playwright install chromium \
     && playwright install-deps chromium \
-    && ln -s /root/.cache/ms-playwright/chromium-*/chrome-linux/chrome /usr/local/bin/pw-chromium \
+    && ln -s "$(find /root/.cache/ms-playwright -name chrome -path '*/chrome-linux/*' | head -1)" /usr/local/bin/pw-chromium \
     && chmod -R o+rx /root/.cache/ms-playwright
 
 # ── Non-root user ────────────────────────────────────────────────────
