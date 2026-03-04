@@ -44,19 +44,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgtk-3-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# ── Python packages ──────────────────────────────────────────────────
+# ── Python packages + Playwright Chromium ─────────────────────────────
+# Must be a single RUN so the Playwright cache is available for the symlink.
+# System chromium from apt crashes with SIGTRAP in Docker on some hosts;
+# Playwright's bundled binary is designed for containers.
 RUN pip install --no-cache-dir \
     browser-use \
     playwright \
     && playwright install chromium \
-    && playwright install-deps chromium
-
-# Symlink Playwright's bundled Chromium so supervisord can find it.
-# System chromium from apt crashes with SIGTRAP in Docker on some hosts.
-RUN set -e; \
-    CHROME_BIN=$(find /root/.cache/ms-playwright -name chrome -path '*/chrome-linux/*' | head -1); \
-    ln -s "$CHROME_BIN" /usr/local/bin/pw-chromium; \
-    chmod -R o+rx /root/.cache/ms-playwright
+    && playwright install-deps chromium \
+    && CHROME_BIN=$(find /root/.cache/ms-playwright -name chrome -path '*/chrome-linux/*' -type f | head -1) \
+    && echo "Playwright chrome at: $CHROME_BIN" \
+    && ln -s "$CHROME_BIN" /usr/local/bin/pw-chromium \
+    && chmod -R o+rx /root/.cache/ms-playwright
 
 # ── Non-root user ────────────────────────────────────────────────────
 RUN useradd -m -s /bin/bash sandboxuser
