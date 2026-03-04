@@ -49,7 +49,9 @@ RUN pip install --no-cache-dir \
     browser-use \
     playwright \
     && playwright install chromium \
-    && playwright install-deps chromium
+    && playwright install-deps chromium \
+    && chmod 755 /root \
+    && chmod -R o+rX /root/.cache/ms-playwright
 
 # ── Non-root user ────────────────────────────────────────────────────
 RUN useradd -m -s /bin/bash sandboxuser
