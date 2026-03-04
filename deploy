@@ -77,11 +77,8 @@ _configure_caddy() {
   cat > "$CADDY_SITE_FILE" << EOF
 ${domain} {
     reverse_proxy localhost:8080 {
-        header_up Host             {host}
-        header_up X-Real-IP        {remote_host}
-        header_up X-Forwarded-For  {remote_host}
-        header_up X-Forwarded-Proto {scheme}
-        # Keep WebSocket (run progress + browser canvas) and HITL-paused connections alive
+        header_up Host      {host}
+        header_up X-Real-IP {remote_host}
         transport http {
             read_timeout 1h
         }
@@ -89,11 +86,15 @@ ${domain} {
 }
 EOF
 
-  # Validate before restarting — show the error if it fails
-  if ! caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile 2>/dev/null; then
-    warn "Caddy config validation failed. Check /etc/caddy/Caddyfile"
-    warn "You may need to remove the default :80 site block that ships with Caddy."
-    return 1
+  # Validate before restarting — show the actual error if it fails
+  info "Validating Caddy config..."
+  local validate_output
+  if validate_output=$(caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile 2>&1); then
+    ok "Caddy config valid"
+  else
+    warn "Caddy config validation failed:"
+    echo "$validate_output" | tail -20
+    die "Fix /etc/caddy/Caddyfile and /etc/caddy/sites/flowpilot.caddy, then re-run."
   fi
 
   systemctl enable caddy 2>/dev/null || true
