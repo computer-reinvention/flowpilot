@@ -404,7 +404,9 @@ class FlowRunner:
 
             await _update(RunStatus.RUNNING, f"Agent running flow '{flow.name}'...")
 
-            result = await asyncio.wait_for(agent.run(max_steps=30), timeout=600)
+            # No wall-clock timeout — max_steps=30 bounds active execution and
+            # HITL pauses should wait indefinitely until the human resumes.
+            result = await agent.run(max_steps=30)
 
             if hasattr(result, "is_successful") and not result.is_successful():
                 errors = result.errors() if hasattr(result, "errors") else []
