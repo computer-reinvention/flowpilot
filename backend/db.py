@@ -129,6 +129,16 @@ async def init_db() -> None:
                 FOREIGN KEY (webhook_id) REFERENCES webhooks(id)
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS sandboxes (
+                id TEXT PRIMARY KEY,
+                container_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                cdp_url TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'running',
+                created_at TEXT NOT NULL
+            )
+        """)
         # Migrations: add columns that may be missing in existing DBs
         for migration in [
             "ALTER TABLE sessions ADD COLUMN profile_name TEXT NOT NULL DEFAULT 'default'",
@@ -555,6 +565,42 @@ async def update_webhook_delivery(delivery_id: str, updates: dict) -> None:
     async with aiosqlite.connect(str(DB_PATH)) as db:
         await db.execute(f"UPDATE webhook_deliveries SET {sets} WHERE id = ?", vals)
         await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Sandboxes
+# ---------------------------------------------------------------------------
+
+async def create_sandbox(sandbox_id: str, container_id: str, user_id: str, cdp_url: str) -> None:
+    created_at = datetime.now(timezone.utc).isoformat()
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        await db.execute(
+            "INSERT INTO sandboxes (id, container_id, user_id, cdp_url, created_at) VALUES (?, ?, ?, ?, ?)",
+            (sandbox_id, container_id, user_id, cdp_url, created_at),
+        )
+        await db.commit()
+
+
+async def delete_sandbox(sandbox_id: str) -> None:
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        await db.execute("DELETE FROM sandboxes WHERE id = ?", (sandbox_id,))
+        await db.commit()
+
+
+async def list_active_sandboxes() -> list[dict]:
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute("SELECT * FROM sandboxes WHERE status = 'running'")
+        rows = await cursor.fetchall()
+    return [dict(r) for r in rows]
+
+
+async def get_sandbox(sandbox_id: str) -> dict | None:
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute("SELECT * FROM sandboxes WHERE id = ?", (sandbox_id,))
+        row = await cursor.fetchone()
+    return dict(row) if row else None
 
 
 # ---------------------------------------------------------------------------

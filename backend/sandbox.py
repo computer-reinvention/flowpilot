@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 SANDBOX_IMAGE = "flowpilot-sandbox"
 CDP_CONTAINER_PORT = 9223  # socat: 0.0.0.0:9223 → 127.0.0.1:9222 (Chromium ignores --remote-debugging-address on ARM)
 SANDBOX_NETWORK = os.environ.get("SANDBOX_NETWORK", "flowpilot_sandbox-net")
-MAX_SANDBOXES_PER_USER = 2
 PROFILE_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
@@ -58,17 +57,6 @@ class SandboxManager:
         Returns:
             Dict with sandbox_id, cdp_url, and status.
         """
-        # H2: Per-user sandbox limit
-        if user_id:
-            current = self._user_sandboxes.get(user_id, set())
-            # Clean up stopped sandboxes from tracking
-            active = {sid for sid in current if sid in self._sandboxes}
-            self._user_sandboxes[user_id] = active
-            if len(active) >= MAX_SANDBOXES_PER_USER:
-                raise RuntimeError(
-                    f"User {user_id} already has {len(active)} active sandboxes (max {MAX_SANDBOXES_PER_USER})"
-                )
-
         sandbox_id = str(uuid.uuid4())[:12]
 
         environment = {
@@ -138,6 +126,7 @@ class SandboxManager:
 
         return {
             "sandbox_id": sandbox_id,
+            "container_id": container.id,
             "cdp_url": cdp_url,
             "status": "running",
         }
@@ -190,6 +179,30 @@ class SandboxManager:
         if not info:
             raise ValueError(f"Unknown sandbox: {sandbox_id}")
         return info.user_id
+
+    def reconcile_from_db(self, db_rows: list[dict]) -> list[str]:
+        """Rebuild _sandboxes from DB rows. Returns sandbox_ids whose containers are gone."""
+        dead = []
+        for row in db_rows:
+            try:
+                container = self.client.containers.get(row["container_id"])
+                if container.status == "running":
+                    info = SandboxInfo(
+                        sandbox_id=row["id"],
+                        container_id=row["container_id"],
+                        cdp_port=CDP_CONTAINER_PORT,
+                        status="running",
+                        user_id=row["user_id"],
+                    )
+                    self._sandboxes[row["id"]] = info
+                    logger.info("Reconciled sandbox %s (container %s)", row["id"], row["container_id"][:12])
+                else:
+                    dead.append(row["id"])
+            except NotFound:
+                dead.append(row["id"])
+            except APIError as e:
+                logger.warning("Reconcile error for sandbox %s: %s", row["id"], e)
+        return dead
 
     def cleanup_orphans(self) -> int:
         """H3: Stop and remove any orphaned flowpilot sandbox containers."""
