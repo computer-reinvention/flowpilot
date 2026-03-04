@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import os
+import secrets
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -167,6 +168,15 @@ class ApiKeyCreateRequest(BaseModel):
 class WebhookCreateRequest(BaseModel):
     url: str
     events: list[str] = []  # empty = subscribe to all
+
+
+class TriggerHookCreateRequest(BaseModel):
+    name: str
+
+
+class TriggerHookExecuteRequest(BaseModel):
+    inputs: dict = {}
+    profile_id: str | None = None
 
 
 class SessionCaptureRequest(BaseModel):
@@ -600,8 +610,8 @@ async def _execute_run(
 
 
 @app.get("/api/runs")
-async def run_list(user: dict = Depends(auth.get_current_user)) -> list[dict]:
-    runs = await platform_db.list_runs(user["id"])
+async def run_list(user: dict = Depends(auth.get_current_user), flow_id: str | None = Query(default=None)) -> list[dict]:
+    runs = await platform_db.list_runs(user["id"], flow_id=flow_id)
     for r in runs:
         if r.get("sandbox_id") and r.get("status") in ACTIVE_RUN_STATUSES:
             r["browser_cdp_url"] = f"{BASE_URL}/ws/browser/{r['sandbox_id']}"
@@ -698,7 +708,7 @@ async def run_resume(run_id: str, user: dict = Depends(auth.get_current_user)) -
 
     # Capture cookies from the browser and persist as a session scoped to the run's profile_id
     try:
-        storage_state = await browser.get_storage_state()
+        storage_state = await browser.export_storage_state()
         cookies = storage_state.get("cookies", [])
         if cookies:
             session = Session(
@@ -956,6 +966,50 @@ async def webhook_test(webhook_id: str, user: dict = Depends(auth.get_current_us
         return {"status": "delivered", "response_status": resp.status_code}
     except Exception as e:
         return {"status": "failed", "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Trigger Hooks (v1)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/flows/{flow_id}/hooks")
+async def trigger_hook_create(flow_id: str, req: TriggerHookCreateRequest, user: dict = Depends(auth.get_current_user)) -> dict:
+    if not req.name.strip():
+        raise HTTPException(status_code=400, detail="Hook name is required")
+    flow = await platform_db.get_flow(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    token = secrets.token_urlsafe(32)
+    hook = await platform_db.create_trigger_hook(flow_id, user["id"], req.name.strip(), token)
+    hook["url"] = f"{BASE_URL}/api/v1/hooks/{token}"
+    return hook
+
+
+@app.get("/api/v1/flows/{flow_id}/hooks")
+async def trigger_hook_list(flow_id: str, user: dict = Depends(auth.get_current_user)) -> list[dict]:
+    hooks = await platform_db.list_trigger_hooks(flow_id, user["id"])
+    for h in hooks:
+        h["url"] = f"{BASE_URL}/api/v1/hooks/{h['token']}"
+    return hooks
+
+
+@app.delete("/api/v1/flows/{flow_id}/hooks/{hook_id}")
+async def trigger_hook_delete(flow_id: str, hook_id: str, user: dict = Depends(auth.get_current_user)) -> dict:
+    deleted = await platform_db.delete_trigger_hook(hook_id, user["id"])
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Hook not found")
+    return {"status": "deleted"}
+
+
+@app.post("/api/v1/hooks/{token}")
+async def trigger_hook_execute(token: str, req: TriggerHookExecuteRequest) -> dict:
+    hook = await platform_db.get_trigger_hook_by_token(token)
+    if not hook:
+        raise HTTPException(status_code=404, detail="Invalid hook token")
+    effective_profile_id = req.profile_id or hook["user_id"]
+    result = await _start_run_impl(hook["flow_id"], req.inputs, hook["user_id"], effective_profile_id)
+    await platform_db.touch_trigger_hook(hook["id"])
+    return result
 
 
 # ---------------------------------------------------------------------------
