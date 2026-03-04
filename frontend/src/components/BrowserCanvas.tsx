@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Loader2, WifiOff } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  RotateCw,
+  Loader2,
+  WifiOff,
+  Globe,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getToken } from "@/lib/api";
 
@@ -42,6 +49,9 @@ export function BrowserCanvas({ sandboxId, isPaused, className }: BrowserCanvasP
 
   const [connState, setConnState] = useState<ConnState>("idle");
   const [currentUrl, setCurrentUrl] = useState<string>("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
+  const [isEditingUrl, setIsEditingUrl] = useState(false);
 
   // ---------------------------------------------------------------------------
   // WebSocket connection
@@ -80,12 +90,16 @@ export function BrowserCanvas({ sandboxId, isPaused, className }: BrowserCanvasP
             data?: string;
             sessionId?: number;
             url?: string;
+            loading?: boolean;
           };
 
           if (msg.type === "frame" && msg.data) {
             renderFrame(msg.data);
           } else if (msg.type === "nav" && msg.url) {
             setCurrentUrl(msg.url);
+            if (!isEditingUrl) setUrlInput(msg.url);
+          } else if (msg.type === "loading") {
+            setIsLoading(!!msg.loading);
           }
         } catch {
           // ignore malformed messages
@@ -166,6 +180,22 @@ export function BrowserCanvas({ sandboxId, isPaused, className }: BrowserCanvasP
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(data));
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Navigation helpers
+  // ---------------------------------------------------------------------------
+  function navigateBack() {
+    send({ type: "navigate", action: "back" });
+  }
+  function navigateForward() {
+    send({ type: "navigate", action: "forward" });
+  }
+  function navigateReload() {
+    send({ type: "navigate", action: "reload" });
+  }
+  function navigateToUrl(url: string) {
+    send({ type: "navigate", action: "goto", url });
   }
 
   // Register wheel as a native non-passive listener so preventDefault() actually works.
@@ -330,68 +360,125 @@ export function BrowserCanvas({ sandboxId, isPaused, className }: BrowserCanvasP
   // ---------------------------------------------------------------------------
   const isConnecting = connState === "connecting" || connState === "reconnecting";
   const isIdle = connState === "idle" || !sandboxId;
+  const showToolbar = connState === "connected";
 
   return (
-    // Outer div fills the container and centers the canvas.
-    // bg-black fills letterbox space if the panel is wider or taller than 16:9.
-    <div className={cn("relative bg-black flex items-center justify-center overflow-hidden select-none", className)}>
-
-      {/*
-        Aspect-ratio wrapper: constrains the canvas to exactly CANVAS_W×CANVAS_H proportions
-        within the available space. The canvas element fills this wrapper 1:1, so
-        getBoundingClientRect() gives the true rendered size — no letterbox offset needed
-        in coordinate math.
-      */}
-      <div
-        className="relative"
-        style={{ aspectRatio: `${CANVAS_W} / ${CANVAS_H}`, maxWidth: "100%", maxHeight: "100%" }}
-      >
-        {/* URL bar overlay */}
-        {currentUrl && connState === "connected" && (
-          <div className="absolute top-0 left-0 right-0 z-10 bg-black/50 backdrop-blur-sm px-3 py-1 pointer-events-none">
-            <span className="text-[11px] text-white/60 font-mono truncate block">{currentUrl}</span>
-          </div>
-        )}
-
-        <canvas
-          ref={canvasRef}
-          width={CANVAS_W}
-          height={CANVAS_H}
-          className={cn(
-            "w-full h-full block focus:outline-none cursor-default",
-            isPaused && "ring-2 ring-amber-400 ring-inset",
-          )}
-          tabIndex={0}
-          onMouseDown={handleMouseDown}
-          onMouseUp={handleMouseUp}
-          onMouseMove={handleMouseMove}
-          onKeyDown={handleKeyDown}
-          onKeyUp={handleKeyUp}
-          onContextMenu={(e) => e.preventDefault()}
-        />
-
-        {/* Overlays — inside the wrapper so they cover only the canvas, not the black bars */}
-        {isIdle && (
-          <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">
-            Waiting for browser...
-          </div>
-        )}
-
-        {isConnecting && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60">
-            {connState === "reconnecting" ? (
-              <>
-                <WifiOff className="size-5 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Reconnecting...</span>
-              </>
+    <div className={cn("flex flex-col h-full w-full bg-black overflow-hidden select-none", className)}>
+      {/* Browser toolbar */}
+      {showToolbar && (
+        <div className="flex items-center gap-1 px-2 py-1.5 bg-zinc-900 border-b border-zinc-800 shrink-0">
+          {/* Nav buttons */}
+          <button
+            onClick={navigateBack}
+            className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors"
+            title="Back"
+          >
+            <ArrowLeft className="size-3.5" />
+          </button>
+          <button
+            onClick={navigateForward}
+            className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors"
+            title="Forward"
+          >
+            <ArrowRight className="size-3.5" />
+          </button>
+          <button
+            onClick={navigateReload}
+            className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors"
+            title="Reload"
+          >
+            {isLoading ? (
+              <Loader2 className="size-3.5 animate-spin" />
             ) : (
-              <>
-                <Loader2 className="size-6 animate-spin text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Connecting to browser...</span>
-              </>
+              <RotateCw className="size-3.5" />
             )}
+          </button>
+
+          {/* URL bar */}
+          <div className="flex-1 flex items-center gap-1.5 bg-zinc-800 rounded px-2 py-0.5 ml-1 min-w-0">
+            <Globe className="size-3 text-zinc-500 shrink-0" />
+            <input
+              type="text"
+              value={isEditingUrl ? urlInput : currentUrl}
+              onChange={(e) => setUrlInput(e.target.value)}
+              onFocus={() => {
+                setIsEditingUrl(true);
+                setUrlInput(currentUrl);
+              }}
+              onBlur={() => setIsEditingUrl(false)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  navigateToUrl(urlInput);
+                  setIsEditingUrl(false);
+                  (e.target as HTMLInputElement).blur();
+                } else if (e.key === "Escape") {
+                  setUrlInput(currentUrl);
+                  setIsEditingUrl(false);
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+              className="flex-1 bg-transparent text-[11px] text-zinc-300 font-mono outline-none placeholder:text-zinc-600 min-w-0"
+              placeholder="Enter URL..."
+              spellCheck={false}
+            />
           </div>
-        )}
+
+          {/* Loading bar */}
+          {isLoading && (
+            <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-zinc-800 overflow-hidden">
+              <div className="h-full w-1/3 bg-blue-500 animate-[slide_1s_ease-in-out_infinite]" />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Canvas area */}
+      <div className="relative flex-1 flex items-center justify-center overflow-hidden">
+        <div
+          className="relative"
+          style={{ aspectRatio: `${CANVAS_W} / ${CANVAS_H}`, maxWidth: "100%", maxHeight: "100%" }}
+        >
+          <canvas
+            ref={canvasRef}
+            width={CANVAS_W}
+            height={CANVAS_H}
+            className={cn(
+              "w-full h-full block focus:outline-none cursor-default",
+              isPaused && "ring-2 ring-amber-400 ring-inset",
+            )}
+            tabIndex={0}
+            onMouseDown={handleMouseDown}
+            onMouseUp={handleMouseUp}
+            onMouseMove={handleMouseMove}
+            onKeyDown={handleKeyDown}
+            onKeyUp={handleKeyUp}
+            onContextMenu={(e) => e.preventDefault()}
+          />
+
+          {/* Overlays — inside the wrapper so they cover only the canvas, not the black bars */}
+          {isIdle && (
+            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">
+              Waiting for browser...
+            </div>
+          )}
+
+          {isConnecting && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60">
+              {connState === "reconnecting" ? (
+                <>
+                  <WifiOff className="size-5 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Reconnecting...</span>
+                </>
+              ) : (
+                <>
+                  <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Connecting to browser...</span>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

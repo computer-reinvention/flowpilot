@@ -164,8 +164,27 @@ async def handle(
                     except Exception:
                         pass
 
+            # -- Loading state handlers --
+            async def on_loading_started(params: dict, frame_session_id: str | None) -> None:
+                if frame_session_id != active["session_id"]:
+                    return
+                try:
+                    await websocket.send_json({"type": "loading", "loading": True})
+                except Exception:
+                    pass
+
+            async def on_loading_stopped(params: dict, frame_session_id: str | None) -> None:
+                if frame_session_id != active["session_id"]:
+                    return
+                try:
+                    await websocket.send_json({"type": "loading", "loading": False})
+                except Exception:
+                    pass
+
             cdp._event_registry.register("Page.screencastFrame", on_screencast_frame)
             cdp._event_registry.register("Page.frameNavigated", on_frame_navigated)
+            cdp._event_registry.register("Page.frameStartedLoading", on_loading_started)
+            cdp._event_registry.register("Page.frameStoppedLoading", on_loading_stopped)
 
             # -- Input relay loop --
             while True:
@@ -225,6 +244,42 @@ async def handle(
                         )
                     except Exception:
                         pass
+
+                elif msg_type == "navigate":
+                    action = data.get("action")
+                    try:
+                        if action == "back":
+                            nav = await cdp.send_raw("Page.getNavigationHistory", session_id=sid)
+                            idx = nav.get("currentIndex", 0)
+                            entries = nav.get("entries", [])
+                            if idx > 0:
+                                await cdp.send_raw(
+                                    "Page.navigateToHistoryEntry",
+                                    {"entryId": entries[idx - 1]["id"]},
+                                    session_id=sid,
+                                )
+                        elif action == "forward":
+                            nav = await cdp.send_raw("Page.getNavigationHistory", session_id=sid)
+                            idx = nav.get("currentIndex", 0)
+                            entries = nav.get("entries", [])
+                            if idx < len(entries) - 1:
+                                await cdp.send_raw(
+                                    "Page.navigateToHistoryEntry",
+                                    {"entryId": entries[idx + 1]["id"]},
+                                    session_id=sid,
+                                )
+                        elif action == "reload":
+                            await cdp.send_raw("Page.reload", session_id=sid)
+                        elif action == "goto":
+                            url = data.get("url", "")
+                            if url:
+                                if not url.startswith(("http://", "https://")):
+                                    url = "https://" + url
+                                await cdp.send_raw(
+                                    "Page.navigate", {"url": url}, session_id=sid,
+                                )
+                    except Exception as exc:
+                        logger.warning("Navigate %s failed: %s", action, exc)
 
     except WebSocketDisconnect:
         pass
