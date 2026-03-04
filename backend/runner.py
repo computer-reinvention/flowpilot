@@ -54,7 +54,7 @@ class RunStatus(str, Enum):
     PENDING = "pending"
     CONNECTING = "connecting"
     RUNNING = "running"
-    PAUSED_FOR_AUTH = "paused_for_auth"
+    PAUSED_FOR_HITL = "paused_for_hitl"
     COMPLETED = "completed"
     FAILED = "failed"
 
@@ -65,7 +65,8 @@ def _get_llm() -> ChatGoogle | ChatAnthropic | ChatOpenAI:
         api_key = os.environ.get("GOOGLE_API_KEY")
         if not api_key:
             raise ValueError("GOOGLE_API_KEY required when LLM_PROVIDER=gemini")
-        return ChatGoogle(model=os.environ.get("GEMINI_MODEL", "gemini-3.1-pro-preview"), api_key=api_key)
+        # Fallback order: flash-lite (fastest) → flash → pro (most capable)
+        return ChatGoogle(model=os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite-preview"), api_key=api_key)
     elif provider in ("claude", "anthropic"):
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
@@ -358,19 +359,22 @@ class FlowRunner:
 
             @tools.action(
                 description=(
-                    "Request human help to log in. Call this when you encounter a login page, "
-                    "auth wall, or captcha you cannot bypass. The human will log in via the "
-                    "browser and then resume you."
+                    "Request human assistance. Call this whenever you need a human to step in — "
+                    "e.g. login/auth walls, CAPTCHAs, consent dialogs, ambiguous form fields, "
+                    "or any situation you cannot resolve autonomously. "
+                    "Pass a short 'reason' describing what you need and a 'category' tag: "
+                    "'auth', 'captcha', 'consent', 'verification', 'form_fill', 'confirmation', or 'other'. "
+                    "The human will interact with the browser and then resume you."
                 )
             )
-            async def request_human_login(reason: str) -> ActionResult:
+            async def request_human_help(reason: str, category: str = "other") -> ActionResult:
                 _paused[0] = True
-                await _update(RunStatus.PAUSED_FOR_AUTH, f"Login needed: {reason}")
+                await _update(RunStatus.PAUSED_FOR_HITL, f"[{category}] {reason}")
                 if _agent_ref:
                     _agent_ref[0].pause()
                 return ActionResult(
                     extracted_content=(
-                        "Human has logged in. The browser now has an authenticated session. "
+                        "Human assistance provided. The browser state has been updated. "
                         "Continue from the current page state."
                     )
                 )
@@ -387,6 +391,8 @@ class FlowRunner:
                     "phase to check if a reflex exists. Fire it with run_reflex() if relevant. "
                     "If a reflex fails or doesn't exist, use your normal browser tools and then "
                     "call save_reflex() to cache the solution for next time. "
+                    "When you hit any blocker requiring a human — login/auth, CAPTCHA, consent, "
+                    "ambiguous input — call request_human_help(reason, category) and pause. "
                     "Your judgment always takes precedence — reflexes are an optimization, not a constraint."
                 ),
             )
