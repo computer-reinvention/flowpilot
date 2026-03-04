@@ -36,9 +36,11 @@ export function CreateFlowForm({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name || !domain || !task) return;
+    // Strip protocol and trailing slashes from domain
+    const cleanDomain = domain.replace(/^https?:\/\//i, "").replace(/\/.*$/, "").trim();
     onSubmit({
       name,
-      domain,
+      domain: cleanDomain,
       task,
       entry_url: entryUrl || undefined,
     });

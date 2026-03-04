@@ -61,7 +61,8 @@ DO NOT save a reflex when:
 
 Use placeholder values when interacting (e.g., "test location" for addresses).
 Write scripts with inputs.field_name so real values work at run time.
-If you hit auth/login, report it as an "auth_wall" stage and stop exploring that branch.
+If you hit auth/login, report it as an "auth_wall" stage and call request_human_help().
+The user will log in for you in the live browser, then exploration resumes.
 """
 
 
@@ -70,6 +71,7 @@ async def explore_flow(
     sandbox_id: str,
     cdp_url: str,
     storage_state: dict | None = None,
+    agent_ready_callback=None,
 ) -> None:
     """Run the exploration agent against a flow's entry_url."""
     await _db.update_flow(flow.id, {"exploration_status": "exploring"})
@@ -247,25 +249,52 @@ async def explore_flow(
             )
         )
         async def declare_inputs(inputs: list[dict]) -> ActionResult:
-            await _db.update_flow(flow.id, {"inputs": json.dumps(inputs)})
-            names = [i.get("name", "?") for i in inputs]
+            # Validate: each input must have at least name and label
+            valid = []
+            for inp in inputs:
+                name = inp.get("name", "").strip()
+                if not name:
+                    continue
+                valid.append({
+                    "name": name,
+                    "label": inp.get("label", name).strip() or name,
+                    "type": inp.get("type", "text"),
+                    "placeholder": inp.get("placeholder", ""),
+                    "required": inp.get("required", True),
+                })
+            if not valid:
+                return ActionResult(
+                    extracted_content="No valid inputs provided. Each must have at least a 'name' field."
+                )
+            await _db.update_flow(flow.id, {"inputs": json.dumps(valid)})
+            names = [i["name"] for i in valid]
             return ActionResult(
                 extracted_content=f"Inputs declared: {', '.join(names)}"
             )
 
         # ----------------------------------------------------------
-        # request_human_help: note auth walls during exploration
+        # request_human_help: pause for HITL (same as runs)
         # ----------------------------------------------------------
+        _paused = [False]
+        _agent_ref: list = []
+
         @tools.action(
             description=(
-                "Note an auth wall encountered during exploration. "
+                "Request human help. The browser will be shown to the user so they "
+                "can log in, solve CAPTCHAs, etc. Exploration pauses until they resume. "
                 "ONLY for: login forms, CAPTCHAs, OTP/SMS, consent dialogs."
             )
         )
         async def request_human_help(reason: str, category: str = "other") -> ActionResult:
+            _paused[0] = True
             notes.append(f"AUTH WALL: [{category}] {reason}")
+            await _db.update_flow(flow.id, {
+                "exploration_status": "paused_for_hitl",
+            })
+            if _agent_ref:
+                _agent_ref[0].pause()
             return ActionResult(
-                extracted_content="Noted auth wall. Report it as an auth_wall stage, then stop exploring that branch."
+                extracted_content="Human assisted. Continue exploring from current page state."
             )
 
         # ----------------------------------------------------------
@@ -286,6 +315,7 @@ async def explore_flow(
             browser=browser,
             tools=tools,
             max_actions_per_step=10,
+            use_vision="auto",  # only send screenshots when needed, saves tokens
             extend_system_message=(
                 "You are an EXPLORER, not a runner. Your job is to map the site and "
                 "save reflexes. Use placeholder values. Don't try to complete the actual task.\n"
@@ -293,6 +323,11 @@ async def explore_flow(
                 "attached to the right stage in the tree."
             ),
         )
+
+        _agent_ref.append(agent)
+
+        if agent_ready_callback:
+            agent_ready_callback(agent, browser, _paused, sandbox_id)
 
         await agent.run(max_steps=15)
 

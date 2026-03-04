@@ -44,6 +44,10 @@ export async function apiFetch<T>(
     } catch {
       // ignore parse errors
     }
+    if (res.status === 401) {
+      clearToken();
+      window.location.reload();
+    }
     throw new ApiError(res.status, detail);
   }
   return res.json() as Promise<T>;

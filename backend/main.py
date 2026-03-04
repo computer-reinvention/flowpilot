@@ -29,6 +29,8 @@ from . import webhooks as webhook_svc
 from .models import Flow, Run, Session
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+logging.getLogger("browser_use").setLevel(logging.DEBUG)
+logging.getLogger("Agent").setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -65,7 +67,15 @@ ACTIVE_RUN_STATUSES: frozenset[str] = frozenset({"pending", "connecting", "runni
 async def lifespan(app: FastAPI):
     PROFILES_DIR.mkdir(parents=True, exist_ok=True)
     await platform_db.init_db()
-    await platform_db.seed_default_flows()
+
+    # Reset any stale exploration states from before restart
+    stale_flows = await platform_db.list_flows()
+    for sf in stale_flows:
+        if sf.get("exploration_status") in ("exploring", "paused_for_hitl"):
+            await platform_db.update_flow(sf["id"], {
+                "exploration_status": "failed",
+                "exploration_error": "Exploration interrupted by server restart",
+            })
 
     # Rebuild _sandboxes from DB, clean up dead containers
     db_sandboxes = await platform_db.list_active_sandboxes()
@@ -294,6 +304,8 @@ async def flow_create(req: FlowCreateRequest, user: dict = Depends(auth.get_curr
     await platform_db.create_flow(flow)
     # Auto-explore if entry_url exists
     if flow.entry_url:
+        await platform_db.update_flow(flow.id, {"exploration_status": "exploring"})
+        flow.exploration_status = "exploring"
         task = asyncio.create_task(_run_exploration(flow, user["id"]))
         _exploration_tasks[flow.id] = task
         task.add_done_callback(lambda t: _exploration_tasks.pop(flow.id, None))
@@ -305,6 +317,9 @@ async def flow_list() -> list[dict]:
     rows = await platform_db.list_flows()
     for r in rows:
         r["inputs"] = json.loads(r.get("inputs", "[]"))
+        r["exploration_tree"] = json.loads(r.get("exploration_tree", "[]"))
+        agent_info = _exploration_agents.get(r["id"])
+        r["exploration_sandbox_id"] = agent_info[3] if agent_info and r.get("exploration_status") in ("exploring", "paused_for_hitl") else None
     return rows
 
 
@@ -335,8 +350,11 @@ async def flow_delete(flow_id: str, user: dict = Depends(auth.get_current_user))
     return {"status": "deleted"}
 
 
+_exploration_agents: dict[str, tuple] = {}  # flow_id -> (agent, browser, paused_ref, sandbox_id)
+
+
 async def _run_exploration(flow: Flow, user_id: str, profile_id: str | None = None) -> None:
-    """Background task: spin up sandbox, run explorer autonomously, tear down."""
+    """Background task: spin up sandbox, run explorer with HITL support, tear down."""
     sandbox_result = None
     try:
         profile_path = None
@@ -366,7 +384,14 @@ async def _run_exploration(flow: Flow, user_id: str, profile_id: str | None = No
                 })
             logger.info("Exploration using %d saved cookies for %s (profile=%s)", len(cookies), flow.domain, effective_profile)
 
-        await explore_flow(flow, sandbox_id, cdp_url, storage_state=storage_state)
+        def on_agent_ready(agent, browser, paused_ref, sb_id):
+            _exploration_agents[flow.id] = (agent, browser, paused_ref, sb_id)
+
+        await explore_flow(
+            flow, sandbox_id, cdp_url,
+            storage_state=storage_state,
+            agent_ready_callback=on_agent_ready,
+        )
     except Exception as e:
         logger.error("Exploration failed for flow %s: %s", flow.id, e, exc_info=True)
         await platform_db.update_flow(flow.id, {
@@ -374,6 +399,7 @@ async def _run_exploration(flow: Flow, user_id: str, profile_id: str | None = No
             "exploration_error": str(e),
         })
     finally:
+        _exploration_agents.pop(flow.id, None)
         if sandbox_result:
             try:
                 sandbox_mgr.stop(sandbox_result["sandbox_id"])
@@ -393,8 +419,18 @@ async def flow_explore(flow_id: str, req: ExploreRequest | None = None, user: di
         raise HTTPException(status_code=404, detail="Flow not found")
     if not flow.entry_url:
         raise HTTPException(status_code=400, detail="Flow has no entry_url — nothing to explore")
-    if flow_id in _exploration_tasks:
-        raise HTTPException(status_code=409, detail="Exploration already in progress")
+    # Cancel any existing exploration and kill its sandbox
+    old_agent_info = _exploration_agents.pop(flow_id, None)
+    if old_agent_info:
+        old_sandbox_id = old_agent_info[3]
+        try:
+            sandbox_mgr.stop(old_sandbox_id)
+            await platform_db.delete_sandbox(old_sandbox_id)
+        except Exception:
+            pass
+    old_task = _exploration_tasks.pop(flow_id, None)
+    if old_task and not old_task.done():
+        old_task.cancel()
     # Reset
     await platform_db.update_flow(flow_id, {
         "exploration_status": "pending",
@@ -410,7 +446,45 @@ async def flow_explore(flow_id: str, req: ExploreRequest | None = None, user: di
     return {"status": "exploring", "flow_id": flow_id}
 
 
+@app.post("/api/flows/{flow_id}/explore/resume")
+async def flow_explore_resume(flow_id: str, user: dict = Depends(auth.get_current_user)) -> dict:
+    """Resume exploration after HITL — user completed auth in the browser."""
+    agent_info = _exploration_agents.get(flow_id)
+    if not agent_info:
+        raise HTTPException(status_code=404, detail="No active exploration for this flow")
+    agent, browser, paused_ref, sandbox_id = agent_info
+
+    # Capture cookies from the browser for future runs
+    try:
+        flow = await platform_db.get_flow(flow_id)
+        storage_state = await browser.export_storage_state()
+        cookies = storage_state.get("cookies", [])
+        if cookies and flow:
+            session = Session(
+                id=str(uuid.uuid4())[:12],
+                user_id=user["id"],
+                domain=flow.domain,
+                cookies=json.dumps(cookies),
+                profile_name=user["id"],
+            )
+            await platform_db.create_session(session)
+            logger.info("Captured %d cookies during exploration resume for %s", len(cookies), flow.domain)
+    except Exception as e:
+        logger.warning("Failed to capture cookies on exploration resume: %s", e)
+
+    paused_ref[0] = False
+    agent.resume()
+    await platform_db.update_flow(flow_id, {"exploration_status": "exploring"})
+    return {"status": "exploring", "flow_id": flow_id}
+
+
 def _flow_to_dict(flow: Flow) -> dict:
+    # Include sandbox_id if exploration is active
+    exploration_sandbox_id = None
+    agent_info = _exploration_agents.get(flow.id)
+    if agent_info and flow.exploration_status in ("exploring", "paused_for_hitl"):
+        exploration_sandbox_id = agent_info[3]  # sandbox_id
+
     return {
         "id": flow.id,
         "name": flow.name,
@@ -425,6 +499,7 @@ def _flow_to_dict(flow: Flow) -> dict:
         "exploration_error": flow.exploration_error,
         "exploration_notes": flow.exploration_notes,
         "exploration_tree": json.loads(flow.exploration_tree),
+        "exploration_sandbox_id": exploration_sandbox_id,
     }
 
 

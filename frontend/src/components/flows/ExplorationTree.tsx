@@ -14,6 +14,7 @@ import {
   XCircle,
   RefreshCw,
   AlertTriangle,
+  Hand,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -119,17 +120,20 @@ function StageNode({
 interface ExplorationTreeProps {
   flow: Flow;
   onExplore?: () => void;
+  onResume?: () => void;
   exploring?: boolean;
 }
 
 export function ExplorationTree({
   flow,
   onExplore,
+  onResume,
   exploring,
 }: ExplorationTreeProps) {
   const status = flow.exploration_status ?? "pending";
   const tree = flow.exploration_tree ?? [];
   const hasTree = tree.length > 0;
+  const isPaused = status === "paused_for_hitl";
 
   return (
     <div className="space-y-3">
@@ -141,6 +145,14 @@ export function ExplorationTree({
               <Loader2 className="size-4 animate-spin text-blue-500" />
               <span className="text-sm font-medium text-blue-500">
                 Exploring site...
+              </span>
+            </>
+          )}
+          {isPaused && (
+            <>
+              <Hand className="size-4 text-amber-500" />
+              <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                Needs your help
               </span>
             </>
           )}
@@ -173,16 +185,25 @@ export function ExplorationTree({
           )}
         </div>
 
-        {onExplore && status !== "exploring" && (
+        {isPaused && onResume && (
           <Button
-            variant="outline"
+            size="sm"
+            onClick={onResume}
+            className="bg-amber-600 hover:bg-amber-700 text-white gap-1.5 shrink-0"
+          >
+            Resume Exploration
+          </Button>
+        )}
+
+        {onExplore && !isPaused && (
+          <Button
+            variant={status === "exploring" ? "destructive" : "outline"}
             size="sm"
             onClick={onExplore}
-            disabled={exploring}
             className="gap-1.5 shrink-0"
           >
-            <RefreshCw className={cn("size-3", exploring && "animate-spin")} />
-            {hasTree ? "Re-explore" : "Explore"}
+            <RefreshCw className="size-3" />
+            {status === "exploring" ? "Restart" : hasTree ? "Re-explore" : "Explore"}
           </Button>
         )}
       </div>

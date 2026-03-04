@@ -40,7 +40,7 @@ function parseRun(raw: RawRun): Run {
   };
 }
 
-export function useRuns() {
+export function useRuns(enabled = true) {
   const [runs, setRuns] = useState<Run[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,8 +59,9 @@ export function useRuns() {
   }, []);
 
   useEffect(() => {
-    fetchRuns();
-  }, [fetchRuns]);
+    if (enabled) fetchRuns();
+    else setLoading(false);
+  }, [enabled, fetchRuns]);
 
   const activeRuns = useMemo(() => {
     const activeStatuses = new Set<string>(ACTIVE_RUN_STATUSES);

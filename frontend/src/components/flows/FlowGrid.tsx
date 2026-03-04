@@ -1,6 +1,7 @@
 import { Plus } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FlowCard } from "./FlowCard";
+import { Onboarding } from "./Onboarding";
 import type { Flow } from "@/lib/types";
 
 interface FlowGridProps {
@@ -37,6 +38,10 @@ export function FlowGrid({ flows, loading, error, onSelect, onCreate }: FlowGrid
     );
   }
 
+  if (flows.length === 0) {
+    return <Onboarding onCreate={onCreate} />;
+  }
+
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
@@ -55,14 +60,6 @@ export function FlowGrid({ flows, loading, error, onSelect, onCreate }: FlowGrid
         {flows.map((flow) => (
           <FlowCard key={flow.id} flow={flow} onClick={() => onSelect(flow)} />
         ))}
-        {flows.length === 0 && (
-          <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-            No flows yet.{" "}
-            <button onClick={onCreate} className="underline underline-offset-2 hover:text-foreground">
-              Create your first flow
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -23,10 +23,11 @@ type FlowSubView = "grid" | "detail" | "create";
 
 export default function App() {
   const auth = useAuth();
-  const flows = useFlows();
+  const authed = !!auth.user;
+  const flows = useFlows(authed);
   const run = useRun();
-  const runs = useRuns();
-  const sessions = useSessions();
+  const runs = useRuns(authed);
+  const sessions = useSessions(authed);
 
   const [authView, setAuthView] = useState<AuthView>("login");
   const [activeSection, setActiveSection] = useState<ActiveSection>("flows");

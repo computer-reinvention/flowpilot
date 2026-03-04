@@ -24,10 +24,11 @@ export interface Flow {
   icon?: string;
   created_by: string;
   created_at: string;
-  exploration_status?: "pending" | "exploring" | "ready" | "failed";
+  exploration_status?: "pending" | "exploring" | "ready" | "failed" | "paused_for_hitl";
   exploration_error?: string;
   exploration_notes?: string;
   exploration_tree?: ExplorationStage[];
+  exploration_sandbox_id?: string;
 }
 
 export interface ExplorationStage {

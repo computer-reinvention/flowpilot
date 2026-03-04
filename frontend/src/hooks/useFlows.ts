@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import type { Flow } from "@/lib/types";
 import { apiFetch } from "@/lib/api";
 
-export function useFlows() {
+export function useFlows(enabled = true) {
   const [flows, setFlows] = useState<Flow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,8 +21,9 @@ export function useFlows() {
   }, []);
 
   useEffect(() => {
-    fetchFlows();
-  }, [fetchFlows]);
+    if (enabled) fetchFlows();
+    else setLoading(false);
+  }, [enabled, fetchFlows]);
 
   const createFlow = useCallback(
     async (data: {

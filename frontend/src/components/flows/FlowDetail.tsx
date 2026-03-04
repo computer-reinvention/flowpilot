@@ -20,10 +20,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Hand } from "lucide-react";
 import { RunHistory } from "@/components/runs/RunHistory";
 import { FlowIntegration } from "./FlowIntegration";
 import { FlowSettings } from "./FlowSettings";
 import { ExplorationTree } from "./ExplorationTree";
+import { BrowserCanvas } from "@/components/BrowserCanvas";
 import { useTriggerHooks } from "@/hooks/useTriggerHooks";
 import { apiFetch } from "@/lib/api";
 import type { Flow, FlowInput, Run } from "@/lib/types";
@@ -103,18 +105,27 @@ export function FlowDetail({
   // Keep liveFlow in sync when parent flow prop changes
   useEffect(() => setLiveFlow(flow), [flow]);
 
+  // Resize values when explorer discovers inputs after creation
+  useEffect(() => {
+    setValues((prev) => {
+      const len = liveFlow.inputs.length;
+      if (prev.length === len) return prev;
+      return Array.from({ length: len }, (_, i) => prev[i] ?? "");
+    });
+  }, [liveFlow.inputs.length]);
+
   // Poll for exploration updates while exploring
   useEffect(() => {
-    if (liveFlow.exploration_status !== "exploring") return;
+    if (liveFlow.exploration_status !== "exploring" && liveFlow.exploration_status !== "paused_for_hitl") return;
     const interval = setInterval(async () => {
       try {
         const updated = await apiFetch<Flow>(`/api/flows/${flow.id}`);
         setLiveFlow(updated);
-        if (updated.exploration_status !== "exploring") {
+        if (updated.exploration_status !== "exploring" && updated.exploration_status !== "paused_for_hitl") {
           clearInterval(interval);
         }
       } catch { /* ignore */ }
-    }, 2000);
+    }, 5000);
     return () => clearInterval(interval);
   }, [liveFlow.exploration_status, flow.id]);
 
@@ -127,6 +138,13 @@ export function FlowDetail({
     finally { setExplorationLoading(false); }
   }, [flow.id]);
 
+  const handleExploreResume = useCallback(async () => {
+    try {
+      await apiFetch(`/api/flows/${flow.id}/explore/resume`, { method: "POST" });
+      setLiveFlow((f) => ({ ...f, exploration_status: "exploring" }));
+    } catch { /* ignore */ }
+  }, [flow.id]);
+
   // Filter runs to this flow
   const flowRuns = runs.filter((r) => r.flow_id === flow.id);
 
@@ -137,7 +155,7 @@ export function FlowDetail({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const result: Record<string, string> = {};
-    flow.inputs.forEach((input, i) => {
+    liveFlow.inputs.forEach((input, i) => {
       result[inputId(input)] = values[i] ?? "";
     });
     onRunSubmit(result, profileId);
@@ -164,8 +182,34 @@ export function FlowDetail({
         </Button>
       </div>
 
+      {/* Live browser during exploration */}
+      {(liveFlow.exploration_status === "exploring" || liveFlow.exploration_status === "paused_for_hitl") && liveFlow.exploration_sandbox_id && (
+        <div className="flex flex-col shrink-0" style={{ height: "50%" }}>
+          {liveFlow.exploration_status === "paused_for_hitl" && (
+            <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 flex items-center gap-2 shrink-0">
+              <Hand className="size-4 text-amber-600 shrink-0" />
+              <span className="text-sm font-medium text-amber-700 dark:text-amber-400 flex-1">
+                The explorer needs your help — log in or complete the action below, then resume
+              </span>
+              <Button
+                size="sm"
+                onClick={handleExploreResume}
+                className="bg-amber-600 hover:bg-amber-700 text-white shrink-0"
+              >
+                Resume Exploration
+              </Button>
+            </div>
+          )}
+          <BrowserCanvas
+            sandboxId={liveFlow.exploration_sandbox_id}
+            isPaused={liveFlow.exploration_status === "paused_for_hitl"}
+            className="flex-1"
+          />
+        </div>
+      )}
+
       {/* Tabs */}
-      <Tabs defaultValue={liveFlow.exploration_status === "pending" && liveFlow.entry_url ? "exploration" : "runs"} className="flex-1 flex flex-col overflow-hidden">
+      <Tabs defaultValue={liveFlow.exploration_status && liveFlow.exploration_status !== "pending" ? "exploration" : "runs"} className="flex-1 flex flex-col overflow-hidden">
         <div className="px-6 pt-2 shrink-0">
           <TabsList variant="line">
             <TabsTrigger value="exploration" className="gap-1.5">
@@ -188,6 +232,7 @@ export function FlowDetail({
             <ExplorationTree
               flow={liveFlow}
               onExplore={handleExplore}
+              onResume={handleExploreResume}
               exploring={explorationLoading || liveFlow.exploration_status === "exploring"}
             />
           </div>
@@ -205,7 +250,7 @@ export function FlowDetail({
 
         <TabsContent value="integration" className="flex-1 overflow-auto px-6 py-4">
           <FlowIntegration
-            flow={flow}
+            flow={liveFlow}
             hooks={triggerHooks.hooks}
             hooksLoading={triggerHooks.loading}
             onCreateHook={triggerHooks.createHook}
@@ -216,7 +261,7 @@ export function FlowDetail({
         <TabsContent value="settings" className="flex-1 overflow-auto px-6 py-4">
           <div className="max-w-xl">
             <FlowSettings
-              flow={flow}
+              flow={liveFlow}
               onUpdate={onUpdateFlow}
               onDelete={onDeleteFlow}
               onDeleted={onFlowDeleted}
@@ -229,11 +274,11 @@ export function FlowDetail({
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent side="right" className="sm:max-w-md overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>Run {flow.name}</SheetTitle>
-            <SheetDescription>{flow.task}</SheetDescription>
+            <SheetTitle>Run {liveFlow.name}</SheetTitle>
+            <SheetDescription>{liveFlow.task}</SheetDescription>
           </SheetHeader>
           <form onSubmit={handleSubmit} className="space-y-4 px-4 pb-4">
-            {flow.inputs.map((input, index) => (
+            {liveFlow.inputs.map((input, index) => (
               <div key={inputId(input)} className="space-y-2">
                 <Label htmlFor={`sheet-input-${index}`}>{input.label}</Label>
                 {renderInput(input, values[index] ?? "", (val) => handleChange(index, val), index)}

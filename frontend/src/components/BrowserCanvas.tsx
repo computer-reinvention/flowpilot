@@ -40,6 +40,13 @@ function modifierBits(e: KeyboardEvent | React.KeyboardEvent | React.MouseEvent)
 // Map browser button index → CDP button name
 const BTN_MAP: Record<number, string> = { 0: "left", 1: "middle", 2: "right" };
 
+// Derive a reliable virtual key code — e.keyCode is deprecated and may return 0.
+function virtualKeyCode(e: React.KeyboardEvent | KeyboardEvent): number {
+  if (e.keyCode) return e.keyCode;
+  if (e.key.length === 1) return e.key.toUpperCase().charCodeAt(0);
+  return 0;
+}
+
 export function BrowserCanvas({ sandboxId, isPaused, className }: BrowserCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -326,7 +333,7 @@ export function BrowserCanvas({ sandboxId, isPaused, className }: BrowserCanvasP
       text: "",
       unmodifiedText: unmodified,
       modifiers: mods,
-      keyCode: e.keyCode,
+      keyCode: virtualKeyCode(e),
       location: loc,
       isKeypad: loc === 3,
     });
@@ -342,7 +349,7 @@ export function BrowserCanvas({ sandboxId, isPaused, className }: BrowserCanvasP
         text: e.key,
         unmodifiedText: unmodified,
         modifiers: mods,
-        keyCode: e.keyCode,
+        keyCode: virtualKeyCode(e),
         location: loc,
       });
     }
@@ -358,7 +365,7 @@ export function BrowserCanvas({ sandboxId, isPaused, className }: BrowserCanvasP
       text: "",
       unmodifiedText: e.key.length === 1 ? e.key.toLowerCase() : "",
       modifiers: modifierBits(e),
-      keyCode: e.keyCode,
+      keyCode: virtualKeyCode(e),
       location: e.location ?? 0,
     });
   }, []);
@@ -388,7 +395,7 @@ export function BrowserCanvas({ sandboxId, isPaused, className }: BrowserCanvasP
               title={tab.url}
             >
               <Globe className="size-3 shrink-0" />
-              <span className="truncate">{tab.title || new URL(tab.url || "about:blank").hostname || "New tab"}</span>
+              <span className="truncate">{tab.title || (() => { try { return new URL(tab.url || "about:blank").hostname; } catch { return "New tab"; } })()}</span>
             </button>
           ))}
         </div>

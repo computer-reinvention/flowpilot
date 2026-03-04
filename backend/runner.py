@@ -52,9 +52,9 @@ def _get_llm() -> ChatGoogle | ChatAnthropic | ChatOpenAI:
         api_key = os.environ.get("GOOGLE_API_KEY")
         if not api_key:
             raise ValueError("GOOGLE_API_KEY env var is required when LLM_PROVIDER=gemini")
-        model = os.environ.get("GEMINI_MODEL") or "gemini-3-flash-preview"
+        model = os.environ.get("GEMINI_MODEL") or "gemini-3-pro-preview"
         logger.info("Using Gemini model: %s", model)
-        return ChatGoogle(model=model, api_key=api_key)
+        return ChatGoogle(model=model, api_key=api_key, max_output_tokens=65536)
     elif provider in ("claude", "anthropic"):
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
@@ -494,6 +494,18 @@ async def _generate_reflex(
     return False, f"Generated script failed: {repair_msg}", None
 
 
+def _tree_reflex_order(tree: list[dict]) -> list[str]:
+    """Return reflex names from the exploration tree in depth-first order."""
+    order: list[str] = []
+    def _walk(nodes: list[dict]) -> None:
+        for node in nodes:
+            if node.get("reflex_name"):
+                order.append(node["reflex_name"])
+            _walk(node.get("children", []))
+    _walk(tree)
+    return order
+
+
 def _build_task(flow: Flow, inputs: dict, domain_reflexes: list[dict]) -> str:
     """Build a concise agent task string."""
     lines = [f"Task: {flow.task}"]
@@ -504,9 +516,10 @@ def _build_task(flow: Flow, inputs: dict, domain_reflexes: list[dict]) -> str:
             lines.append(f"  {k} = {v!r}")
 
     if domain_reflexes:
-        lines.append(f"\nReflexes for {flow.domain} (call run_reflex to execute instantly):")
-        for r in domain_reflexes:
-            lines.append(f"  • {r['name']} — {r['description']}")
+        lines.append(f"\nReflexes for {flow.domain} — execute IN THIS ORDER:")
+        for i, r in enumerate(domain_reflexes, 1):
+            lines.append(f"  {i}. run_reflex('{r['name']}') — {r['description']}")
+        lines.append("Call them sequentially. Do not skip or reorder.")
 
     return "\n".join(lines)
 
@@ -573,9 +586,19 @@ class FlowRunner:
         cdp_url = f"ws://{_cdp_h}:{_cdp_p}{_ws_path}"
 
         # ------------------------------------------------------------------
-        # Load domain reflexes
+        # Load domain reflexes — ordered by the exploration tree if available,
+        # otherwise fall back to DB creation order.
         # ------------------------------------------------------------------
-        domain_reflexes = await _db.list_reflexes_for_domain(flow.domain)
+        all_reflexes = await _db.list_reflexes_for_domain(flow.domain)
+        tree = json.loads(flow.exploration_tree) if flow.exploration_tree else []
+        if tree:
+            tree_order = _tree_reflex_order(tree)
+            by_name = {r["name"]: r for r in all_reflexes}
+            # Tree-ordered first, then any reflexes not in the tree appended at the end
+            domain_reflexes = [by_name[n] for n in tree_order if n in by_name]
+            domain_reflexes += [r for r in all_reflexes if r["name"] not in {n for n in tree_order}]
+        else:
+            domain_reflexes = all_reflexes
 
         # ------------------------------------------------------------------
         # Agent run
@@ -840,6 +863,7 @@ class FlowRunner:
                 register_new_step_callback=_on_step,
                 tools=tools,
                 max_actions_per_step=10,
+                use_vision="auto",
                 extend_system_message=_AGENT_RULES,
             )
 

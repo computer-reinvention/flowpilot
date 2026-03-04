@@ -692,6 +692,3 @@ async def touch_trigger_hook(hook_id: str) -> None:
 # Seed default flows
 # ---------------------------------------------------------------------------
 
-async def seed_default_flows() -> None:
-    """No-op — flows are user-created. Kept for lifespan compatibility."""
-    pass
