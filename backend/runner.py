@@ -263,65 +263,16 @@ class FlowRunner:
 
             # Exclude direct one-at-a-time browser actions — the agent must write
             # Playwright scripts via execute_script() instead of clicking/typing
-            # element by element. This prevents the multi-step retry loops that
-            # burn through the step budget without making progress.
+            # element by element. This prevents multi-step retry loops.
+            # Kept: screenshot, find_elements, evaluate, search_page, scroll, navigate
+            # — these are browser-use's built-in inspection tools, no need to replicate.
             _DIRECT_ACTIONS = [
-                "click", "input", "send_keys", "scroll", "find_text",
+                "click", "input", "send_keys", "find_text",
                 "upload_file", "dropdown_options", "select_dropdown",
                 "switch", "close",
                 "write_file", "read_file", "replace_file",
             ]
             tools = Tools(exclude_actions=_DIRECT_ACTIONS)
-
-            @tools.action(
-                description=(
-                    "Inspect the current page and return all interactive elements "
-                    "(inputs, buttons, selects, textareas, links) with their attributes: "
-                    "tag, type, role, placeholder, aria-label, id, name, class, and a "
-                    "suggested Playwright locator. Call this BEFORE writing execute_script() "
-                    "so you know the exact selectors to use."
-                )
-            )
-            async def inspect_page() -> ActionResult:
-                js = """
-(() => {
-    const sel = 'input, button, select, textarea, a[href], [role="button"], [role="combobox"], [role="listbox"], [role="option"]';
-    return Array.from(document.querySelectorAll(sel)).slice(0, 80).map(el => {
-        const label = el.getAttribute('aria-label') || el.getAttribute('placeholder') ||
-                      el.getAttribute('name') || el.id || el.innerText?.trim().slice(0, 40) || '';
-        let locator = '';
-        if (el.getAttribute('aria-label'))  locator = `page.get_by_label(${JSON.stringify(el.getAttribute('aria-label'))})`;
-        else if (el.getAttribute('placeholder')) locator = `page.get_by_placeholder(${JSON.stringify(el.getAttribute('placeholder'))})`;
-        else if (el.getAttribute('role')) locator = `page.get_by_role(${JSON.stringify(el.getAttribute('role'))}, {name: ${JSON.stringify(label)}})`;
-        else if (el.id) locator = `page.locator(${JSON.stringify('#' + el.id)})`;
-        else locator = `page.locator(${JSON.stringify(el.tagName.toLowerCase() + (el.className ? '.' + el.className.trim().split(/\\s+/).join('.') : ''))})`;
-        return {
-            tag: el.tagName.toLowerCase(),
-            type: el.type || el.getAttribute('role') || '',
-            label,
-            locator,
-            visible: el.offsetParent !== null,
-        };
-    }).filter(e => e.label || e.visible);
-})()
-"""
-                try:
-                    async with async_playwright() as p:
-                        b = await p.chromium.connect_over_cdp(cdp_url)
-                        try:
-                            ctx = b.contexts[0] if b.contexts else await b.new_context()
-                            page = ctx.pages[0] if ctx.pages else await ctx.new_page()
-                            elements = await page.evaluate(js)
-                        finally:
-                            await b.disconnect()
-                    lines = ["Interactive elements on current page:"]
-                    for e in elements:
-                        vis = "" if e.get("visible") else " [hidden]"
-                        lines.append(f"  {e['tag']}({e['type']}){vis} — {e['label']!r}")
-                        lines.append(f"    locator: {e['locator']}")
-                    return ActionResult(extracted_content="\n".join(lines))
-                except Exception:
-                    return ActionResult(error=f"inspect_page failed: {_traceback.format_exc()}")
 
             @tools.action(
                 description=(
@@ -501,8 +452,8 @@ class FlowRunner:
                     "MANDATORY RULES:\n"
                     "1. AUTH WALLS: Any login page, CAPTCHA, or auth wall → call request_human_help(). "
                     "Never call done() with failure. The human will act and resume you.\n"
-                    "2. SCRIPT FIRST: To interact with a page — call inspect_page() to get element locators, "
-                    "then write a complete execute_script() call using those locators. "
+                    "2. SCRIPT FIRST: To interact with a page — use find_elements() or evaluate() to "
+                    "discover selectors, then write a complete execute_script() call. "
                     "Never try individual click/input actions.\n"
                     "3. AUTOCOMPLETE IN SCRIPTS: To fill a location/autocomplete field use this pattern:\n"
                     "   await field.fill(value)\n"
