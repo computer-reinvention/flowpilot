@@ -329,12 +329,16 @@ class FlowRunner:
 
             @tools.action(
                 description=(
-                    "Request human assistance. Call this whenever you need a human to step in — "
-                    "e.g. login/auth walls, CAPTCHAs, consent dialogs, ambiguous form fields, "
-                    "or any situation you cannot resolve autonomously. "
-                    "Pass a short 'reason' describing what you need and a 'category' tag: "
-                    "'auth', 'captcha', 'consent', 'verification', 'form_fill', 'confirmation', or 'other'. "
-                    "The human will interact with the browser and then resume you."
+                    "LAST RESORT: Request human assistance. Only call this when you are TRULY "
+                    "blocked and have exhausted all other options. "
+                    "Valid reasons to call: you see a login/password form, a CAPTCHA image, "
+                    "an SMS/OTP verification prompt, or a consent dialog that requires human credentials. "
+                    "NEVER call this for: pages still loading, autocomplete dropdowns, cookie banners, "
+                    "popups you can dismiss, forms you can fill, buttons you can click, or navigation "
+                    "you haven't tried yet. "
+                    "Before calling, you MUST have attempted at least one action on the current page. "
+                    "Pass a 'reason' describing the specific blocker and a 'category': "
+                    "'auth', 'captcha', 'consent', 'verification', 'form_fill', 'confirmation', or 'other'."
                 )
             )
             async def request_human_help(reason: str, category: str = "other") -> ActionResult:
@@ -366,9 +370,11 @@ class FlowRunner:
                     "Then call save_reflex() to cache what you did.\n"
                     "\n"
                     "MANDATORY RULES:\n"
-                    "- AUTH/CAPTCHA/LOGIN: Any auth wall, CAPTCHA, or login page → "
-                    "immediately call request_human_help(). Never try to solve auth yourself. "
-                    "Never call done() with failure — the human will handle it and resume you.\n"
+                    "- AUTH/CAPTCHA/LOGIN: If you encounter a login form asking for password/OTP, "
+                    "a CAPTCHA, or an SMS verification prompt, call request_human_help(). "
+                    "Never try to enter credentials or solve CAPTCHAs yourself. "
+                    "But do NOT call it prematurely — first dismiss any cookie banners, close popups, "
+                    "and try interacting with the page. Only pause when you genuinely cannot proceed.\n"
                     "- AUTOCOMPLETE: When you type into a location/search field and a dropdown "
                     "appears with suggestions, ACCEPT THE FIRST MATCHING SUGGESTION. "
                     "Do not open new tabs to verify. Do not search for pin codes. "

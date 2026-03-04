@@ -125,12 +125,10 @@ export function FlowRunner({
               Cancel
             </Button>
           )}
-          {isFinished && (
-            <Button variant="outline" size="sm" onClick={onReset} className="h-7 text-xs gap-1">
-              <ArrowLeft className="size-3" />
-              Back
-            </Button>
-          )}
+          <Button variant="outline" size="sm" onClick={onReset} className="h-7 text-xs gap-1">
+            <ArrowLeft className="size-3" />
+            {isFinished ? "Back" : "Hide"}
+          </Button>
         </div>
       </div>
 

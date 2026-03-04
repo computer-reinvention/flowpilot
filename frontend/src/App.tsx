@@ -108,7 +108,15 @@ export default function App() {
   }
 
   function handleRunReset() {
-    run.reset();
+    const isActive = (
+      ["pending", "connecting", "starting", "running", "paused_for_hitl"] as string[]
+    ).includes(run.status);
+
+    // If run is still active, just navigate away — don't kill it
+    if (!isActive) {
+      run.reset();
+    }
+
     setActiveRunId(null);
     runs.refetch();
     if (selectedFlow) {
@@ -134,9 +142,9 @@ export default function App() {
     }
   }
 
-  function handleSelectRun(runId: string) {
-    setActiveRunId(runId);
-    run.reconnectToRun(runId);
+  function handleSelectRun(id: string) {
+    setActiveRunId(id);
+    run.reconnectToRun(id);
     setActiveSection("flows");
   }
 

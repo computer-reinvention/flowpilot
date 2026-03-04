@@ -187,6 +187,11 @@ export function useRun() {
 
   const reconnectToRun = useCallback(
     async (id: string) => {
+      // If we're already tracking this run with an open WS, just return
+      if (runId === id && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        return;
+      }
+
       setError(null);
       setStatus("connecting");
 
@@ -208,7 +213,7 @@ export function useRun() {
         setStatus("failed");
       }
     },
-    [connectWs],
+    [connectWs, runId],
   );
 
   const resumeRun = useCallback(async () => {
