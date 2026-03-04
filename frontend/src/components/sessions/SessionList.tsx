@@ -8,6 +8,17 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { SessionBadge } from "./SessionBadge";
 import type { Session } from "@/lib/types";
 
@@ -28,7 +39,7 @@ export function SessionList({ sessions, loading, onDelete }: SessionListProps) {
 
   if (sessions.length === 0) {
     return (
-      <div className="text-center py-12 text-muted-foreground text-sm">
+      <div className="text-center py-12 text-muted-foreground text-sm text-pretty">
         No saved sessions. Sessions are captured when the agent pauses for login.
       </div>
     );
@@ -37,8 +48,8 @@ export function SessionList({ sessions, loading, onDelete }: SessionListProps) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Saved Sessions</CardTitle>
-        <CardDescription>
+        <CardTitle className="text-base text-balance">Saved Sessions</CardTitle>
+        <CardDescription className="text-pretty">
           Browser sessions captured by domain
         </CardDescription>
       </CardHeader>
@@ -57,15 +68,32 @@ export function SessionList({ sessions, loading, onDelete }: SessionListProps) {
                   </Badge>
                 )}
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7"
-                onClick={() => onDelete(session.id)}
-                aria-label={`Delete session for ${session.domain}`}
-              >
-                <Trash2 className="size-3" />
-              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    aria-label={`Delete session for ${session.domain}`}
+                  >
+                    <Trash2 className="size-3" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="text-balance">Delete session?</AlertDialogTitle>
+                    <AlertDialogDescription className="text-pretty">
+                      This will remove the saved cookies for {session.domain}. The agent won't be able to reuse this login session.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => onDelete(session.id)}>
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           ))}
         </div>
