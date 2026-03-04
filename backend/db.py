@@ -3,6 +3,7 @@
 import json
 import logging
 import uuid
+from datetime import datetime, timezone
 
 import aiosqlite
 
@@ -89,9 +90,49 @@ async def init_db() -> None:
                 UNIQUE(domain, name)
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS api_keys (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                key_hash TEXT NOT NULL UNIQUE,
+                key_prefix TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                last_used_at TEXT,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS webhooks (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                url TEXT NOT NULL,
+                secret TEXT NOT NULL,
+                events TEXT NOT NULL DEFAULT '[]',
+                enabled INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS webhook_deliveries (
+                id TEXT PRIMARY KEY,
+                webhook_id TEXT NOT NULL,
+                run_id TEXT,
+                event TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                attempt INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'pending',
+                response_status INTEGER,
+                response_body TEXT,
+                delivered_at TEXT,
+                FOREIGN KEY (webhook_id) REFERENCES webhooks(id)
+            )
+        """)
         # Migrations: add columns that may be missing in existing DBs
         for migration in [
             "ALTER TABLE sessions ADD COLUMN profile_name TEXT NOT NULL DEFAULT 'default'",
+            "ALTER TABLE runs ADD COLUMN profile_id TEXT NOT NULL DEFAULT ''",
         ]:
             try:
                 await db.execute(migration)
@@ -176,10 +217,13 @@ async def create_run(run: Run) -> Run:
     return run
 
 
+_RUN_COLS = "id, flow_id, user_id, status, inputs, sandbox_id, steps, current_step, result, error, created_at, completed_at"
+
+
 async def get_run(run_id: str) -> Run | None:
     async with aiosqlite.connect(str(DB_PATH)) as db:
         db.row_factory = aiosqlite.Row
-        cursor = await db.execute("SELECT * FROM runs WHERE id = ?", (run_id,))
+        cursor = await db.execute(f"SELECT {_RUN_COLS} FROM runs WHERE id = ?", (run_id,))
         row = await cursor.fetchone()
     if not row:
         return None
@@ -190,7 +234,7 @@ async def list_runs(user_id: str) -> list[dict]:
     async with aiosqlite.connect(str(DB_PATH)) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            "SELECT * FROM runs WHERE user_id = ? ORDER BY created_at DESC", (user_id,),
+            f"SELECT {_RUN_COLS} FROM runs WHERE user_id = ? ORDER BY created_at DESC", (user_id,),
         )
         rows = await cursor.fetchall()
     return [dict(r) for r in rows]
