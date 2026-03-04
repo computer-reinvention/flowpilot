@@ -1,23 +1,20 @@
-"""Flow runner — browser-use agent with reflex tools for cached interaction steps.
+"""Flow runner — browser-use agent with executable JavaScript reflex scripts.
 
 Architecture
 ------------
-The agent uses browser-use's full toolkit (click, input, navigate, screenshot, etc.)
-plus custom reflex tools:
+The agent uses browser-use's full toolkit plus custom tools:
 
-  search_reflexes(use_case)  — find cached step-by-step instructions for this domain
-  run_reflex(name)           — retrieve saved steps to follow
-  save_reflex(name, ...)     — save steps after solving a repeatable interaction
+  run_reflex(name)           — execute a saved JS script on the browser (no LLM calls)
+  save_reflex(name, ...)     — save a JS script after solving a repeatable interaction
   request_human_help(...)    — pause for HITL (auth walls, CAPTCHAs, etc.)
 
-Reflexes are domain-scoped step descriptions (e.g. "uber.com/fill_booking_form") that
-accumulate across runs. The agent retrieves them as guidance and follows the steps
-using browser-use's built-in tools.
+Reflexes are domain-scoped async JavaScript scripts executed via the Actor API's
+page.evaluate(). They receive an `inputs` object and can use helpers like waitFor(),
+sleep(), typeInto(). On failure, the agent gets the current URL + error context and
+takes over from where the script stopped.
 
-Naming convention: {domain}/{name}
-  uber.com/pre_auth             — navigate and fill the form before auth
-  uber.com/confirm_ride         — confirm after the human logs in
-  gmail.com/compose_email       — open compose window and fill fields
+The agent writes reflex scripts after completing an interaction, so future runs on
+the same domain skip the LLM entirely for known flows.
 """
 
 import asyncio
@@ -25,7 +22,6 @@ import http.client
 import json
 import logging
 import os
-import re
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Callable, Awaitable
@@ -39,11 +35,6 @@ from . import db as _db
 from .models import Flow
 
 logger = logging.getLogger(__name__)
-
-# Minimum word-overlap fraction for search_reflexes to surface a result.
-# Keeping this low (0.15) because domain scoping already does the heavy filtering;
-# we just want to exclude completely unrelated reflexes.
-_RELEVANCE_THRESHOLD = 0.15
 
 
 class RunStatus(str, Enum):
@@ -84,64 +75,455 @@ def _get_llm() -> ChatGoogle | ChatAnthropic | ChatOpenAI:
         )
 
 
-def _relevance_score(use_case: str, reflex: dict) -> float:
-    """Word-recall fraction: what proportion of use_case words appear in the reflex text.
+# JavaScript wrapper that provides helpers to reflex scripts.
+# The user script is injected into {user_script} and runs as the body of an
+# async IIFE receiving (inputs, entryUrl).
+_REFLEX_JS_WRAPPER = """
+async (inputs, entryUrl) => {
+    // Wait for a selector to appear in the DOM
+    const waitFor = (sel, timeout = 5000) => new Promise((resolve, reject) => {
+        const existing = document.querySelector(sel);
+        if (existing) return resolve(existing);
+        const observer = new MutationObserver(() => {
+            const el = document.querySelector(sel);
+            if (el) { observer.disconnect(); resolve(el); }
+        });
+        observer.observe(document.body, {childList: true, subtree: true});
+        setTimeout(() => { observer.disconnect(); reject(new Error('waitFor timeout: ' + sel)); }, timeout);
+    });
 
-    Intentionally recall-oriented so we don't miss relevant reflexes. The domain
-    scoping already restricts the candidate set; this just removes clearly irrelevant ones.
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+    // Type char-by-char to trigger autocomplete/React onChange
+    const typeInto = async (el, text, delay = 30) => {
+        el.focus();
+        el.value = '';
+        for (const ch of text) {
+            el.value += ch;
+            el.dispatchEvent(new Event('input', {bubbles: true}));
+            el.dispatchEvent(new KeyboardEvent('keydown', {key: ch, bubbles: true}));
+            el.dispatchEvent(new KeyboardEvent('keyup', {key: ch, bubbles: true}));
+            await sleep(delay);
+        }
+        el.dispatchEvent(new Event('change', {bubbles: true}));
+    };
+
+    // Set value instantly (for fields that don't need autocomplete)
+    const fillInput = (el, value) => {
+        el.focus();
+        el.value = value;
+        el.dispatchEvent(new Event('input', {bubbles: true}));
+        el.dispatchEvent(new Event('change', {bubbles: true}));
+    };
+
+    // Default selectors for suggestion/autocomplete dropdowns
+    const SUGGESTION_SELS = '[role="option"], [role="listbox"] li, [role="listbox"] [role="presentation"], .pac-item, [class*="suggestion"], [class*="Suggestion"], [class*="dropdown"] li, [class*="autocomplete"] li, [class*="Autocomplete"] li, ul[id*="listbox"] li';
+
+    // Wait for suggestion dropdown and click first match
+    const acceptSuggestion = async (sel, timeout = 3000) => {
+        const selector = sel || SUGGESTION_SELS;
+        const el = await waitFor(selector, timeout);
+        el.click();
+    };
+
+    // Type into a field and select from the suggestion dropdown.
+    // This is the go-to for location pickers, address fields, etc. where
+    // you MUST click a suggestion for the value to be accepted.
+    //
+    // Usage:
+    //   await typeAndSelect(el, 'JFK Airport');
+    //   await typeAndSelect(el, inputs.pickup, {match: 'Terminal 4'});
+    //   await typeAndSelect(el, inputs.dropoff, {suggestionSel: '.uber-suggestion'});
+    //
+    // Options:
+    //   match       — substring to match in suggestion text (picks best match instead of first)
+    //   suggestionSel — custom CSS selector for suggestion items
+    //   timeout     — how long to wait for suggestions (default 5000ms)
+    //   typeDelay   — delay between keystrokes (default 40ms)
+    //   retries     — retry typing + selecting if suggestions don't appear (default 2)
+    const typeAndSelect = async (el, text, opts = {}) => {
+        const {
+            match = null,
+            suggestionSel = null,
+            timeout = 5000,
+            typeDelay = 40,
+            retries = 2,
+        } = opts;
+        const selector = suggestionSel || SUGGESTION_SELS;
+
+        for (let attempt = 0; attempt <= retries; attempt++) {
+            // Clear and type
+            el.focus();
+            el.value = '';
+            el.dispatchEvent(new Event('input', {bubbles: true}));
+            await sleep(100);
+
+            // Type char by char
+            for (const ch of text) {
+                el.value += ch;
+                el.dispatchEvent(new Event('input', {bubbles: true}));
+                el.dispatchEvent(new KeyboardEvent('keydown', {key: ch, bubbles: true}));
+                el.dispatchEvent(new KeyboardEvent('keyup', {key: ch, bubbles: true}));
+                await sleep(typeDelay);
+            }
+            el.dispatchEvent(new Event('change', {bubbles: true}));
+
+            // Wait for suggestions to appear
+            let suggestions;
+            const deadline = Date.now() + timeout;
+            while (Date.now() < deadline) {
+                suggestions = document.querySelectorAll(selector);
+                // Filter to only visible suggestions
+                suggestions = Array.from(suggestions).filter(s => {
+                    const r = s.getBoundingClientRect();
+                    return r.width > 0 && r.height > 0;
+                });
+                if (suggestions.length > 0) break;
+                await sleep(200);
+            }
+
+            if (!suggestions || suggestions.length === 0) {
+                if (attempt < retries) {
+                    // Retry: clear and retype (sometimes the first attempt doesn't trigger)
+                    el.value = '';
+                    el.dispatchEvent(new Event('input', {bubbles: true}));
+                    await sleep(500);
+                    continue;
+                }
+                throw new Error('typeAndSelect: no suggestions appeared for "' + text + '" (selector: ' + selector + ')');
+            }
+
+            // Pick the best matching suggestion, or first if no match specified
+            let picked = suggestions[0];
+            if (match) {
+                const lower = match.toLowerCase();
+                const found = suggestions.find(s => (s.textContent || '').toLowerCase().includes(lower));
+                if (found) picked = found;
+            }
+
+            picked.click();
+            await sleep(300);
+
+            // Verify the selection stuck — the input should have changed from what we typed
+            // (autocomplete fields often replace the value after clicking a suggestion)
+            const newValue = el.value;
+            if (newValue && newValue !== text) {
+                // Selection was accepted — value was replaced by the autocomplete
+                return newValue;
+            }
+            // Even if value didn't change, the click might have set a hidden field.
+            // Check if suggestions dismissed (good sign).
+            await sleep(200);
+            const remaining = document.querySelectorAll(selector);
+            const visible = Array.from(remaining).filter(s => {
+                const r = s.getBoundingClientRect();
+                return r.width > 0 && r.height > 0;
+            });
+            if (visible.length === 0) {
+                // Dropdown closed — selection was accepted
+                return newValue || text;
+            }
+
+            // Suggestions still showing — try clicking again or retry
+            if (attempt < retries) continue;
+            return newValue || text;
+        }
+    };
+
+    // Run the user's reflex script
+    __REFLEX_SCRIPT__
+}
+"""
+
+
+# JS snippet that dumps interactive elements as a compact list.
+# Returns lines like: "0: input#email[name=email] "Email address""
+_DUMP_ELEMENTS_JS = """
+() => {
+    const els = document.querySelectorAll(
+        'a, button, input, select, textarea, [role="button"], [role="link"], ' +
+        '[role="option"], [role="tab"], [role="checkbox"], [role="menuitem"], ' +
+        '[contenteditable="true"], [onclick], [tabindex]'
+    );
+    const lines = [];
+    let i = 0;
+    for (const el of els) {
+        if (i >= 50) { lines.push('... (' + (els.length - 50) + ' more)'); break; }
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) continue;
+        const tag = el.tagName.toLowerCase();
+        const id = el.id ? '#' + el.id : '';
+        const name = el.name ? '[name=' + el.name + ']' : '';
+        const type = el.type ? '[type=' + el.type + ']' : '';
+        const role = el.getAttribute('role') ? '[role=' + el.getAttribute('role') + ']' : '';
+        const cls = el.className && typeof el.className === 'string'
+            ? '.' + el.className.split(' ').filter(Boolean).slice(0, 2).join('.')
+            : '';
+        const text = (el.textContent || el.value || el.placeholder || '').trim().slice(0, 40);
+        lines.push(i + ': ' + tag + id + name + type + role + cls + ' "' + text + '"');
+        i++;
+    }
+    return lines.join('\\n');
+}
+"""
+
+
+async def _execute_reflex(
+    script: str,
+    inputs: dict,
+    entry_url: str,
+    browser_session,
+) -> tuple[bool, str]:
+    """Execute a reflex JS script via the Actor API. No LLM calls.
+
+    Uses page.goto() for navigation (proper CDP navigation with wait),
+    then page.evaluate() for the script body. On failure, captures a
+    compact DOM snapshot of interactive elements so the agent can
+    immediately see what selectors are available and continue.
     """
-    def tokens(text: str) -> set[str]:
-        return set(re.findall(r"\b\w+\b", text.lower()))
+    page = await browser_session.must_get_current_page()
 
-    query = tokens(use_case)
-    if not query:
-        return 0.0
-    candidate = tokens(
-        f"{reflex['name']} {reflex['description']} {' '.join(reflex.get('tags', []))}"
+    # Navigate to entry_url if we're on a blank page
+    if entry_url:
+        try:
+            current_url = await page.get_url()
+            if current_url in ("", "about:blank", "chrome://newtab/"):
+                await page.goto(entry_url)
+                await asyncio.sleep(1.5)
+        except Exception:
+            pass
+
+    # Inject the user script into our wrapper
+    wrapped = _REFLEX_JS_WRAPPER.replace("__REFLEX_SCRIPT__", script)
+
+    try:
+        await page.evaluate(wrapped, inputs, entry_url)
+        return True, "Reflex executed successfully"
+    except Exception as e:
+        # Dump page state so the agent can pick up where the script stopped
+        try:
+            fail_url = await page.get_url()
+            elements = await page.evaluate(_DUMP_ELEMENTS_JS)
+            context = f"URL: {fail_url}\nElements on page:\n{elements}"
+        except Exception:
+            context = "Could not read page state"
+        return False, f"Script error: {e}\n{context}"
+
+
+async def _repair_reflex(
+    broken_script: str,
+    error_msg: str,
+    inputs: dict,
+    entry_url: str,
+    browser_session,
+    llm,
+    max_attempts: int = 2,
+) -> tuple[bool, str, str | None]:
+    """Use a lightweight LLM call to fix a broken reflex script.
+
+    Sends the broken script + DOM dump to the LLM and asks for a corrected
+    version. Retries execution up to max_attempts times. Returns
+    (success, message, fixed_script_or_None).
+
+    This runs as a "subagent" — a single LLM call that doesn't pollute
+    the main agent's conversation context.
+    """
+    for attempt in range(max_attempts):
+        # Get fresh DOM state for the repair prompt
+        try:
+            page = await browser_session.must_get_current_page()
+            current_url = await page.get_url()
+            elements = await page.evaluate(_DUMP_ELEMENTS_JS)
+        except Exception:
+            return False, "Cannot read page state for repair", None
+
+        repair_prompt = (
+            "You are a JavaScript repair bot. A browser automation script failed. "
+            "Fix the script so it works with the actual DOM elements on the page.\n\n"
+            f"BROKEN SCRIPT:\n```js\n{broken_script}\n```\n\n"
+            f"ERROR: {error_msg}\n\n"
+            f"CURRENT PAGE: {current_url}\n"
+            f"INTERACTIVE ELEMENTS ON PAGE:\n{elements}\n\n"
+            "The script runs as an async function body receiving (inputs, entryUrl) "
+            "and helpers: waitFor(sel, timeout), sleep(ms), typeInto(el, text, delay), "
+            "fillInput(el, value), acceptSuggestion(sel, timeout), "
+            "typeAndSelect(el, text, opts?) — for fields requiring suggestion selection.\n\n"
+            "IMPORTANT: For location/address/search fields where you MUST pick from a "
+            "suggestion dropdown, use typeAndSelect() instead of typeInto()+acceptSuggestion().\n\n"
+            "Reply with ONLY the fixed JavaScript code, no markdown fences, no explanation. "
+            "Update the CSS selectors to match the actual elements listed above."
+        )
+
+        try:
+            from browser_use.llm.messages import UserMessage
+            response = await llm.ainvoke([UserMessage(content=repair_prompt)])
+            fixed_script = response.completion.strip()
+            # Strip markdown fences if the model included them anyway
+            if fixed_script.startswith("```"):
+                fixed_script = "\n".join(fixed_script.split("\n")[1:])
+            if fixed_script.endswith("```"):
+                fixed_script = "\n".join(fixed_script.split("\n")[:-1])
+            fixed_script = fixed_script.strip()
+        except Exception as e:
+            logger.warning("Repair LLM call failed: %s", e)
+            return False, f"Repair LLM call failed: {e}", None
+
+        # Try executing the fixed script
+        success, msg = await _execute_reflex(
+            script=fixed_script,
+            inputs=inputs,
+            entry_url=entry_url,
+            browser_session=browser_session,
+        )
+
+        if success:
+            return True, "Repaired and executed successfully", fixed_script
+
+        # Update error for next attempt
+        broken_script = fixed_script
+        error_msg = msg
+        logger.info("Repair attempt %d/%d failed: %s", attempt + 1, max_attempts, msg)
+
+    return False, f"Repair failed after {max_attempts} attempts: {error_msg}", None
+
+
+async def _generate_reflex(
+    flow: Flow,
+    inputs: dict,
+    browser_session,
+    llm,
+) -> tuple[bool, str, str | None]:
+    """Generate a reflex script from scratch by examining the live page.
+
+    Navigates to the entry URL, dumps the DOM, asks the LLM to write a JS
+    script that completes the task, then executes it. If it works, returns
+    the script for saving. This is a single LLM call — much faster than
+    letting the agent loop through 10+ steps.
+
+    Returns (success, message, script_or_None).
+    """
+    entry_url = flow.entry_url or ""
+    if not entry_url:
+        return False, "No entry URL to navigate to", None
+
+    page = await browser_session.must_get_current_page()
+
+    # Navigate and wait for page to settle
+    try:
+        await page.goto(entry_url)
+        await asyncio.sleep(2)
+    except Exception as e:
+        return False, f"Failed to navigate to {entry_url}: {e}", None
+
+    # Dump interactive elements
+    try:
+        elements = await page.evaluate(_DUMP_ELEMENTS_JS)
+        current_url = await page.get_url()
+    except Exception as e:
+        return False, f"Failed to read page state: {e}", None
+
+    # Build input description
+    input_desc = ", ".join(f"{k}={v!r}" for k, v in inputs.items()) if inputs else "none"
+
+    generate_prompt = (
+        "You are a browser automation script writer. Write a JavaScript script that "
+        "completes the following task on the current page.\n\n"
+        f"TASK: {flow.description}\n"
+        f"USER INPUTS: {input_desc}\n"
+        f"CURRENT PAGE: {current_url}\n"
+        f"INTERACTIVE ELEMENTS ON PAGE:\n{elements}\n\n"
+        "The script runs as an async function body receiving (inputs, entryUrl) "
+        "and helpers:\n"
+        "  waitFor(sel, timeout=5000) — wait for CSS selector to appear, returns element\n"
+        "  sleep(ms) — wait\n"
+        "  typeInto(el, text, delay=30) — type char-by-char (triggers autocomplete)\n"
+        "  fillInput(el, value) — set value instantly\n"
+        "  acceptSuggestion(sel?, timeout=3000) — wait for dropdown, click first match\n"
+        "  typeAndSelect(el, text, opts?) — TYPE AND PICK FROM SUGGESTIONS in one call.\n"
+        "    For ANY field that requires selecting from a dropdown (locations, addresses,\n"
+        "    search fields), you MUST use typeAndSelect. Typing alone won't work — the app\n"
+        "    requires clicking a suggestion. opts: {match, suggestionSel, timeout, typeDelay, retries}\n\n"
+        "Access user inputs via `inputs.key_name`. The page is already loaded at entryUrl.\n"
+        "Use the CSS selectors from the elements list above (id, name, class attributes).\n"
+        "Add sleep() calls after actions that trigger navigation or XHR.\n"
+        "If the task requires login/auth, end with: throw new Error('NEEDS_AUTH');\n\n"
+        "Reply with ONLY the JavaScript code. No markdown fences, no explanation."
     )
-    return len(query & candidate) / len(query)
+
+    try:
+        from browser_use.llm.messages import UserMessage
+        response = await llm.ainvoke([UserMessage(content=generate_prompt)])
+        script = response.completion.strip()
+        # Strip markdown fences
+        if script.startswith("```"):
+            script = "\n".join(script.split("\n")[1:])
+        if script.endswith("```"):
+            script = "\n".join(script.split("\n")[:-1])
+        script = script.strip()
+    except Exception as e:
+        return False, f"LLM generation failed: {e}", None
+
+    if not script:
+        return False, "LLM returned empty script", None
+
+    # Execute the generated script
+    success, msg = await _execute_reflex(
+        script=script,
+        inputs=inputs,
+        entry_url=entry_url,
+        browser_session=browser_session,
+    )
+
+    if success:
+        return True, "Generated and executed successfully", script
+
+    # Try one repair pass
+    repaired, repair_msg, fixed = await _repair_reflex(
+        broken_script=script,
+        error_msg=msg,
+        inputs=inputs,
+        entry_url=entry_url,
+        browser_session=browser_session,
+        llm=llm,
+        max_attempts=1,
+    )
+
+    if repaired and fixed:
+        return True, "Generated, repaired, and executed successfully", fixed
+
+    return False, f"Generated script failed: {repair_msg}", None
 
 
 def _build_task(flow: Flow, inputs: dict, domain_reflexes: list[dict]) -> str:
-    """Build the agent task string, including a summary of available reflexes."""
-    try:
-        input_defs = json.loads(flow.inputs) if flow.inputs else []
-    except (json.JSONDecodeError, TypeError):
-        input_defs = []
-    input_keys = [d.get("name") or d.get("key", "") for d in input_defs if d.get("name") or d.get("key")]
-
+    """Build a concise agent task string."""
     lines = [f"Task: {flow.description}"]
     if flow.entry_url:
-        lines.append(f"Starting URL: {flow.entry_url}")
+        lines.append(f"Start: {flow.entry_url}")
     if inputs:
-        lines.append("User inputs:")
         for k, v in inputs.items():
             lines.append(f"  {k} = {v!r}")
-    if input_keys:
-        lines.append(f"Input keys available in reflexes: {input_keys}")
 
-    lines += ["", "--- Workflow ---"]
     if domain_reflexes:
-        lines.append(f"Saved reflexes for {flow.domain}:")
+        lines.append(f"\nReflexes for {flow.domain} (call run_reflex to execute instantly):")
         for r in domain_reflexes:
-            pause_note = " [pauses for auth after]" if r.get("pause_after") == "auth" else ""
-            lines.append(f"  • {r['name']}{pause_note} — {r['description']}")
-        lines += [
-            "",
-            "Strategy:",
-            "1. Call search_reflexes() to find cached steps for what you need to do.",
-            "2. If a match exists: call run_reflex() and follow the returned steps exactly.",
-            "3. If no match or the steps are outdated: handle it yourself, then save_reflex().",
-        ]
-    else:
-        lines += [
-            f"No reflexes saved yet for {flow.domain}.",
-            "Strategy:",
-            "1. Screenshot → plan minimal steps → execute.",
-            "2. After each successful interaction, call save_reflex() to cache it for next time.",
-        ]
+            lines.append(f"  • {r['name']} — {r['description']}")
 
     return "\n".join(lines)
+
+
+# System prompt extension — only FlowPilot-specific rules.
+# browser-use's default prompt already handles autocomplete, batching, popups, loops.
+_AGENT_RULES = """\
+FLOWPILOT RULES:
+- REFLEXES FIRST: If a reflex exists, call run_reflex(name). It executes JS directly — \
+zero LLM calls. If it fails, you get the error + element list to take over.
+- AUTH/LOGIN: If you see a login form, password field, OTP/SMS prompt, or CAPTCHA, \
+call request_human_help(). NEVER type passwords or credentials yourself.
+- SAVE REFLEXES: After completing a repeatable interaction, call save_reflex() with a \
+JS script. Helpers available: waitFor(sel), sleep(ms), typeInto(el, text), \
+fillInput(el, value), acceptSuggestion(sel), typeAndSelect(el, text, opts). \
+For fields requiring suggestion selection (locations, addresses), use typeAndSelect().\
+"""
 
 
 class FlowRunner:
@@ -158,7 +540,7 @@ class FlowRunner:
         storage_state: dict | None = None,
         agent_ready_callback: Callable | None = None,
     ) -> dict:
-        """Run a flow. The agent always drives; reflex tools give it cached fast paths."""
+        """Run a flow. Reflexes execute JS directly; agent handles the rest."""
 
         async def _update(status: RunStatus, message: str) -> None:
             if progress_callback:
@@ -191,7 +573,7 @@ class FlowRunner:
         cdp_url = f"ws://{_cdp_h}:{_cdp_p}{_ws_path}"
 
         # ------------------------------------------------------------------
-        # Load domain reflexes (metadata only — scripts fetched on demand)
+        # Load domain reflexes
         # ------------------------------------------------------------------
         domain_reflexes = await _db.list_reflexes_for_domain(flow.domain)
 
@@ -201,7 +583,16 @@ class FlowRunner:
         browser: Browser | None = None
         try:
             await _update(RunStatus.CONNECTING, "Connecting to sandbox browser via CDP")
-            browser = Browser(cdp_url=cdp_url, storage_state=storage_state, headers={"Host": "localhost"})
+            browser = Browser(
+                cdp_url=cdp_url,
+                storage_state=storage_state,
+                headers={"Host": "localhost"},
+                # Give autocomplete dropdowns time to appear after typing.
+                # Default 0.5s is too fast — most location/address pickers
+                # need a network round-trip before rendering suggestions.
+                wait_between_actions=2.0,
+                wait_for_network_idle_page_load_time=1.0,
+            )
 
             if storage_state:
                 await _update(
@@ -212,16 +603,96 @@ class FlowRunner:
             await _update(RunStatus.RUNNING, "Connected. Launching agent...")
 
             llm = _get_llm()
+
+            # ----------------------------------------------------------
+            # Fast path: if a saved reflex exists, execute it directly.
+            # If no reflex exists, try generating one from the DOM.
+            # Only fall through to the full agent if both fail.
+            # ----------------------------------------------------------
+            if domain_reflexes:
+                # Try the first matching reflex
+                for reflex in domain_reflexes:
+                    await _update(RunStatus.RUNNING, f"Trying reflex '{reflex['name']}'...")
+                    success, msg = await _execute_reflex(
+                        script=reflex["script"],
+                        inputs=inputs,
+                        entry_url=flow.entry_url or "",
+                        browser_session=browser,
+                    )
+                    if success:
+                        await _update(RunStatus.COMPLETED, f"Reflex '{reflex['name']}' completed flow")
+                        return {
+                            "raw_result": f"Completed via reflex '{reflex['name']}'",
+                            "flow_name": flow.name,
+                            "inputs": inputs,
+                            "completed_at": datetime.now(timezone.utc).isoformat(),
+                        }
+                    # Try auto-repair
+                    await _update(RunStatus.RUNNING, f"Reflex '{reflex['name']}' failed, repairing...")
+                    repaired, _, fixed_script = await _repair_reflex(
+                        broken_script=reflex["script"],
+                        error_msg=msg,
+                        inputs=inputs,
+                        entry_url=flow.entry_url or "",
+                        browser_session=browser,
+                        llm=llm,
+                    )
+                    if repaired and fixed_script:
+                        await _db.upsert_reflex(
+                            domain=flow.domain,
+                            name=reflex["name"],
+                            description=reflex["description"],
+                            script=fixed_script,
+                            pause_after=reflex.get("pause_after"),
+                            tags=json.loads(reflex.get("tags", "[]")) if isinstance(reflex.get("tags"), str) else reflex.get("tags", []),
+                        )
+                        await _update(RunStatus.COMPLETED, f"Reflex '{reflex['name']}' repaired and completed flow")
+                        return {
+                            "raw_result": f"Completed via repaired reflex '{reflex['name']}'",
+                            "flow_name": flow.name,
+                            "inputs": inputs,
+                            "completed_at": datetime.now(timezone.utc).isoformat(),
+                        }
+                    logger.info("Reflex '%s' repair failed, trying next or falling through", reflex["name"])
+
+            elif flow.entry_url:
+                # No saved reflexes — try generating one from the live page
+                await _update(RunStatus.RUNNING, "No reflexes found. Generating script from page...")
+                gen_ok, gen_msg, gen_script = await _generate_reflex(
+                    flow=flow,
+                    inputs=inputs,
+                    browser_session=browser,
+                    llm=llm,
+                )
+                if gen_ok and gen_script:
+                    # Save it for next time
+                    await _db.upsert_reflex(
+                        domain=flow.domain,
+                        name="auto_generated",
+                        description=f"Auto-generated for: {flow.description}",
+                        script=gen_script,
+                        pause_after=None,
+                        tags=["auto"],
+                    )
+                    await _update(RunStatus.COMPLETED, "Generated script completed flow")
+                    return {
+                        "raw_result": "Completed via auto-generated reflex",
+                        "flow_name": flow.name,
+                        "inputs": inputs,
+                        "completed_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                logger.info("Script generation failed (%s), falling through to agent", gen_msg)
+
+            # ----------------------------------------------------------
+            # Slow path: full agent loop (only if fast paths failed)
+            # ----------------------------------------------------------
+            await _update(RunStatus.RUNNING, "Starting agent loop...")
             task = _build_task(flow, inputs, domain_reflexes)
 
             _paused = [False]
             _agent_ref: list = []
 
-            step_count = 0
-
             def _on_step(state_summary, agent_output, step_num):
-                nonlocal step_count
-                step_count += 1
                 try:
                     state = getattr(agent_output, "current_state", None)
                     goal = (
@@ -239,75 +710,94 @@ class FlowRunner:
 
                 asyncio.create_task(_send())
 
-            # Use browser-use's full toolkit — no action exclusions.
-            # The agent can click, type, scroll, navigate, etc. directly.
             tools = Tools()
 
+            # ----------------------------------------------------------
+            # run_reflex: execute saved JS directly on the browser
+            # ----------------------------------------------------------
             @tools.action(
                 description=(
-                    "Search for saved reflexes relevant to your current step. "
-                    "Pass a short description of what you're trying to do, e.g. 'fill pickup and dropoff fields'. "
-                    "Returns matching reflexes with step-by-step instructions you can follow."
-                )
-            )
-            async def search_reflexes(use_case: str) -> ActionResult:
-                candidates = await _db.list_reflexes_for_domain(flow.domain)
-                matches = [
-                    r for r in candidates
-                    if _relevance_score(use_case, r) >= _RELEVANCE_THRESHOLD
-                ]
-                matches.sort(key=lambda r: _relevance_score(use_case, r), reverse=True)
-                if not matches:
-                    return ActionResult(
-                        extracted_content=(
-                            f"No reflexes found for '{use_case}' on {flow.domain}. "
-                            "Handle this step manually, then save a reflex if it's repeatable."
-                        )
-                    )
-                lines = [f"Relevant reflexes for '{use_case}' on {flow.domain}:"]
-                for r in matches:
-                    pause_note = "  [expects auth after]" if r.get("pause_after") == "auth" else ""
-                    lines.append(f"  • {r['name']}{pause_note} — {r['description']}  tags: {r['tags']}")
-                lines.append("Call run_reflex(name) to see the full steps.")
-                return ActionResult(extracted_content="\n".join(lines))
-
-            @tools.action(
-                description=(
-                    "Retrieve a saved reflex by name. Returns step-by-step instructions "
-                    "for a previously solved interaction on this domain. "
-                    "Follow the returned steps using your browser tools (click, input, navigate, etc.)."
+                    "Execute a saved reflex by name. Runs a JS script directly on the "
+                    "page — fills forms, clicks buttons, handles the interaction instantly. "
+                    "Call this FIRST if a reflex exists for what you need to do. "
+                    "On failure you get the current URL, error, and a list of interactive "
+                    "elements on the page so you can continue immediately."
                 )
             )
             async def run_reflex(name: str) -> ActionResult:
                 reflex = await _db.get_reflex(flow.domain, name)
                 if not reflex:
                     return ActionResult(
-                        error=f"No reflex named '{name}' for domain '{flow.domain}'. "
-                              f"Use search_reflexes() to see what's available."
+                        error=f"No reflex '{name}' for '{flow.domain}'."
                     )
-                return ActionResult(
-                    extracted_content=(
-                        f"Reflex '{name}' for {flow.domain}:\n"
-                        f"Description: {reflex['description']}\n"
-                        f"Steps:\n{reflex['script']}\n\n"
-                        "Follow these steps using your browser tools. "
-                        "If the steps are outdated, adapt and call save_reflex() to update."
-                    )
+
+                await _update(RunStatus.RUNNING, f"Executing reflex '{name}'...")
+                success, msg = await _execute_reflex(
+                    script=reflex["script"],
+                    inputs=inputs,
+                    entry_url=flow.entry_url or "",
+                    browser_session=browser,
                 )
 
+                if success:
+                    return ActionResult(
+                        extracted_content=f"Reflex '{name}' done. Continue from current page."
+                    )
+
+                # Reflex failed — try auto-repair with a subagent LLM call.
+                # This keeps the DOM dump + repair loop out of the main agent context.
+                await _update(RunStatus.RUNNING, f"Reflex '{name}' failed, attempting auto-repair...")
+                repaired, repair_msg, fixed_script = await _repair_reflex(
+                    broken_script=reflex["script"],
+                    error_msg=msg,
+                    inputs=inputs,
+                    entry_url=flow.entry_url or "",
+                    browser_session=browser,
+                    llm=llm,
+                )
+
+                if repaired and fixed_script:
+                    # Save the fixed script so it works next time
+                    await _db.upsert_reflex(
+                        domain=flow.domain,
+                        name=name,
+                        description=reflex["description"],
+                        script=fixed_script,
+                        pause_after=reflex.get("pause_after"),
+                        tags=json.loads(reflex.get("tags", "[]")) if isinstance(reflex.get("tags"), str) else reflex.get("tags", []),
+                    )
+                    return ActionResult(
+                        extracted_content=f"Reflex '{name}' was broken but auto-repaired and executed. "
+                        "Updated script saved. Continue from current page."
+                    )
+
+                # Repair also failed — hand back to the main agent with DOM context
+                return ActionResult(
+                    extracted_content=f"Reflex '{name}' failed and auto-repair failed:\n{repair_msg}\n"
+                    "Continue manually from current page state."
+                )
+
+            # ----------------------------------------------------------
+            # save_reflex: save a JS script for future instant replay
+            # ----------------------------------------------------------
             @tools.action(
                 description=(
-                    "Save or update a reflex — a named, reusable set of steps for this domain. "
-                    "Call this after you've successfully completed a repeatable interaction. "
-                    "Write clear step-by-step instructions that a future agent can follow. "
-                    "Reference user inputs as inputs['key']. "
-                    "Name should be snake_case and descriptive, e.g. 'fill_booking_form', 'confirm_ride'."
+                    "Save a JavaScript reflex script after completing a repeatable interaction. "
+                    "The script runs as an async function body receiving (inputs, entryUrl) "
+                    "plus helpers: waitFor(sel, timeout), sleep(ms), typeInto(el, text, delay), "
+                    "fillInput(el, value), acceptSuggestion(sel, timeout), "
+                    "typeAndSelect(el, text, opts?). "
+                    "For fields requiring suggestion selection (locations, addresses), "
+                    "ALWAYS use typeAndSelect — typing alone won't work. Example:\n"
+                    "  const el = await waitFor('input[name=\"pickup\"]');\n"
+                    "  await typeAndSelect(el, inputs.pickup);\n"
+                    "Name: snake_case, e.g. 'fill_booking_form'."
                 )
             )
             async def save_reflex(
                 name: str,
                 description: str,
-                steps: str,
+                script: str,
                 tags: list[str] | None = None,
                 pause_after_auth: bool = False,
             ) -> ActionResult:
@@ -316,29 +806,22 @@ class FlowRunner:
                     domain=flow.domain,
                     name=name,
                     description=description,
-                    script=steps,
+                    script=script,
                     pause_after=pause_after,
                     tags=tags or [],
                 )
                 return ActionResult(
-                    extracted_content=(
-                        f"Reflex '{flow.domain}/{name}' saved. "
-                        "It will be available to future agents running flows on this domain."
-                    )
+                    extracted_content=f"Reflex '{flow.domain}/{name}' saved."
                 )
 
+            # ----------------------------------------------------------
+            # request_human_help: HITL pause
+            # ----------------------------------------------------------
             @tools.action(
                 description=(
-                    "LAST RESORT: Request human assistance. Only call this when you are TRULY "
-                    "blocked and have exhausted all other options. "
-                    "Valid reasons to call: you see a login/password form, a CAPTCHA image, "
-                    "an SMS/OTP verification prompt, or a consent dialog that requires human credentials. "
-                    "NEVER call this for: pages still loading, autocomplete dropdowns, cookie banners, "
-                    "popups you can dismiss, forms you can fill, buttons you can click, or navigation "
-                    "you haven't tried yet. "
-                    "Before calling, you MUST have attempted at least one action on the current page. "
-                    "Pass a 'reason' describing the specific blocker and a 'category': "
-                    "'auth', 'captcha', 'consent', 'verification', 'form_fill', 'confirmation', or 'other'."
+                    "Request human help. ONLY for: login forms, CAPTCHAs, OTP/SMS, "
+                    "consent dialogs requiring credentials. NEVER for: loading pages, "
+                    "dropdowns, cookie banners, forms you can fill."
                 )
             )
             async def request_human_help(reason: str, category: str = "other") -> ActionResult:
@@ -347,10 +830,7 @@ class FlowRunner:
                 if _agent_ref:
                     _agent_ref[0].pause()
                 return ActionResult(
-                    extracted_content=(
-                        "Human assistance provided. The browser state has been updated. "
-                        "Continue from the current page state."
-                    )
+                    extracted_content="Human assisted. Continue from current page state."
                 )
 
             agent = Agent(
@@ -360,30 +840,7 @@ class FlowRunner:
                 register_new_step_callback=_on_step,
                 tools=tools,
                 max_actions_per_step=10,
-                extend_system_message=(
-                    "EFFICIENCY IS CRITICAL — you have limited steps. Do not waste them.\n"
-                    "\n"
-                    "STRATEGY (follow this order):\n"
-                    "1. REFLEXES FIRST: Call search_reflexes() before doing anything on a page. "
-                    "If a reflex exists, call run_reflex() and follow its steps exactly.\n"
-                    "2. IF NO REFLEX: Take a screenshot, plan the minimum steps, execute. "
-                    "Then call save_reflex() to cache what you did.\n"
-                    "\n"
-                    "MANDATORY RULES:\n"
-                    "- AUTH/CAPTCHA/LOGIN: If you encounter a login form asking for password/OTP, "
-                    "a CAPTCHA, or an SMS verification prompt, call request_human_help(). "
-                    "Never try to enter credentials or solve CAPTCHAs yourself. "
-                    "But do NOT call it prematurely — first dismiss any cookie banners, close popups, "
-                    "and try interacting with the page. Only pause when you genuinely cannot proceed.\n"
-                    "- AUTOCOMPLETE: When you type into a location/search field and a dropdown "
-                    "appears with suggestions, ACCEPT THE FIRST MATCHING SUGGESTION. "
-                    "Do not open new tabs to verify. Do not search for pin codes. "
-                    "Just click the suggestion — it's what a real user would do.\n"
-                    "- NO OVERTHINKING: Accept reasonable defaults. Don't verify obvious things. "
-                    "If a suggestion looks right, click it. If a button says what you need, click it.\n"
-                    "- USER VALUES: Use inputs['key'] for user-provided values — never hardcode them.\n"
-                    "- SPEED: Each step costs time and money. Finish in the fewest steps possible."
-                ),
+                extend_system_message=_AGENT_RULES,
             )
 
             _agent_ref.append(agent)
@@ -393,9 +850,7 @@ class FlowRunner:
 
             await _update(RunStatus.RUNNING, f"Agent running flow '{flow.name}'...")
 
-            # No wall-clock timeout — max_steps=30 bounds active execution and
-            # HITL pauses should wait indefinitely until the human resumes.
-            result = await agent.run(max_steps=30)
+            result = await agent.run(max_steps=20)
 
             if hasattr(result, "is_successful") and not result.is_successful():
                 errors = result.errors() if hasattr(result, "errors") else []

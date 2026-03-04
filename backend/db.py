@@ -72,10 +72,10 @@ async def init_db() -> None:
                 captured_at TEXT NOT NULL
             )
         """)
-        # Reflexes: global, domain-scoped step-by-step instructions the agent builds over time.
+        # Reflexes: domain-scoped JavaScript scripts the agent builds over time.
         # Named within a domain (e.g., domain="uber.com", name="fill_booking_form").
-        # The agent discovers them via search_reflexes(), fires them via run_reflex(),
-        # and writes/updates them via save_reflex().
+        # The `script` column holds raw JS executed via page.evaluate() — zero LLM calls.
+        # The agent saves them via save_reflex() and executes via run_reflex().
         await db.execute("""
             CREATE TABLE IF NOT EXISTS reflexes (
                 id TEXT PRIMARY KEY,
@@ -127,6 +127,18 @@ async def init_db() -> None:
                 response_body TEXT,
                 delivered_at TEXT,
                 FOREIGN KEY (webhook_id) REFERENCES webhooks(id)
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS trigger_hooks (
+                id TEXT PRIMARY KEY,
+                flow_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                token TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                last_used_at TEXT,
+                FOREIGN KEY (flow_id) REFERENCES flows(id)
             )
         """)
         await db.execute("""
@@ -241,12 +253,18 @@ async def get_run(run_id: str) -> Run | None:
     return Run(**dict(row))
 
 
-async def list_runs(user_id: str) -> list[dict]:
+async def list_runs(user_id: str, flow_id: str | None = None) -> list[dict]:
     async with aiosqlite.connect(str(DB_PATH)) as db:
         db.row_factory = aiosqlite.Row
-        cursor = await db.execute(
-            f"SELECT {_RUN_COLS} FROM runs WHERE user_id = ? ORDER BY created_at DESC", (user_id,),
-        )
+        if flow_id:
+            cursor = await db.execute(
+                f"SELECT {_RUN_COLS} FROM runs WHERE user_id = ? AND flow_id = ? ORDER BY created_at DESC",
+                (user_id, flow_id),
+            )
+        else:
+            cursor = await db.execute(
+                f"SELECT {_RUN_COLS} FROM runs WHERE user_id = ? ORDER BY created_at DESC", (user_id,),
+            )
         rows = await cursor.fetchall()
     return [dict(r) for r in rows]
 
@@ -601,6 +619,62 @@ async def get_sandbox(sandbox_id: str) -> dict | None:
         cursor = await db.execute("SELECT * FROM sandboxes WHERE id = ?", (sandbox_id,))
         row = await cursor.fetchone()
     return dict(row) if row else None
+
+
+# ---------------------------------------------------------------------------
+# Trigger Hooks
+# ---------------------------------------------------------------------------
+
+async def create_trigger_hook(flow_id: str, user_id: str, name: str, token: str) -> dict:
+    hook_id = str(uuid.uuid4())[:12]
+    created_at = datetime.now(timezone.utc).isoformat()
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        await db.execute(
+            "INSERT INTO trigger_hooks (id, flow_id, user_id, name, token, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (hook_id, flow_id, user_id, name, token, created_at),
+        )
+        await db.commit()
+    return {"id": hook_id, "flow_id": flow_id, "user_id": user_id, "name": name, "token": token, "created_at": created_at, "last_used_at": None}
+
+
+async def list_trigger_hooks(flow_id: str, user_id: str) -> list[dict]:
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT id, flow_id, user_id, name, token, created_at, last_used_at FROM trigger_hooks WHERE flow_id = ? AND user_id = ? ORDER BY created_at DESC",
+            (flow_id, user_id),
+        )
+        rows = await cursor.fetchall()
+    return [dict(r) for r in rows]
+
+
+async def get_trigger_hook_by_token(token: str) -> dict | None:
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT id, flow_id, user_id, name, token, created_at, last_used_at FROM trigger_hooks WHERE token = ?",
+            (token,),
+        )
+        row = await cursor.fetchone()
+    return dict(row) if row else None
+
+
+async def delete_trigger_hook(hook_id: str, user_id: str) -> bool:
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        cursor = await db.execute(
+            "DELETE FROM trigger_hooks WHERE id = ? AND user_id = ?", (hook_id, user_id)
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+async def touch_trigger_hook(hook_id: str) -> None:
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        await db.execute(
+            "UPDATE trigger_hooks SET last_used_at = ? WHERE id = ?",
+            (datetime.now(timezone.utc).isoformat(), hook_id),
+        )
+        await db.commit()
 
 
 # ---------------------------------------------------------------------------
