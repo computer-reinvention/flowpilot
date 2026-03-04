@@ -22,6 +22,7 @@ const SECTION_LABELS: Record<ActiveSection, string> = {
   flows: "Flows",
   runs: "Runs",
   sessions: "Sessions",
+  settings: "Settings",
 };
 
 export function AppShell({

@@ -1,0 +1,43 @@
+import { useState, useEffect, useCallback } from "react";
+import type { ApiKey } from "@/lib/types";
+import { apiFetch } from "@/lib/api";
+
+export function useApiKeys() {
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchApiKeys = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiFetch<ApiKey[]>("/api/v1/api-keys");
+      setApiKeys(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch API keys");
+      setApiKeys([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchApiKeys();
+  }, [fetchApiKeys]);
+
+  const createApiKey = useCallback(async (name: string): Promise<ApiKey> => {
+    const data = await apiFetch<ApiKey>("/api/v1/api-keys", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+    setApiKeys((prev) => [data, ...prev]);
+    return data;
+  }, []);
+
+  const deleteApiKey = useCallback(async (id: string) => {
+    await apiFetch(`/api/v1/api-keys/${id}`, { method: "DELETE" });
+    setApiKeys((prev) => prev.filter((k) => k.id !== id));
+  }, []);
+
+  return { apiKeys, loading, error, createApiKey, deleteApiKey, refetch: fetchApiKeys };
+}

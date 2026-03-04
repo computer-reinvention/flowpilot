@@ -15,6 +15,7 @@ import { FlowRunner } from "@/components/flows/FlowRunner";
 import { CreateFlowForm } from "@/components/flows/CreateFlowForm";
 import { RunHistory } from "@/components/runs/RunHistory";
 import { SessionList } from "@/components/sessions/SessionList";
+import { SettingsPanel } from "@/components/settings/SettingsPanel";
 import type { Flow, Run } from "@/lib/types";
 
 type AuthView = "login" | "signup";
@@ -88,11 +89,11 @@ export default function App() {
     setFlowSubView("form");
   }
 
-  async function handleRunSubmit(values: Record<string, string>) {
+  async function handleRunSubmit(values: Record<string, string>, profileId: string) {
     if (!selectedFlow) return;
     setSubmitting(true);
     try {
-      const id = await run.startRun(selectedFlow.id, values);
+      const id = await run.startRun(selectedFlow.id, values, profileId || undefined);
       setActiveRunId(id ?? null);
     } finally {
       setSubmitting(false);
@@ -138,7 +139,7 @@ export default function App() {
     run.reconnectToRun(runId);
   }
 
-  function handleConnectRun(r: Run) {
+  function handleSelectRunObj(r: Run) {
     setActiveRunId(r.id);
     run.reconnectToRun(r.id);
   }
@@ -194,6 +195,7 @@ export default function App() {
                 onSubmit={handleRunSubmit}
                 onBack={handleBack}
                 submitting={submitting}
+                defaultProfileId={auth.user?.id ?? ""}
               />
             </div>
           );
@@ -218,7 +220,7 @@ export default function App() {
               flows={flows.flows}
               loading={runs.loading}
               error={runs.error}
-              onConnect={handleConnectRun}
+              onSelect={handleSelectRunObj}
             />
           </div>
         );
@@ -233,6 +235,9 @@ export default function App() {
             />
           </div>
         );
+
+      case "settings":
+        return <SettingsPanel />;
     }
   }
 

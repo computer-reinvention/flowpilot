@@ -3,6 +3,7 @@ import {
   History,
   Globe,
   LogOut,
+  Settings,
 } from "lucide-react";
 import {
   Sidebar,
@@ -19,7 +20,7 @@ import {
 } from "@/components/ui/sidebar";
 import type { Run, Flow } from "@/lib/types";
 
-export type ActiveSection = "flows" | "runs" | "sessions";
+export type ActiveSection = "flows" | "runs" | "sessions" | "settings";
 
 interface AppSidebarProps {
   activeSection: ActiveSection;
@@ -32,9 +33,9 @@ interface AppSidebarProps {
 }
 
 const NAV_ITEMS: { key: ActiveSection; label: string; icon: typeof Workflow }[] = [
-  { key: "flows", label: "Flows", icon: Workflow },
-  { key: "runs", label: "Runs", icon: History },
-  { key: "sessions", label: "Sessions", icon: Globe },
+  { key: "flows",    label: "Flows",    icon: Workflow },
+  { key: "runs",     label: "Runs",     icon: History  },
+  { key: "sessions", label: "Sessions", icon: Globe    },
 ];
 
 export function AppSidebar({
@@ -106,11 +107,21 @@ export function AppSidebar({
         )}
       </SidebarContent>
 
-      <SidebarFooter className="px-4 py-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground truncate">
-            {userName}
-          </span>
+      <SidebarFooter className="px-4 py-3 space-y-1">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={activeSection === "settings"}
+              onClick={() => onNavigate("settings")}
+              tooltip="Settings"
+            >
+              <Settings className="size-4" />
+              <span>Settings</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+        <div className="flex items-center justify-between pt-1">
+          <span className="text-xs text-muted-foreground truncate">{userName}</span>
           <button
             onClick={onLogout}
             className="text-muted-foreground hover:text-foreground"
