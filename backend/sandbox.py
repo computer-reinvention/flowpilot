@@ -141,11 +141,11 @@ class SandboxManager:
             container = self.client.containers.get(info.container_id)
             # Capture logs before destroying the container
             try:
-                logs = container.logs(tail=80).decode(errors="replace")
+                logs = container.logs(tail=80, stdout=True, stderr=True).decode(errors="replace")
                 if logs.strip():
                     logger.info("Sandbox %s logs:\n%s", sandbox_id, logs)
-            except Exception:
-                pass
+            except Exception as log_err:
+                logger.warning("Could not capture logs for sandbox %s: %s", sandbox_id, log_err)
             container.stop(timeout=5)
             container.remove(force=True)
         except NotFound:
