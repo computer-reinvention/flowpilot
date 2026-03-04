@@ -115,11 +115,16 @@ async def _start_run(client: httpx.AsyncClient, token: str, flow_id: str) -> tup
     return run_id, sandbox_id
 
 
-async def _watch_run(token: str, run_id: str) -> dict:
-    """Subscribe to /ws/runs/{run_id} and collect events until terminal status.
+async def _resume_run(client: httpx.AsyncClient, token: str, run_id: str) -> None:
+    resp = await client.post(f"/api/runs/{run_id}/resume", headers=_headers(token))
+    if resp.status_code not in (200, 409):
+        logger.warning("Resume returned %d: %s", resp.status_code, resp.text)
+    else:
+        logger.info("Run resumed")
 
-    Returns the last event dict received.
-    """
+
+async def _watch_run(token: str, run_id: str, client: httpx.AsyncClient) -> dict:
+    """Subscribe to /ws/runs/{run_id}, handle HITL prompts, return last event."""
     ws_url = f"{WS_BASE}/ws/runs/{run_id}"
     last_event: dict = {}
     deadline = time.monotonic() + RUN_TIMEOUT
@@ -149,14 +154,28 @@ async def _watch_run(token: str, run_id: str) -> dict:
             steps   = event.get("steps")
 
             if steps:
-                # Initial state replay on reconnect
                 logger.info("[WS] initial state: status=%s  steps=%d", status, len(steps))
             else:
                 logger.info("[WS] status=%-20s  %s", status, message[:80] if message else "")
 
             last_event = event
 
-            if status in TERMINAL:
+            # HITL pause — hand off to the human running the test
+            if status == "paused_for_hitl":
+                print("\n" + "═" * 60)
+                print("⏸  AGENT PAUSED — human input required")
+                print(f"   Reason  : {message}")
+                print(f"   Open    : {BASE_URL}")
+                print(f"   Run ID  : {run_id}")
+                print("   Complete the action in the browser, then press Enter to resume.")
+                print("═" * 60)
+                await asyncio.get_event_loop().run_in_executor(None, input, "   ↩  Press Enter when done: ")
+                await _resume_run(client, token, run_id)
+                # Reset deadline — give a full timeout after resume
+                deadline = time.monotonic() + RUN_TIMEOUT
+                continue
+
+            if status in (TERMINAL - {"paused_for_hitl"}):
                 logger.info("Run reached terminal status: %s", status)
                 break
 
@@ -205,12 +224,13 @@ async def run_e2e() -> None:
             # ── Start run ─────────────────────────────────────────────────
             run_id, sandbox_id = await _start_run(client, token, flow_id)
 
-            # ── Watch over WebSocket ───────────────────────────────────────
-            last_event = await _watch_run(token, run_id)
+            # ── Watch over WebSocket (with interactive HITL handling) ─────
+            last_event = await _watch_run(token, run_id, client)
             final_status = last_event.get("status", "unknown")
 
             # ── If still running after timeout, cancel ─────────────────────
-            if final_status not in TERMINAL:
+            non_hitl_terminal = TERMINAL - {"paused_for_hitl"}
+            if final_status not in non_hitl_terminal:
                 logger.warning("Run timed out — cancelling")
                 await _cancel_run(client, token, run_id)
                 final_status = "cancelled"
@@ -238,17 +258,18 @@ async def run_e2e() -> None:
             # 2. At least one step was recorded
             assert len(steps) > 0, "No steps recorded — agent never started"
 
-            # 3. Must have completed — not failed, not paused, not timed out.
-            #    Any other outcome means the agent didn't do the task.
+            # 3. Must have completed. failed / cancelled / timed-out all mean
+            #    the agent didn't do the task.  paused_for_hitl won't reach
+            #    here because _watch_run handles it interactively and resumes.
             assert persisted_status == "completed", (
                 f"Run did not complete. status='{persisted_status}'"
                 + (f"  error={run_data.get('error')}" if run_data.get("error") else "")
                 + (f"  last_step={steps[-1].get('message', '')[:120]}" if steps else "")
             )
 
-            # 4. Result must contain "Example Domain" — the actual <h1> on example.com.
-            #    This verifies the agent navigated the page and read the content,
-            #    not just that the plumbing worked.
+            # 4. Result must contain "Example Domain" — the actual <h1> text on
+            #    example.com. This verifies the agent read the page content,
+            #    not just that the framework ran.
             result_str = json.dumps(run_data.get("result", {})).lower()
             assert "example domain" in result_str, (
                 f"Agent completed but result doesn't contain 'Example Domain'.\n"
