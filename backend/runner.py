@@ -428,7 +428,7 @@ async def _generate_reflex(
     generate_prompt = (
         "You are a browser automation script writer. Write a JavaScript script that "
         "completes the following task on the current page.\n\n"
-        f"TASK: {flow.description}\n"
+        f"TASK: {flow.task}\n"
         f"USER INPUTS: {input_desc}\n"
         f"CURRENT PAGE: {current_url}\n"
         f"INTERACTIVE ELEMENTS ON PAGE:\n{elements}\n\n"
@@ -496,7 +496,7 @@ async def _generate_reflex(
 
 def _build_task(flow: Flow, inputs: dict, domain_reflexes: list[dict]) -> str:
     """Build a concise agent task string."""
-    lines = [f"Task: {flow.description}"]
+    lines = [f"Task: {flow.task}"]
     if flow.entry_url:
         lines.append(f"Start: {flow.entry_url}")
     if inputs:
@@ -669,7 +669,7 @@ class FlowRunner:
                     await _db.upsert_reflex(
                         domain=flow.domain,
                         name="auto_generated",
-                        description=f"Auto-generated for: {flow.description}",
+                        description=f"Auto-generated for: {flow.task}",
                         script=gen_script,
                         pause_after=None,
                         tags=["auto"],

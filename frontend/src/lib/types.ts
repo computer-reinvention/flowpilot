@@ -18,12 +18,26 @@ export interface Flow {
   id: string;
   name: string;
   domain: string;
-  description: string;
+  task: string;
   inputs: FlowInput[];
   entry_url?: string;
   icon?: string;
   created_by: string;
   created_at: string;
+  exploration_status?: "pending" | "exploring" | "ready" | "failed";
+  exploration_error?: string;
+  exploration_notes?: string;
+  exploration_tree?: ExplorationStage[];
+}
+
+export interface ExplorationStage {
+  id: string;
+  title: string;
+  url: string;
+  type: "page" | "form" | "auth_wall" | "navigation" | "extraction" | "dynamic";
+  note?: string;
+  reflex_name?: string;
+  children: ExplorationStage[];
 }
 
 export interface RunStep {

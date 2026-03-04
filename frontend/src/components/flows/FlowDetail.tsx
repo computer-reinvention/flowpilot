@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ArrowLeft, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +23,9 @@ import {
 import { RunHistory } from "@/components/runs/RunHistory";
 import { FlowIntegration } from "./FlowIntegration";
 import { FlowSettings } from "./FlowSettings";
+import { ExplorationTree } from "./ExplorationTree";
 import { useTriggerHooks } from "@/hooks/useTriggerHooks";
+import { apiFetch } from "@/lib/api";
 import type { Flow, FlowInput, Run } from "@/lib/types";
 
 function inputId(input: FlowInput): string {
@@ -94,7 +96,36 @@ export function FlowDetail({
   const [sheetOpen, setSheetOpen] = useState(false);
   const [values, setValues] = useState<string[]>(() => flow.inputs.map(() => ""));
   const [profileId, setProfileId] = useState(defaultProfileId);
+  const [liveFlow, setLiveFlow] = useState(flow);
+  const [explorationLoading, setExplorationLoading] = useState(false);
   const triggerHooks = useTriggerHooks(flow.id);
+
+  // Keep liveFlow in sync when parent flow prop changes
+  useEffect(() => setLiveFlow(flow), [flow]);
+
+  // Poll for exploration updates while exploring
+  useEffect(() => {
+    if (liveFlow.exploration_status !== "exploring") return;
+    const interval = setInterval(async () => {
+      try {
+        const updated = await apiFetch<Flow>(`/api/flows/${flow.id}`);
+        setLiveFlow(updated);
+        if (updated.exploration_status !== "exploring") {
+          clearInterval(interval);
+        }
+      } catch { /* ignore */ }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [liveFlow.exploration_status, flow.id]);
+
+  const handleExplore = useCallback(async () => {
+    setExplorationLoading(true);
+    try {
+      await apiFetch(`/api/flows/${flow.id}/explore`, { method: "POST", body: "{}" });
+      setLiveFlow((f) => ({ ...f, exploration_status: "exploring", exploration_tree: [] }));
+    } catch { /* ignore */ }
+    finally { setExplorationLoading(false); }
+  }, [flow.id]);
 
   // Filter runs to this flow
   const flowRuns = runs.filter((r) => r.flow_id === flow.id);
@@ -134,14 +165,33 @@ export function FlowDetail({
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="runs" className="flex-1 flex flex-col overflow-hidden">
+      <Tabs defaultValue={liveFlow.exploration_status === "pending" && liveFlow.entry_url ? "exploration" : "runs"} className="flex-1 flex flex-col overflow-hidden">
         <div className="px-6 pt-2 shrink-0">
           <TabsList variant="line">
+            <TabsTrigger value="exploration" className="gap-1.5">
+              Exploration
+              {liveFlow.exploration_status === "exploring" && (
+                <span className="size-1.5 rounded-full bg-blue-500 animate-pulse" />
+              )}
+              {liveFlow.exploration_status === "ready" && (
+                <span className="size-1.5 rounded-full bg-green-500" />
+              )}
+            </TabsTrigger>
             <TabsTrigger value="runs">Runs</TabsTrigger>
             <TabsTrigger value="integration">Integration</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
         </div>
+
+        <TabsContent value="exploration" className="flex-1 overflow-auto px-6 py-4">
+          <div className="max-w-2xl">
+            <ExplorationTree
+              flow={liveFlow}
+              onExplore={handleExplore}
+              exploring={explorationLoading || liveFlow.exploration_status === "exploring"}
+            />
+          </div>
+        </TabsContent>
 
         <TabsContent value="runs" className="flex-1 overflow-auto px-6 py-4">
           <RunHistory
@@ -180,7 +230,7 @@ export function FlowDetail({
         <SheetContent side="right" className="sm:max-w-md overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Run {flow.name}</SheetTitle>
-            <SheetDescription>{flow.description}</SheetDescription>
+            <SheetDescription>{flow.task}</SheetDescription>
           </SheetHeader>
           <form onSubmit={handleSubmit} className="space-y-4 px-4 pb-4">
             {flow.inputs.map((input, index) => (

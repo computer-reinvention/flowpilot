@@ -38,7 +38,7 @@ const INPUT_TYPES = ["text", "textarea", "number", "select", "date", "time"] as 
 export function FlowSettings({ flow, onUpdate, onDelete, onDeleted }: FlowSettingsProps) {
   const [name, setName] = useState(flow.name);
   const [domain, setDomain] = useState(flow.domain);
-  const [description, setDescription] = useState(flow.description);
+  const [task, setTask] = useState(flow.task);
   const [entryUrl, setEntryUrl] = useState(flow.entry_url ?? "");
   const [inputs, setInputs] = useState<InputDefinition[]>(
     flow.inputs.map((i) => ({ name: i.name, label: i.label, type: i.type, placeholder: i.placeholder }))
@@ -68,13 +68,13 @@ export function FlowSettings({ flow, onUpdate, onDelete, onDeleted }: FlowSettin
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    if (!name || !domain || !description) return;
+    if (!name || !domain || !task) return;
     setSaving(true);
     try {
       await onUpdate(flow.id, {
         name,
         domain,
-        description,
+        task,
         entry_url: entryUrl || null,
         inputs: inputs.length > 0 ? inputs : [],
       });
@@ -107,8 +107,8 @@ export function FlowSettings({ flow, onUpdate, onDelete, onDeleted }: FlowSettin
           <Input id="fs-domain" value={domain} onChange={(e) => setDomain(e.target.value)} required />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="fs-description">Description</Label>
-          <Textarea id="fs-description" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} required />
+          <Label htmlFor="fs-task">Task</Label>
+          <Textarea id="fs-task" value={task} onChange={(e) => setTask(e.target.value)} rows={3} required />
         </div>
         <div className="space-y-2">
           <Label htmlFor="fs-entry-url">

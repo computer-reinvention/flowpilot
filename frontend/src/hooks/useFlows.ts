@@ -28,9 +28,8 @@ export function useFlows() {
     async (data: {
       name: string;
       domain: string;
-      description: string;
+      task: string;
       entry_url?: string;
-      inputs?: Array<Record<string, unknown>>;
       icon?: string;
     }) => {
       const created = await apiFetch<Flow>("/api/flows", {

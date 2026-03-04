@@ -34,12 +34,16 @@ async def init_db() -> None:
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
                 domain TEXT NOT NULL,
-                description TEXT NOT NULL,
+                task TEXT NOT NULL,
                 entry_url TEXT,
                 inputs TEXT NOT NULL DEFAULT '[]',
                 icon TEXT,
                 created_by TEXT NOT NULL,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                exploration_status TEXT NOT NULL DEFAULT 'pending',
+                exploration_error TEXT,
+                exploration_notes TEXT,
+                exploration_tree TEXT NOT NULL DEFAULT '[]'
             )
         """)
         await db.execute("""
@@ -155,6 +159,11 @@ async def init_db() -> None:
         for migration in [
             "ALTER TABLE sessions ADD COLUMN profile_name TEXT NOT NULL DEFAULT 'default'",
             "ALTER TABLE runs ADD COLUMN profile_id TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE flows RENAME COLUMN description TO task",
+            "ALTER TABLE flows ADD COLUMN exploration_status TEXT NOT NULL DEFAULT 'pending'",
+            "ALTER TABLE flows ADD COLUMN exploration_error TEXT",
+            "ALTER TABLE flows ADD COLUMN exploration_notes TEXT",
+            "ALTER TABLE flows ADD COLUMN exploration_tree TEXT NOT NULL DEFAULT '[]'",
         ]:
             try:
                 await db.execute(migration)
@@ -172,16 +181,18 @@ async def create_flow(flow: Flow) -> Flow:
     async with aiosqlite.connect(str(DB_PATH)) as db:
         await db.execute(
             """INSERT INTO flows
-               (id, name, domain, description, entry_url, inputs, icon, created_by, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (flow.id, flow.name, flow.domain, flow.description, flow.entry_url,
-             flow.inputs, flow.icon, flow.created_by, flow.created_at),
+               (id, name, domain, task, entry_url, inputs, icon, created_by, created_at, exploration_status, exploration_error, exploration_notes, exploration_tree)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (flow.id, flow.name, flow.domain, flow.task, flow.entry_url,
+             flow.inputs, flow.icon, flow.created_by, flow.created_at,
+             flow.exploration_status, flow.exploration_error, flow.exploration_notes,
+             flow.exploration_tree),
         )
         await db.commit()
     return flow
 
 
-_FLOW_COLS = "id, name, domain, description, entry_url, inputs, icon, created_by, created_at"
+_FLOW_COLS = "id, name, domain, task, entry_url, inputs, icon, created_by, created_at, exploration_status, exploration_error, exploration_notes, exploration_tree"
 
 
 async def get_flow(flow_id: str) -> Flow | None:
@@ -203,7 +214,7 @@ async def list_flows() -> list[dict]:
 
 
 async def update_flow(flow_id: str, updates: dict) -> Flow | None:
-    allowed = {"name", "domain", "description", "entry_url", "inputs", "icon"}
+    allowed = {"name", "domain", "task", "entry_url", "inputs", "icon", "exploration_status", "exploration_error", "exploration_notes", "exploration_tree"}
     filtered = {k: v for k, v in updates.items() if k in allowed}
     if not filtered:
         return await get_flow(flow_id)
@@ -682,28 +693,5 @@ async def touch_trigger_hook(hook_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 async def seed_default_flows() -> None:
-    """Seed the default Uber flow if no flows exist."""
-    flows = await list_flows()
-    if flows:
-        return
-    uber_flow = Flow(
-        id=str(uuid.uuid4())[:12],
-        name="Uber Ride",
-        domain="uber.com",
-        description=(
-            "Book an Uber ride on m.uber.com. Navigate to the site, enter the pickup "
-            "and dropoff locations provided by the user, select their requested ride type, "
-            "and confirm the booking. Wait for confirmation and return the driver name, "
-            "car details, ETA, and fare estimate."
-        ),
-        entry_url="https://m.uber.com",
-        inputs=json.dumps([
-            {"name": "pickup", "label": "Pickup location", "type": "text", "placeholder": "e.g. Koramangala 5th Block"},
-            {"name": "dropoff", "label": "Drop-off location", "type": "text", "placeholder": "e.g. Indiranagar Metro"},
-            {"name": "ride_type", "label": "Ride type", "type": "select", "options": ["UberGo", "Premier", "Auto", "UberXL"]},
-        ]),
-        icon="🚗",
-        created_by="system",
-    )
-    await create_flow(uber_flow)
-    logger.info("Seeded default Uber flow (id=%s)", uber_flow.id)
+    """No-op — flows are user-created. Kept for lifespan compatibility."""
+    pass

@@ -148,7 +148,7 @@ export function FlowForm({ flow, onSubmit, onBack, submitting, defaultProfileId 
               <Badge variant="secondary">{flow.domain}</Badge>
             </div>
             <CardDescription className="mt-1">
-              {flow.description}
+              {flow.task}
             </CardDescription>
           </div>
         </div>

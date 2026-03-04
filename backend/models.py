@@ -9,12 +9,16 @@ class Flow:
     id: str
     name: str
     domain: str
-    description: str
+    task: str
     inputs: str  # JSON array of input definitions
     created_by: str
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     entry_url: str | None = None
     icon: str | None = None
+    exploration_status: str = "pending"  # pending | exploring | ready | failed
+    exploration_error: str | None = None
+    exploration_notes: str | None = None
+    exploration_tree: str = "[]"  # JSON array of exploration stage nodes
 
 
 @dataclass

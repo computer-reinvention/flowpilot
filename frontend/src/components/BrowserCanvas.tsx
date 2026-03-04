@@ -50,8 +50,8 @@ export function BrowserCanvas({ sandboxId, isPaused, className }: BrowserCanvasP
   const [connState, setConnState] = useState<ConnState>("idle");
   const [currentUrl, setCurrentUrl] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
-  const [urlInput, setUrlInput] = useState("");
-  const [isEditingUrl, setIsEditingUrl] = useState(false);
+  const [tabs, setTabs] = useState<{ id: string; title: string; url: string }[]>([]);
+  const [activeTargetId, setActiveTargetId] = useState<string>("");
 
   // ---------------------------------------------------------------------------
   // WebSocket connection
@@ -91,15 +91,19 @@ export function BrowserCanvas({ sandboxId, isPaused, className }: BrowserCanvasP
             sessionId?: number;
             url?: string;
             loading?: boolean;
+            tabs?: { id: string; title: string; url: string }[];
+            activeTargetId?: string;
           };
 
           if (msg.type === "frame" && msg.data) {
             renderFrame(msg.data);
           } else if (msg.type === "nav" && msg.url) {
             setCurrentUrl(msg.url);
-            if (!isEditingUrl) setUrlInput(msg.url);
           } else if (msg.type === "loading") {
             setIsLoading(!!msg.loading);
+          } else if (msg.type === "tabs" && msg.tabs) {
+            setTabs(msg.tabs);
+            if (msg.activeTargetId) setActiveTargetId(msg.activeTargetId);
           }
         } catch {
           // ignore malformed messages
@@ -194,8 +198,8 @@ export function BrowserCanvas({ sandboxId, isPaused, className }: BrowserCanvasP
   function navigateReload() {
     send({ type: "navigate", action: "reload" });
   }
-  function navigateToUrl(url: string) {
-    send({ type: "navigate", action: "goto", url });
+  function switchTab(targetId: string) {
+    send({ type: "switchTab", targetId });
   }
 
   // Register wheel as a native non-passive listener so preventDefault() actually works.
@@ -297,9 +301,13 @@ export function BrowserCanvas({ sandboxId, isPaused, className }: BrowserCanvasP
   // Keyboard handlers
   // ---------------------------------------------------------------------------
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
-    // Let Ctrl/Meta+R pass through (browser reload) but swallow everything else
-    // that would interfere with typing into the remote browser.
-    if ((e.ctrlKey || e.metaKey) && ["r", "w", "t", "l"].includes(e.key.toLowerCase())) {
+    // Block Ctrl/Meta+T (new tab), Ctrl/Meta+W (close tab), Ctrl/Meta+L (address bar)
+    // Let Ctrl/Meta+R pass through (browser reload)
+    if ((e.ctrlKey || e.metaKey) && ["t", "w", "l", "n"].includes(e.key.toLowerCase())) {
+      e.preventDefault();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "r") {
       return;
     }
     e.preventDefault();
@@ -364,72 +372,69 @@ export function BrowserCanvas({ sandboxId, isPaused, className }: BrowserCanvasP
 
   return (
     <div className={cn("flex flex-col h-full w-full bg-black overflow-hidden select-none", className)}>
+      {/* Tab bar */}
+      {showToolbar && (
+        <div className="flex items-center bg-zinc-950 border-b border-zinc-800 shrink-0 overflow-x-auto">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => switchTab(tab.id)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 text-[11px] min-w-0 max-w-[180px] border-r border-zinc-800 shrink-0",
+                tab.id === activeTargetId
+                  ? "bg-zinc-900 text-zinc-200"
+                  : "text-zinc-500 hover:bg-zinc-900/50 hover:text-zinc-400",
+              )}
+              title={tab.url}
+            >
+              <Globe className="size-3 shrink-0" />
+              <span className="truncate">{tab.title || new URL(tab.url || "about:blank").hostname || "New tab"}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Browser toolbar */}
       {showToolbar && (
-        <div className="flex items-center gap-1 px-2 py-1.5 bg-zinc-900 border-b border-zinc-800 shrink-0">
-          {/* Nav buttons */}
-          <button
-            onClick={navigateBack}
-            className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors"
-            title="Back"
-          >
-            <ArrowLeft className="size-3.5" />
-          </button>
-          <button
-            onClick={navigateForward}
-            className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors"
-            title="Forward"
-          >
-            <ArrowRight className="size-3.5" />
-          </button>
-          <button
-            onClick={navigateReload}
-            className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors"
-            title="Reload"
-          >
-            {isLoading ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <RotateCw className="size-3.5" />
-            )}
-          </button>
-
-          {/* URL bar */}
-          <div className="flex-1 flex items-center gap-1.5 bg-zinc-800 rounded px-2 py-0.5 ml-1 min-w-0">
-            <Globe className="size-3 text-zinc-500 shrink-0" />
-            <input
-              type="text"
-              value={isEditingUrl ? urlInput : currentUrl}
-              onChange={(e) => setUrlInput(e.target.value)}
-              onFocus={() => {
-                setIsEditingUrl(true);
-                setUrlInput(currentUrl);
-              }}
-              onBlur={() => setIsEditingUrl(false)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  navigateToUrl(urlInput);
-                  setIsEditingUrl(false);
-                  (e.target as HTMLInputElement).blur();
-                } else if (e.key === "Escape") {
-                  setUrlInput(currentUrl);
-                  setIsEditingUrl(false);
-                  (e.target as HTMLInputElement).blur();
-                }
-              }}
-              className="flex-1 bg-transparent text-[11px] text-zinc-300 font-mono outline-none placeholder:text-zinc-600 min-w-0"
-              placeholder="Enter URL..."
-              spellCheck={false}
-            />
-          </div>
-
-          {/* Loading bar */}
-          {isLoading && (
-            <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-zinc-800 overflow-hidden">
-              <div className="h-full w-1/3 bg-blue-500 animate-[slide_1s_ease-in-out_infinite]" />
-            </div>
+        <div className="flex items-center gap-1 px-2 py-1 bg-zinc-900 border-b border-zinc-800 shrink-0">
+          {/* Nav buttons — only during HITL */}
+          {isPaused && (
+            <>
+              <button
+                onClick={navigateBack}
+                className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors"
+                title="Back"
+              >
+                <ArrowLeft className="size-3.5" />
+              </button>
+              <button
+                onClick={navigateForward}
+                className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors"
+                title="Forward"
+              >
+                <ArrowRight className="size-3.5" />
+              </button>
+              <button
+                onClick={navigateReload}
+                className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors"
+                title="Reload"
+              >
+                <RotateCw className="size-3.5" />
+              </button>
+            </>
           )}
+
+          {/* URL bar (read-only) */}
+          <div className="flex-1 flex items-center gap-1.5 bg-zinc-800 rounded px-2 py-0.5 min-w-0">
+            {isLoading ? (
+              <Loader2 className="size-3 text-blue-400 shrink-0 animate-spin" />
+            ) : (
+              <Globe className="size-3 text-zinc-500 shrink-0" />
+            )}
+            <span className="flex-1 text-[11px] text-zinc-400 font-mono truncate select-text min-w-0">
+              {currentUrl || "about:blank"}
+            </span>
+          </div>
         </div>
       )}
 

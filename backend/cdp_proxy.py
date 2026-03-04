@@ -113,23 +113,80 @@ async def handle(
             # Initial attach
             await _attach_to_target(target_id)
 
-            # -- Target tracking: follow browser-use when it opens new tabs --
+            # -- Tab tracking --
+            # Maintain a list of open page targets so the frontend can render a tab bar.
+            open_tabs: dict[str, dict] = {}  # targetId -> {id, title, url}
+
+            async def _send_tab_list() -> None:
+                """Push current tab list + active tab to the frontend."""
+                try:
+                    await websocket.send_json({
+                        "type": "tabs",
+                        "tabs": list(open_tabs.values()),
+                        "activeTargetId": active["target_id"],
+                    })
+                except Exception:
+                    pass
+
             async def on_target_created(params: dict, _session_id: str | None) -> None:
                 info = params.get("targetInfo", {})
                 if info.get("type") != "page":
                     return
                 new_tid = info.get("targetId", "")
-                if not new_tid or new_tid == active["target_id"]:
+                if not new_tid:
                     return
-                logger.info("New page target detected: %s — re-attaching screencast", new_tid)
-                try:
-                    await _attach_to_target(new_tid)
-                except Exception as exc:
-                    logger.warning("Failed to attach to new target %s: %s", new_tid, exc)
+                open_tabs[new_tid] = {
+                    "id": new_tid,
+                    "title": info.get("title", ""),
+                    "url": info.get("url", ""),
+                }
+                # Auto-switch screencast to the new tab
+                if new_tid != active["target_id"]:
+                    logger.info("New page target detected: %s — re-attaching screencast", new_tid)
+                    try:
+                        await _attach_to_target(new_tid)
+                    except Exception as exc:
+                        logger.warning("Failed to attach to new target %s: %s", new_tid, exc)
+                await _send_tab_list()
 
-            # Discover targets so we get targetCreated events
+            async def on_target_info_changed(params: dict, _session_id: str | None) -> None:
+                info = params.get("targetInfo", {})
+                if info.get("type") != "page":
+                    return
+                tid = info.get("targetId", "")
+                if tid in open_tabs:
+                    open_tabs[tid] = {
+                        "id": tid,
+                        "title": info.get("title", ""),
+                        "url": info.get("url", ""),
+                    }
+                    await _send_tab_list()
+
+            async def on_target_destroyed(params: dict, _session_id: str | None) -> None:
+                tid = params.get("targetId", "")
+                if tid not in open_tabs:
+                    return
+                del open_tabs[tid]
+                # If the destroyed tab was active, switch back to the last remaining tab
+                if tid == active["target_id"] and open_tabs:
+                    fallback_tid = list(open_tabs.keys())[-1]
+                    logger.info("Active tab closed, switching to %s", fallback_tid)
+                    try:
+                        await _attach_to_target(fallback_tid)
+                    except Exception as exc:
+                        logger.warning("Failed to switch to fallback target: %s", exc)
+                await _send_tab_list()
+
+            # Seed initial tab list
+            open_tabs[target_id] = {"id": target_id, "title": "", "url": ""}
+
+            # Discover targets so we get target events
             await cdp.send_raw("Target.setDiscoverTargets", {"discover": True})
             cdp._event_registry.register("Target.targetCreated", on_target_created)
+            cdp._event_registry.register("Target.targetInfoChanged", on_target_info_changed)
+            cdp._event_registry.register("Target.targetDestroyed", on_target_destroyed)
+
+            await _send_tab_list()
 
             # -- Screencast frame handler --
             async def on_screencast_frame(params: dict, frame_session_id: str | None) -> None:
@@ -244,6 +301,15 @@ async def handle(
                         )
                     except Exception:
                         pass
+
+                elif msg_type == "switchTab":
+                    target_id = data.get("targetId", "")
+                    if target_id and target_id in open_tabs and target_id != active["target_id"]:
+                        try:
+                            await _attach_to_target(target_id)
+                            await _send_tab_list()
+                        except Exception as exc:
+                            logger.warning("Tab switch to %s failed: %s", target_id, exc)
 
                 elif msg_type == "navigate":
                     action = data.get("action")

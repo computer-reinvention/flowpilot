@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from .sandbox import SandboxManager
 from .profile import ProfileManager
 from .runner import FlowRunner, RunStatus
+from .explorer import explore_flow
 from .config import PROFILES_DIR, BASE_URL
 from . import auth
 from . import db as platform_db
@@ -51,6 +52,7 @@ flow_runner = FlowRunner()
 _ws_connections: dict[str, list[WebSocket]] = {}  # run_id -> [websocket, ...]
 _run_tasks: dict[str, asyncio.Task] = {}  # run_id -> background task
 _run_agents: dict[str, tuple] = {}  # run_id -> (agent, browser, flow, paused_ref)
+_exploration_tasks: dict[str, asyncio.Task] = {}  # flow_id -> background exploration task
 
 ACTIVE_RUN_STATUSES: frozenset[str] = frozenset({"pending", "connecting", "running", "paused_for_hitl"})
 
@@ -140,16 +142,15 @@ class ProfileSaveRequest(BaseModel):
 class FlowCreateRequest(BaseModel):
     name: str
     domain: str
-    description: str
+    task: str
     entry_url: str | None = None
-    inputs: list[dict] = []
     icon: str | None = None
 
 
 class FlowUpdateRequest(BaseModel):
     name: str | None = None
     domain: str | None = None
-    description: str | None = None
+    task: str | None = None
     entry_url: str | None = None
     inputs: list[dict] | None = None
     icon: str | None = None
@@ -284,13 +285,18 @@ async def flow_create(req: FlowCreateRequest, user: dict = Depends(auth.get_curr
         id=str(uuid.uuid4())[:12],
         name=req.name,
         domain=req.domain,
-        description=req.description,
+        task=req.task,
         entry_url=req.entry_url,
-        inputs=json.dumps(req.inputs),
+        inputs="[]",
         icon=req.icon,
         created_by=user["id"],
     )
     await platform_db.create_flow(flow)
+    # Auto-explore if entry_url exists
+    if flow.entry_url:
+        task = asyncio.create_task(_run_exploration(flow, user["id"]))
+        _exploration_tasks[flow.id] = task
+        task.add_done_callback(lambda t: _exploration_tasks.pop(flow.id, None))
     return _flow_to_dict(flow)
 
 
@@ -329,18 +335,96 @@ async def flow_delete(flow_id: str, user: dict = Depends(auth.get_current_user))
     return {"status": "deleted"}
 
 
+async def _run_exploration(flow: Flow, user_id: str, profile_id: str | None = None) -> None:
+    """Background task: spin up sandbox, run explorer autonomously, tear down."""
+    sandbox_result = None
+    try:
+        profile_path = None
+        if profile_mgr.has_profile(user_id, "default"):
+            profile_path = str(PROFILES_DIR / user_id / "default")
+        sandbox_result = sandbox_mgr.start(profile_path=profile_path, user_id=user_id)
+        sandbox_id = sandbox_result["sandbox_id"]
+        cdp_url = sandbox_result.get("cdp_url", "ws://localhost:9222")
+        await platform_db.create_sandbox(
+            sandbox_id, sandbox_result["container_id"], user_id, cdp_url,
+        )
+
+        # Load saved session cookies if available
+        storage_state = None
+        effective_profile = profile_id or user_id
+        domain_session = await platform_db.get_session_for_domain(user_id, flow.domain, profile_name=effective_profile)
+        if not domain_session:
+            domain_session = await platform_db.get_session_for_domain(user_id, flow.domain)
+        if domain_session:
+            cookies = json.loads(domain_session.cookies)
+            local_storage = json.loads(domain_session.local_storage)
+            storage_state = {"cookies": cookies, "origins": []}
+            if local_storage and flow.entry_url:
+                storage_state["origins"].append({
+                    "origin": flow.entry_url.rstrip("/"),
+                    "localStorage": [{"name": k, "value": v} for k, v in local_storage.items()],
+                })
+            logger.info("Exploration using %d saved cookies for %s (profile=%s)", len(cookies), flow.domain, effective_profile)
+
+        await explore_flow(flow, sandbox_id, cdp_url, storage_state=storage_state)
+    except Exception as e:
+        logger.error("Exploration failed for flow %s: %s", flow.id, e, exc_info=True)
+        await platform_db.update_flow(flow.id, {
+            "exploration_status": "failed",
+            "exploration_error": str(e),
+        })
+    finally:
+        if sandbox_result:
+            try:
+                sandbox_mgr.stop(sandbox_result["sandbox_id"])
+                await platform_db.delete_sandbox(sandbox_result["sandbox_id"])
+            except Exception as e:
+                logger.warning("Failed to stop exploration sandbox: %s", e)
+
+
+class ExploreRequest(BaseModel):
+    profile_id: str | None = None
+
+
+@app.post("/api/flows/{flow_id}/explore")
+async def flow_explore(flow_id: str, req: ExploreRequest | None = None, user: dict = Depends(auth.get_current_user)) -> dict:
+    flow = await platform_db.get_flow(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    if not flow.entry_url:
+        raise HTTPException(status_code=400, detail="Flow has no entry_url — nothing to explore")
+    if flow_id in _exploration_tasks:
+        raise HTTPException(status_code=409, detail="Exploration already in progress")
+    # Reset
+    await platform_db.update_flow(flow_id, {
+        "exploration_status": "pending",
+        "exploration_error": None,
+        "exploration_notes": None,
+        "exploration_tree": "[]",
+    })
+    flow = await platform_db.get_flow(flow_id)
+    profile_id = req.profile_id if req else None
+    task = asyncio.create_task(_run_exploration(flow, user["id"], profile_id=profile_id))
+    _exploration_tasks[flow_id] = task
+    task.add_done_callback(lambda t: _exploration_tasks.pop(flow_id, None))
+    return {"status": "exploring", "flow_id": flow_id}
+
 
 def _flow_to_dict(flow: Flow) -> dict:
     return {
         "id": flow.id,
         "name": flow.name,
         "domain": flow.domain,
-        "description": flow.description,
+        "task": flow.task,
         "entry_url": flow.entry_url,
         "inputs": json.loads(flow.inputs),
         "icon": flow.icon,
         "created_by": flow.created_by,
         "created_at": flow.created_at,
+        "exploration_status": flow.exploration_status,
+        "exploration_error": flow.exploration_error,
+        "exploration_notes": flow.exploration_notes,
+        "exploration_tree": json.loads(flow.exploration_tree),
     }
 
 

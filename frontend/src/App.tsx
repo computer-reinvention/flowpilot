@@ -129,9 +129,8 @@ export default function App() {
   async function handleCreateFlow(data: {
     name: string;
     domain: string;
-    description: string;
+    task: string;
     entry_url?: string;
-    inputs?: Array<{ name: string; label: string; type: string; placeholder?: string }>;
   }) {
     setSubmitting(true);
     try {

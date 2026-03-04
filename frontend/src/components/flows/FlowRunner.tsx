@@ -100,6 +100,9 @@ export function FlowRunner({
     <div className="flex flex-col h-full">
       {/* Status strip */}
       <div className="flex items-center gap-2 px-4 py-2 border-b shrink-0">
+        <Button variant="ghost" size="icon" onClick={onReset} className="size-7 shrink-0" aria-label="Go back">
+          <ArrowLeft className="size-3.5" />
+        </Button>
         <Badge variant="outline" className={cn("text-xs", badgeInfo.className)}>
           {badgeInfo.label}
         </Badge>
@@ -125,10 +128,6 @@ export function FlowRunner({
               Cancel
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={onReset} className="h-7 text-xs gap-1">
-            <ArrowLeft className="size-3" />
-            {isFinished ? "Back" : "Hide"}
-          </Button>
         </div>
       </div>
 

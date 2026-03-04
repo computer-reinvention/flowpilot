@@ -31,7 +31,7 @@ export function FlowCard({ flow, onClick }: FlowCardProps) {
             </span>
           )}
         </div>
-        <p className="text-xs text-muted-foreground truncate">{flow.description}</p>
+        <p className="text-xs text-muted-foreground truncate">{flow.task}</p>
       </div>
       <ChevronRight className="size-3.5 text-muted-foreground/50 shrink-0 mt-1" />
     </button>
