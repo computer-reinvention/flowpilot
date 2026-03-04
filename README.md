@@ -1,49 +1,60 @@
 # FlowPilot
 
-AI-powered browser automation platform. Define automation flows for any website, capture authenticated sessions via Chrome extension, and execute them in sandboxed Chromium containers with live browser viewing.
+AI-powered browser automation platform. Define flows for any website, capture authenticated sessions via Chrome extension, and execute them in sandboxed Chromium containers with a live interactive browser view.
 
-Uses [browser-use](https://github.com/browser-use/browser-use) — an LLM-driven browser automation agent — to translate natural language task descriptions into browser actions.
+Uses [browser-use](https://github.com/browser-use/browser-use) for LLM-driven browser automation and [cdp-use](https://github.com/browser-use/cdp-use) for the live browser canvas.
 
 ## How It Works
 
-1. **Define Flows** — Create automation flows for any website. Each flow has a name, target domain, natural language description of what the agent should do, and configurable input fields (text, select, textarea, etc.).
+1. **Define Flows** — Create automation flows for any website. Each flow has a name, target domain, natural language description, and configurable input fields (text, select, textarea, date, etc.).
 
-2. **Capture Sessions** — Install the Chrome extension to capture browser sessions (cookies, localStorage, sessionStorage) from any domain. These are injected into sandbox runs so the agent inherits your logged-in state.
+2. **Capture Sessions** — Install the Chrome extension to capture browser sessions (cookies, localStorage) from any domain. These are injected into sandbox runs so the agent starts authenticated.
 
-3. **Run** — Execute a flow with your inputs. The backend spins up a sandboxed Chromium container via Docker, restores your captured session, and the LLM agent navigates the site to complete the task.
+3. **Run** — Execute a flow with your inputs. The backend spins up an ephemeral sandboxed Chromium container, restores your session, and the LLM agent navigates the site. Reflexes (cached Playwright snippets built from previous runs) let the agent skip re-learning steps it has already solved.
 
-4. **Watch** — Real-time progress streams over WebSocket. Expand the live noVNC browser view to watch the automation in action.
+4. **Watch & Interact** — A live canvas streams the browser via CDP screencast at native viewport resolution. During HITL pauses (login walls, captchas) you take over directly — full mouse and keyboard interaction with the running browser.
 
-Sandbox containers are ephemeral — created on demand via the Docker API and destroyed after each run.
+5. **HITL (Human-in-the-Loop)** — When the agent hits an auth wall it can't bypass, it pauses and notifies you. You log in directly in the live canvas, click Resume, and the agent continues with the authenticated session automatically saved.
 
 ## Architecture
 
 ```
-┌─────────────┐      ┌──────────────────┐      ┌─────────────────────┐
-│  React UI   │─────>│  FastAPI Backend  │─────>│  Docker Socket      │
-│  (Vite)     │ REST │  (port 8080)      │      │  Proxy (limited)    │
-│  port 3000* │<─────│                   │      └─────────┬───────────┘
-└─────────────┘  WS  │  - Auth (JWT)     │                │
-                      │  - Flows CRUD     │      ┌─────────▼───────────┐
-┌─────────────┐      │  - Runs engine    │      │  Sandbox Container  │
-│  Chrome     │─────>│  - Sessions       │      │  - Chromium + CDP   │
-│  Extension  │ POST │  - Profiles       │      │  - Xvfb + VNC       │
-└─────────────┘      └──────────────────┘      │  - noVNC (web view) │
-                                                │  - browser-use      │
-                                                └─────────────────────┘
-* port 3000 in dev (Vite proxy to 8080), port 8080 in production (static files served by FastAPI)
+┌─────────────┐      ┌──────────────────────┐      ┌──────────────────────┐
+│  React UI   │─────>│  FastAPI Backend      │─────>│  Docker Socket Proxy │
+│  (Vite)     │ REST │  (port 8080)          │      └──────────┬───────────┘
+│  port 3000* │<─────│                       │                 │
+└─────────────┘  WS  │  - Auth (JWT)         │      ┌──────────▼───────────┐
+                      │  - Flows CRUD         │      │  Sandbox Container   │
+┌─────────────┐      │  - Runs engine        │      │  - Chromium 1920×1080│
+│  Chrome     │─────>│  - Reflexes (SQLite)  │      │  - CDP (port 9222)   │
+│  Extension  │ POST │  - Sessions           │      │  - socat forwarder   │
+└─────────────┘      │  - Profiles           │      │  - Xvfb + SwiftShader│
+                      │  - CDP proxy (WS)     │◄─────│  - browser-use agent │
+                      └──────────────────────┘  CDP  └──────────────────────┘
 ```
+
+The CDP proxy (`/ws/browser/{sandbox_id}`) connects to Chromium via a flat `Target.attachToTarget` session that coexists with browser-use's Playwright session — both can use the browser simultaneously without conflict.
+
+`*` port 3000 in dev (Vite proxies `/api` and `/ws` to :8080), port 8080 in production (FastAPI serves the built frontend as static files).
+
+## Features
+
+- **Reflexes** — The agent builds a library of reusable Playwright snippets scoped by domain (e.g. `uber.com/fill_booking_form`). On subsequent runs it fires reflexes for steps it recognises, skipping slow LLM-driven interaction. When a reflex breaks it handles the step manually and updates the cached version.
+- **Live browser canvas** — CDP screencast at native 1920×1080 viewport. No VNC, no iframe — direct pixel-accurate stream with ~1-frame latency.
+- **Interactive HITL** — Full mouse (click, drag, scroll) and keyboard input forwarded to the remote browser via `Input.dispatchMouseEvent` / `Input.dispatchKeyEvent`.
+- **Session capture** — Chrome extension captures cookies and localStorage; injected before each run so the agent starts logged in.
+- **Profile persistence** — Save the full Chrome profile out of a sandbox and restore it on future runs for longer-lived auth state.
 
 ## Prerequisites
 
-- **Python 3.12+**
+- **Python 3.12+** with [uv](https://docs.astral.sh/uv/)
 - **Node.js 20+** and npm
-- **Docker** and Docker Compose (for sandboxed browser execution)
-- **An LLM API key** — one of: Google Gemini, Anthropic Claude, or OpenAI
+- **Docker** and Docker Compose
+- **An LLM API key** — Google Gemini, Anthropic Claude, or OpenAI
 
 ## Setup
 
-### 1. Environment Variables
+### 1. Environment variables
 
 ```bash
 cp .env.example .env
@@ -52,181 +63,158 @@ cp .env.example .env
 Edit `.env`:
 
 ```bash
-# Choose your LLM provider: gemini, claude, or openai
+# LLM provider: gemini, claude, or openai
 LLM_PROVIDER=gemini
+GOOGLE_API_KEY=your-key-here
 
-# Set the API key for your chosen provider
-GOOGLE_API_KEY=your-key-here        # if LLM_PROVIDER=gemini
-ANTHROPIC_API_KEY=your-key-here     # if LLM_PROVIDER=claude
-OPENAI_API_KEY=your-key-here        # if LLM_PROVIDER=openai
+# Model override (optional — defaults shown)
+# GEMINI_MODEL=gemini-3-flash-preview      # or gemini-3.1-pro-preview
+# ANTHROPIC_MODEL=claude-sonnet-4-20250514
+# OPENAI_MODEL=gpt-4o
 
-# Optional
-VNC_PASSWORD=changeme               # Password for noVNC browser view
-JWT_SECRET=some-random-secret       # Token signing (auto-generated if unset, but won't survive restarts)
-PROFILES_DIR=./profiles             # Where browser profiles are stored (default: /app/profiles in Docker)
+# Token signing (auto-generated if unset, but tokens won't survive restarts)
+JWT_SECRET=some-random-secret
 ```
 
-### 2. Backend (Local Development)
+### 2. Dev utility
 
 ```bash
-# Install Python dependencies
-pip install -r backend/requirements.txt
-
-# Install Playwright browser (needed for browser-use)
-playwright install chromium
-playwright install-deps chromium
-
-# Start the backend (port 8080)
-uvicorn backend.main:app --reload --host 0.0.0.0 --port 8080
+chmod +x dev
+./dev          # shows available commands
 ```
 
-### 3. Frontend (Local Development)
+```
+Commands:
+  stop       Stop all containers (force-kills stuck ones too)
+  build-fe   Rebuild the frontend only
+  build      Rebuild sandbox + backend Docker images
+  up         Start all containers
+  restart    Full cycle: stop → build-fe → build → up → logs
+  logs       Follow logs (press q to stop)
+  url        Print the app URL
+```
+
+### 3. First run
 
 ```bash
-cd frontend
-npm install
-npm run dev     # Starts Vite dev server on port 3000, proxies /api and /ws to :8080
+./dev restart
+```
+
+Open [http://localhost:8080](http://localhost:8080).
+
+### 4. Local backend development
+
+```bash
+uv sync
+uv run playwright install chromium && uv run playwright install-deps
+uv run uvicorn backend.main:app --reload --host 0.0.0.0 --port 8080
+```
+
+Frontend dev server (with hot reload):
+
+```bash
+cd frontend && npm install && npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
 
-### 4. Docker (Production)
-
-```bash
-# Build sandbox image first
-docker build -t flowpilot-sandbox -f Dockerfile.sandbox .
-
-# Start everything
-docker compose up --build
-```
-
-Open [http://localhost:8080](http://localhost:8080). The backend serves the built frontend as static files.
-
 ### 5. Chrome Extension
 
-1. Open `chrome://extensions/` in Chrome
-2. Enable "Developer mode" (top right)
-3. Click "Load unpacked" and select the `extension/` directory
-4. Navigate to any website, click the extension icon, and capture your session
+1. Open `chrome://extensions/`
+2. Enable **Developer mode**
+3. **Load unpacked** → select the `extension/` directory
+4. Navigate to any website, click the extension icon, capture your session
 
-Captured sessions are sent to the backend and automatically used when running flows for that domain.
-
-## API Endpoints
+## API Reference
 
 ### Auth
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| POST | `/api/auth/signup` | No | Create account (email, password, name) |
-| POST | `/api/auth/login` | No | Login, returns JWT token |
-| GET | `/api/auth/me` | Yes | Current user info |
+| POST | `/api/auth/signup` | — | Create account |
+| POST | `/api/auth/login` | — | Login → JWT token |
+| GET | `/api/auth/me` | ✓ | Current user |
 
 ### Flows
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/flows` | No | List all flows |
-| GET | `/api/flows/{id}` | No | Get flow details |
-| POST | `/api/flows` | Yes | Create flow (name, domain, description, inputs, entry_url) |
-| PUT | `/api/flows/{id}` | Yes | Update flow |
-| DELETE | `/api/flows/{id}` | Yes | Delete flow |
+| GET | `/api/flows` | — | List all flows |
+| GET | `/api/flows/{id}` | — | Get flow |
+| POST | `/api/flows` | ✓ | Create flow |
+| PUT | `/api/flows/{id}` | ✓ | Update flow |
+| DELETE | `/api/flows/{id}` | ✓ | Delete flow |
 
 ### Runs
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| POST | `/api/runs` | Yes | Start a run (flow_id, inputs) → returns run_id + noVNC URL |
-| GET | `/api/runs` | Yes | List user's runs |
-| GET | `/api/runs/{id}` | Yes | Get run details (status, steps, result) |
-| POST | `/api/runs/{id}/cancel` | Yes | Cancel a running run |
+| POST | `/api/runs` | ✓ | Start a run → `run_id`, `sandbox_id` |
+| GET | `/api/runs` | ✓ | List runs |
+| GET | `/api/runs/{id}` | ✓ | Run details (status, steps, result) |
+| POST | `/api/runs/{id}/cancel` | ✓ | Cancel run |
+| POST | `/api/runs/{id}/pause` | ✓ | Manual pause |
+| POST | `/api/runs/{id}/resume` | ✓ | Resume after HITL login |
 
-### Sessions
+### Sessions & Profiles
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| POST | `/api/sessions/capture` | Yes | Capture browser session (from extension) |
-| GET | `/api/sessions` | Yes | List captured sessions |
-| DELETE | `/api/sessions/{id}` | Yes | Delete a session |
+| POST | `/api/sessions/capture` | ✓ | Capture session (from extension) |
+| GET | `/api/sessions` | ✓ | List sessions |
+| DELETE | `/api/sessions/{id}` | ✓ | Delete session |
+| POST | `/api/profile/save` | ✓ | Save Chrome profile from sandbox |
+| GET | `/api/profile/status` | ✓ | Profile status |
 
-### Sandbox
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | `/api/sandbox/start` | Yes | Start a sandbox container (noVNC + CDP) |
-| POST | `/api/sandbox/stop` | Yes | Stop a sandbox container |
+### WebSockets
+| Endpoint | Description |
+|----------|-------------|
+| `WS /ws/runs/{run_id}` | Real-time run progress (status, steps) |
+| `WS /ws/browser/{sandbox_id}?token=` | Live CDP browser canvas stream + input |
 
-### Profiles
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | `/api/profile/save` | Yes | Save browser profile from sandbox |
-| GET | `/api/profile/status` | Yes | Check profile status |
-
-### Other
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/health` | No | Health check |
-| WS | `/ws/runs/{run_id}` | No | Real-time run progress stream |
-
-## Environment Variables Reference
+## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `LLM_PROVIDER` | `gemini` | LLM backend: `gemini`, `claude`, or `openai` |
-| `GOOGLE_API_KEY` | — | Gemini API key (required if provider=gemini) |
-| `ANTHROPIC_API_KEY` | — | Claude API key (required if provider=claude) |
-| `OPENAI_API_KEY` | — | OpenAI API key (required if provider=openai) |
-| `GEMINI_MODEL` | `gemini-2.0-flash` | Gemini model name |
-| `ANTHROPIC_MODEL` | `claude-sonnet-4-20250514` | Claude model name |
-| `OPENAI_MODEL` | `gpt-4o` | OpenAI model name |
-| `VNC_PASSWORD` | `changeme` | Password for noVNC browser view |
-| `JWT_SECRET` | (generated) | Secret for JWT token signing |
-| `PROFILES_DIR` | `/app/profiles` | Browser profile storage directory |
-| `ALLOWED_ORIGINS` | `http://localhost:8080,http://localhost:3000` | CORS allowed origins |
-| `DOCKER_HOST` | — | Docker daemon URL (auto-detected if unset) |
+| `LLM_PROVIDER` | `gemini` | `gemini`, `claude`, or `openai` |
+| `GOOGLE_API_KEY` | — | Required if `LLM_PROVIDER=gemini` |
+| `ANTHROPIC_API_KEY` | — | Required if `LLM_PROVIDER=claude` |
+| `OPENAI_API_KEY` | — | Required if `LLM_PROVIDER=openai` |
+| `GEMINI_MODEL` | `gemini-3-flash-preview` | Gemini model |
+| `ANTHROPIC_MODEL` | `claude-sonnet-4-20250514` | Claude model |
+| `OPENAI_MODEL` | `gpt-4o` | OpenAI model |
+| `JWT_SECRET` | (generated) | JWT signing secret |
+| `PROFILES_DIR` | `/app/profiles` | Profile + DB storage directory |
+| `ALLOWED_ORIGINS` | `http://localhost:8080,...` | CORS origins |
+| `DOCKER_HOST` | (auto) | Docker daemon URL |
+| `SANDBOX_NETWORK` | `flowpilot_sandbox-net` | Docker network for sandboxes |
 
 ## Security
 
-- **Sandbox isolation**: Each run gets its own Docker container with resource limits (1GB RAM, 256 PIDs, 256MB shared memory)
-- **No raw Docker socket**: Backend communicates via docker-socket-proxy with limited API access (containers + networks only)
-- **CDP not exposed**: Chrome DevTools Protocol port (9222) is only accessible on the internal Docker network, never published to the host
-- **Per-user sandbox limit**: Maximum 2 concurrent sandboxes per user
-- **Per-sandbox VNC password**: Each sandbox gets a unique random VNC password
-- **JWT auth**: All mutation endpoints require authentication
-- **Profile path validation**: Profile names are validated against `^[a-zA-Z0-9_-]+$` to prevent path traversal
-- **Tar extraction safety**: Archive extraction checks for path traversal (`..` and absolute paths)
+- **Sandbox isolation** — Each run gets its own container with resource limits (1GB RAM, 100k CPU quota, 256 PIDs, 256MB shared memory)
+- **No raw Docker socket** — Backend talks through docker-socket-proxy (containers + networks API only)
+- **CDP not exposed to host** — Port 9222 is internal-only; the socat forwarder (9223) is also internal to the Docker network
+- **CDP proxy authentication** — `/ws/browser/{id}` requires a JWT via `?token=` query param
+- **Per-user sandbox limit** — Max 2 concurrent sandboxes per user
+- **JWT auth** — All mutation endpoints require authentication
+- **Profile path validation** — `^[a-zA-Z0-9_-]+$` prevents path traversal
 
 ## Hosting
 
-FlowPilot requires Docker-in-Docker (or Docker socket access) for sandbox containers. Recommended options for self-hosting:
-
-### VPS / Dedicated Server (Recommended)
-
-Best fit for a personal tool with Docker requirements.
+FlowPilot requires Docker socket access for sandbox containers.
 
 | Provider | Spec | ~Cost/mo | Notes |
 |----------|------|----------|-------|
-| **Hetzner Cloud** | CX32 (4 vCPU, 8GB) | $7 | Best value, EU/US datacenters |
-| **DigitalOcean** | Basic Droplet (4GB) | $24 | Simple setup, good docs |
-| **Linode (Akamai)** | Shared 4GB | $24 | Reliable, good network |
-| **Oracle Cloud** | Ampere A1 (4 core, 24GB) | Free tier | ARM — Docker works, generous free allowance |
+| **Hetzner Cloud** | CX32 (4 vCPU, 8GB) | $7 | Best value |
+| **DigitalOcean** | Basic 4GB Droplet | $24 | Simple setup |
+| **Oracle Cloud** | Ampere A1 (4 core, 24GB) | Free tier | ARM, generous allowance |
 
-Setup: install Docker, clone repo, `docker compose up -d`. Use Caddy or nginx for HTTPS.
+Setup: install Docker, clone repo, `./dev restart`. Use Caddy or nginx for HTTPS.
 
-### Railway / Render
+**Not recommended**: Vercel, Netlify, Lambda, Fly.io — no Docker socket or privileged container support.
 
-Can work but need Docker builder support. Railway supports Dockerfiles natively. Render supports Docker but may have limitations with Docker-in-Docker for sandbox containers.
-
-### Not Recommended
-
-- **Vercel/Netlify**: No Docker, no long-running processes
-- **AWS Lambda / Cloud Functions**: No Docker socket, no persistent containers
-- **Fly.io**: Possible but Docker-in-Docker requires privileged containers which Fly doesn't support by default
-
-### Storage
-
-SQLite database stored at `PROFILES_DIR/platform.db`. Back up this file and the `profiles/` directory for data persistence across redeployments.
+**Storage**: SQLite DB at `$PROFILES_DIR/platform.db`. Back up that file and the `profiles/` directory.
 
 ## Running Tests
 
 ```bash
-pip install pytest pytest-asyncio httpx
-cd /home/cmux/flowpilot
-python -m pytest tests/ -v
+uv run pytest tests/ -v
 ```
 
 ## License
