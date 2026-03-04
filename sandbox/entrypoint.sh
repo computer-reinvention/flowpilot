@@ -1,17 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ── VNC password setup ───────────────────────────────────────────────
-# TigerVNC uses vncpasswd to generate the hashed password file.
-echo "Setting VNC password..."
-mkdir -p /home/sandboxuser/.vnc
-echo "${VNC_PASSWORD:-bookr}" | vncpasswd -f > /home/sandboxuser/.vnc/passwd
-chmod 600 /home/sandboxuser/.vnc/passwd
-chown -R sandboxuser:sandboxuser /home/sandboxuser/.vnc
-
 # ── Restore browser profile if one exists ────────────────────────────
-# /profiles is a mounted volume. If it contains a saved profile, copy it
-# into the working directory so Chromium picks it up.
 PROFILE_SRC="/profiles/chrome-profile"
 PROFILE_DST="/tmp/chrome-profile"
 
@@ -27,9 +17,7 @@ fi
 # ── Export environment for supervisord children ──────────────────────
 export DISPLAY="${DISPLAY:-:1}"
 export RESOLUTION="${RESOLUTION:-1280x720x24}"
-export NOVNC_PORT="${NOVNC_PORT:-6080}"
-export VNC_PORT="${VNC_PORT:-5900}"
 
-# ── Start supervisord (manages Xvfb, fluxbox, VNC, noVNC) ───────────
+# ── Start supervisord (manages Xvfb, Chromium, socat CDP forwarder) ──
 echo "Starting supervisord..."
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/sandbox.conf

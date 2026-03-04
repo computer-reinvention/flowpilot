@@ -36,14 +36,13 @@ export interface Run {
   id: string;
   flow_id: string;
   user_id: string;
-  status: "pending" | "connecting" | "running" | "paused_for_auth" | "completed" | "failed";
+  status: "pending" | "connecting" | "starting" | "running" | "paused_for_auth" | "completed" | "failed" | "cancelled";
   inputs: Record<string, string>;
   sandbox_id?: string;
   steps: RunStep[];
   current_step?: string;
   result?: Record<string, unknown>;
   error?: string;
-  novnc_url?: string;
   created_at: string;
   completed_at?: string;
 }
@@ -60,3 +59,5 @@ export interface AuthResponse {
   token: string;
   user: User;
 }
+
+export const ACTIVE_RUN_STATUSES = ["pending", "connecting", "running", "paused_for_auth"] as const;

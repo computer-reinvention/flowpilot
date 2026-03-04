@@ -91,11 +91,9 @@ export default function App() {
   async function handleRunSubmit(values: Record<string, string>) {
     if (!selectedFlow) return;
     setSubmitting(true);
-    setActiveRunId("pending"); // will be replaced by actual ID
     try {
-      await run.startRun(selectedFlow.id, values);
-      // After startRun, run.runId is set
-      setActiveRunId(run.runId ?? "pending");
+      const id = await run.startRun(selectedFlow.id, values);
+      setActiveRunId(id ?? null);
     } finally {
       setSubmitting(false);
     }
@@ -166,7 +164,7 @@ export default function App() {
           steps={run.steps}
           currentStep={run.currentStep}
           error={run.error}
-          novncUrl={run.novncUrl}
+          sandboxId={run.sandboxId}
           onReset={handleRunReset}
           onResume={run.resumeRun}
           onCancel={run.cancelRun}

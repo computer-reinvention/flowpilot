@@ -1,47 +1,34 @@
 # flowpilot sandbox image
-# Provides: Chromium + VNC + noVNC + browser-use + Playwright
-# Ports: 6080 (noVNC web UI), 5900 (VNC direct)
+# Provides: Chromium + CDP (via socat) + Xvfb
+# Ports: 9222 (CDP direct), 9223 (socat-forwarded CDP — accessible cross-container)
 
 FROM python:3.12-slim
 
 ENV DEBIAN_FRONTEND=noninteractive \
     DISPLAY=:1 \
-    RESOLUTION=1280x720x24 \
-    NOVNC_PORT=6080 \
-    VNC_PORT=5900
+    RESOLUTION=1920x1080x24
 
 # ── System dependencies ──────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Browser
     chromium \
     chromium-sandbox \
-    # Display server
+    # Virtual framebuffer (Chromium still needs a display for proper rendering)
     xvfb \
-    # Window manager
-    fluxbox \
-    # VNC server
-    tigervnc-standalone-server \
-    tigervnc-common \
-    tigervnc-tools \
     # Process manager
     supervisor \
     # TCP forwarder (Chromium ignores --remote-debugging-address on ARM)
     socat \
-    # Utilities needed for noVNC build / general use
-    git \
+    # Utilities
     curl \
-    wget \
     procps \
-    net-tools \
     x11-utils \
-    x11-xserver-utils \
     dbus-x11 \
-    xdg-utils \
     # Fonts (Chromium needs at least one font family)
     fonts-liberation \
     fonts-noto-color-emoji \
     fonts-dejavu-core \
-    # Libraries Chromium / Playwright may need
+    # Libraries Chromium needs
     libnss3 \
     libatk-bridge2.0-0 \
     libdrm2 \
@@ -57,13 +44,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgtk-3-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# ── noVNC from GitHub release ────────────────────────────────────────
-RUN git clone --depth 1 --branch v1.5.0 https://github.com/novnc/noVNC.git /opt/noVNC \
-    && ln -s /opt/noVNC/vnc.html /opt/noVNC/index.html
-
 # ── Python packages ──────────────────────────────────────────────────
 RUN pip install --no-cache-dir \
-    websockify \
     browser-use \
     playwright \
     && playwright install chromium \
@@ -76,10 +58,9 @@ RUN useradd -m -s /bin/bash sandboxuser
 RUN mkdir -p \
     /profiles \
     /tmp/chrome-profile \
-    /home/sandboxuser/.vnc \
     /var/log/supervisor \
     /var/run/supervisor \
-    && chown -R sandboxuser:sandboxuser /tmp/chrome-profile /home/sandboxuser/.vnc /profiles
+    && chown -R sandboxuser:sandboxuser /tmp/chrome-profile /profiles
 
 # ── Supervisord config ───────────────────────────────────────────────
 COPY sandbox/supervisord.conf /etc/supervisor/conf.d/sandbox.conf
@@ -90,12 +71,10 @@ RUN chmod +x /entrypoint.sh
 
 # ── Volumes & Ports ──────────────────────────────────────────────────
 VOLUME ["/profiles"]
-EXPOSE 6080 5900 9222
+EXPOSE 9222 9223
 
 # ── Health check ─────────────────────────────────────────────────────
-# Verify both noVNC (HTTP) and VNC (TCP) are reachable
-HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -sf http://localhost:6080/ > /dev/null && (echo > /dev/tcp/localhost/9222) 2>/dev/null && \
-        (echo > /dev/tcp/localhost/5900) 2>/dev/null
+HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -sf http://localhost:9222/json/version > /dev/null
 
 ENTRYPOINT ["/entrypoint.sh"]

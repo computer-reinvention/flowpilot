@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+# dev — FlowPilot development utility
+# Usage: ./dev <command>
+#   stop       Stop all running containers
+#   build-fe   Rebuild the frontend only
+#   build      Rebuild all Docker images (sandbox + backend)
+#   up         Start all containers
+#   restart    stop → build → up (full rebuild cycle)
+#   logs [q]   Follow logs (press q to stop, or pass "q" to skip)
+#   url        Print the app URL
+
+set -euo pipefail
+
+COMPOSE_FILE="$(cd "$(dirname "$0")" && pwd)/docker-compose.yml"
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+APP_URL="http://localhost:8080"
+
+# ── colours ─────────────────────────────────────────────────────────────────
+bold=$'\e[1m'; reset=$'\e[0m'; green=$'\e[32m'; cyan=$'\e[36m'; yellow=$'\e[33m'; red=$'\e[31m'
+
+info()  { echo "${cyan}→${reset} $*"; }
+ok()    { echo "${green}✓${reset} $*"; }
+warn()  { echo "${yellow}!${reset} $*"; }
+die()   { echo "${red}✗${reset} $*" >&2; exit 1; }
+
+# ── commands ─────────────────────────────────────────────────────────────────
+
+cmd_stop() {
+  info "Stopping containers..."
+  docker compose -f "$COMPOSE_FILE" down --timeout 8
+
+  # Force-remove any sandbox containers that survived (they're not in compose)
+  local sandbox_ids
+  sandbox_ids=$(docker ps -aq --filter label=flowpilot=sandbox 2>/dev/null)
+  if [[ -n "$sandbox_ids" ]]; then
+    warn "Force-removing leftover sandbox containers..."
+    docker rm -f $sandbox_ids 2>/dev/null || true
+  fi
+
+  # Force-remove any compose containers still lingering
+  local compose_ids
+  compose_ids=$(docker ps -aq --filter label=com.docker.compose.project=flowpilot 2>/dev/null)
+  if [[ -n "$compose_ids" ]]; then
+    warn "Force-removing leftover compose containers..."
+    docker rm -f $compose_ids 2>/dev/null || true
+  fi
+
+  # Remove the sandbox network if it's stuck
+  if docker network inspect flowpilot_flowpilot_sandbox-net &>/dev/null; then
+    info "Removing sandbox network..."
+    docker network rm flowpilot_flowpilot_sandbox-net 2>/dev/null || true
+  fi
+
+  ok "Containers stopped."
+}
+
+cmd_build_fe() {
+  info "Building frontend..."
+  cd "$PROJECT_DIR/frontend"
+  npm run build
+  ok "Frontend built → dist/"
+}
+
+cmd_build() {
+  info "Building sandbox image..."
+  docker build -t flowpilot-sandbox:latest -f "$PROJECT_DIR/Dockerfile.sandbox" "$PROJECT_DIR"
+  ok "Sandbox image built."
+
+  info "Building backend image..."
+  docker compose -f "$COMPOSE_FILE" build backend
+  ok "Backend image built."
+}
+
+cmd_up() {
+  info "Starting containers..."
+  docker compose -f "$COMPOSE_FILE" up -d
+  # Wait briefly then confirm
+  sleep 2
+  if docker compose -f "$COMPOSE_FILE" ps | grep -q "Up\|running"; then
+    ok "All containers up."
+  else
+    warn "Some containers may have failed — run: docker compose ps"
+  fi
+  cmd_url
+}
+
+cmd_url() {
+  echo ""
+  echo "  ${bold}${green}App:${reset}  ${cyan}${APP_URL}${reset}"
+  echo ""
+}
+
+cmd_logs() {
+  local follow_flag="${1:-}"
+  if [[ "$follow_flag" == "q" ]]; then
+    info "Showing last 50 lines of logs (no follow)."
+    docker compose -f "$COMPOSE_FILE" logs --tail=50
+    return
+  fi
+
+  info "Following logs — press ${bold}q${reset} then Enter to stop."
+  # Run docker compose logs in a background process, kill it on 'q'
+  docker compose -f "$COMPOSE_FILE" logs -f --tail=50 &
+  LOG_PID=$!
+  trap "kill $LOG_PID 2>/dev/null; wait $LOG_PID 2>/dev/null; trap - INT TERM; exit 0" INT TERM
+  while IFS= read -r -n1 key; do
+    if [[ "$key" == "q" || "$key" == "Q" ]]; then
+      kill $LOG_PID 2>/dev/null
+      wait $LOG_PID 2>/dev/null
+      echo ""
+      ok "Log follow stopped."
+      break
+    fi
+  done
+  trap - INT TERM
+}
+
+cmd_restart() {
+  cmd_stop
+  echo ""
+  cmd_build_fe
+  echo ""
+  cmd_build
+  echo ""
+  cmd_up
+  echo ""
+  cmd_logs
+}
+
+# ── dispatch ─────────────────────────────────────────────────────────────────
+
+CMD="${1:-}"
+
+case "$CMD" in
+  stop)       cmd_stop ;;
+  build-fe)   cmd_build_fe ;;
+  build)      cmd_build ;;
+  up)         cmd_up ;;
+  restart)    cmd_restart ;;
+  logs)       cmd_logs "${2:-}" ;;
+  url)        cmd_url ;;
+  *)
+    echo ""
+    echo "  ${bold}FlowPilot dev utility${reset}"
+    echo ""
+    echo "  Usage: ${cyan}./dev <command>${reset}"
+    echo ""
+    echo "  Commands:"
+    echo "    ${bold}stop${reset}       Stop all running containers"
+    echo "    ${bold}build-fe${reset}   Rebuild the frontend only"
+    echo "    ${bold}build${reset}      Rebuild sandbox + backend Docker images"
+    echo "    ${bold}up${reset}         Start all containers"
+    echo "    ${bold}restart${reset}    Full cycle: stop → build-fe → build → up"
+    echo "    ${bold}logs${reset}       Follow logs (press q to stop)"
+    echo "    ${bold}logs q${reset}     Print last 50 lines without following"
+    echo "    ${bold}url${reset}        Print the app URL"
+    echo ""
+    [[ -n "$CMD" ]] && die "Unknown command: $CMD"
+    exit 0
+    ;;
+esac

@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { RunStep } from "@/lib/types";
+import { ACTIVE_RUN_STATUSES } from "@/lib/types";
 import { apiFetch } from "@/lib/api";
 import {
   requestNotificationPermission,
@@ -10,7 +11,6 @@ import {
 interface StartRunResponse {
   run_id: string;
   sandbox_id?: string;
-  novnc_url?: string;
   status: string;
 }
 
@@ -25,18 +25,26 @@ interface RunDetailResponse {
   current_step?: string;
   result?: Record<string, unknown>;
   error?: string;
-  novnc_url?: string;
   created_at: string;
   completed_at?: string;
 }
 
+interface WsMessage {
+  status?: string;
+  message?: string;
+  timestamp?: string;
+  steps?: RunStep[];
+  current_step?: string;
+  error?: string;
+}
+
 export function useRun() {
   const [runId, setRunId] = useState<string | null>(null);
+  const [sandboxId, setSandboxId] = useState<string | null>(null);
   const [status, setStatus] = useState<string>("idle");
   const [steps, setSteps] = useState<RunStep[]>([]);
   const [currentStep, setCurrentStep] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [novncUrl, setNovncUrl] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   const cleanup = useCallback(() => {
@@ -59,7 +67,7 @@ export function useRun() {
 
       ws.onmessage = (event) => {
         try {
-          const data = JSON.parse(event.data);
+          const data = JSON.parse(event.data) as WsMessage;
 
           // Handle initial state message from reconnection (has steps array)
           if (data.steps && Array.isArray(data.steps)) {
@@ -113,9 +121,10 @@ export function useRun() {
             stopTitleFlash();
             ws.close();
           } else {
-            setStatus(data.status || "running");
+            const resolvedStatus = data.status || "running";
+            setStatus(resolvedStatus);
             stopTitleFlash();
-            setCurrentStep(data.message || data.status);
+            setCurrentStep(data.message || resolvedStatus);
             // Mark previous running/connecting steps as done, append new one
             setSteps((prev) => {
               const settled = prev.map((s) =>
@@ -126,8 +135,8 @@ export function useRun() {
               return [
                 ...settled,
                 {
-                  status: data.status,
-                  message: data.message || data.status,
+                  status: resolvedStatus,
+                  message: data.message || resolvedStatus,
                   timestamp: data.timestamp || new Date().toISOString(),
                 },
               ];
@@ -147,7 +156,7 @@ export function useRun() {
   );
 
   const startRun = useCallback(
-    async (flowId: string, inputs: Record<string, string>) => {
+    async (flowId: string, inputs: Record<string, string>): Promise<string | null> => {
       setSteps([]);
       setError(null);
       setCurrentStep(null);
@@ -161,13 +170,16 @@ export function useRun() {
           method: "POST",
           body: JSON.stringify({ flow_id: flowId, inputs }),
         });
-        const id = data.run_id || "";
+        const id = data.run_id;
+        if (!id) throw new Error("Server did not return a run_id");
         setRunId(id);
-        setNovncUrl(data.novnc_url || null);
+        setSandboxId(data.sandbox_id || null);
         connectWs(id);
+        return id;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to start run");
         setStatus("failed");
+        return null;
       }
     },
     [connectWs],
@@ -184,12 +196,11 @@ export function useRun() {
         setSteps(data.steps || []);
         setStatus(data.status);
         setCurrentStep(data.current_step || null);
-        setNovncUrl(data.novnc_url || null);
+        setSandboxId(data.sandbox_id || null);
         if (data.error) setError(data.error);
 
         // Connect WS if run is still active
-        const activeStatuses = ["pending", "connecting", "running", "paused_for_auth"];
-        if (activeStatuses.includes(data.status)) {
+        if ((ACTIVE_RUN_STATUSES as readonly string[]).includes(data.status)) {
           connectWs(data.id);
         }
       } catch (err) {
@@ -227,17 +238,17 @@ export function useRun() {
     setStatus("idle");
     setSteps([]);
     setCurrentStep(null);
+    setSandboxId(null);
     setError(null);
-    setNovncUrl(null);
   }, [cleanup]);
 
   return {
     runId,
+    sandboxId,
     status,
     steps,
     currentStep,
     error,
-    novncUrl,
     startRun,
     reconnectToRun,
     resumeRun,

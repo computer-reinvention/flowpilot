@@ -3,10 +3,10 @@
 import os
 import re
 import uuid
-import secrets
 import logging
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from pathlib import Path
 
 import docker
 from docker.errors import NotFound, APIError
@@ -14,7 +14,6 @@ from docker.errors import NotFound, APIError
 logger = logging.getLogger(__name__)
 
 SANDBOX_IMAGE = "flowpilot-sandbox"
-NOVNC_CONTAINER_PORT = 6080
 CDP_CONTAINER_PORT = 9223  # socat: 0.0.0.0:9223 → 127.0.0.1:9222 (Chromium ignores --remote-debugging-address on ARM)
 SANDBOX_NETWORK = os.environ.get("SANDBOX_NETWORK", "flowpilot_sandbox-net")
 MAX_SANDBOXES_PER_USER = 2
@@ -25,11 +24,9 @@ PROFILE_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 class SandboxInfo:
     sandbox_id: str
     container_id: str
-    novnc_port: int
     cdp_port: int
     status: str
     user_id: str = ""
-    vnc_password: str = ""
 
 
 class SandboxManager:
@@ -59,7 +56,7 @@ class SandboxManager:
             user_id: ID of the user requesting the sandbox.
 
         Returns:
-            Dict with sandbox_id, novnc_url, cdp_url, and status.
+            Dict with sandbox_id, cdp_url, and status.
         """
         # H2: Per-user sandbox limit
         if user_id:
@@ -74,11 +71,7 @@ class SandboxManager:
 
         sandbox_id = str(uuid.uuid4())[:12]
 
-        # C4: Random VNC password per sandbox
-        vnc_password = secrets.token_urlsafe(12)
-
         environment = {
-            "VNC_PASSWORD": vnc_password,
             "DISPLAY": ":1",
         }
 
@@ -91,10 +84,7 @@ class SandboxManager:
                 image=SANDBOX_IMAGE,
                 name=f"flowpilot-{sandbox_id}",
                 detach=True,
-                ports={
-                    f"{NOVNC_CONTAINER_PORT}/tcp": None,  # random host port — noVNC only
-                    # C2: CDP port NOT published to host; accessed via sandbox-net
-                },
+                # CDP port is NOT published to the host; accessed via sandbox-net
                 volumes=volumes,
                 environment=environment,
                 network=SANDBOX_NETWORK,
@@ -103,7 +93,7 @@ class SandboxManager:
                     "sandbox-id": sandbox_id,
                     "user-id": user_id,
                 },
-                # H1: Resource limits
+                # Resource limits
                 mem_limit="1g",
                 cpu_quota=100000,
                 pids_limit=256,
@@ -113,12 +103,7 @@ class SandboxManager:
             logger.error("Failed to start sandbox container: %s", e)
             raise RuntimeError(f"Failed to start sandbox: {e}") from e
 
-        # Reload to get port mappings
-        container.reload()
-
-        novnc_port = self._get_host_port(container, NOVNC_CONTAINER_PORT)
-
-        # C2: CDP accessible via container name on the internal network
+        # CDP accessible via container name on the internal network
         cdp_host = f"flowpilot-{sandbox_id}"
         cdp_port = CDP_CONTAINER_PORT  # internal port, not published
 
@@ -130,7 +115,6 @@ class SandboxManager:
                     check=True,
                     capture_output=True,
                 )
-                # Fix ownership for non-root user
                 container.exec_run("chown -R sandboxuser:sandboxuser /tmp/chrome-profile")
                 logger.info("Restored profile from %s into sandbox %s", profile_path, sandbox_id)
             except subprocess.CalledProcessError as e:
@@ -138,12 +122,10 @@ class SandboxManager:
 
         info = SandboxInfo(
             sandbox_id=sandbox_id,
-            container_id=container.id,
-            novnc_port=novnc_port,
+            container_id=container.id or "",
             cdp_port=cdp_port,
             status="running",
             user_id=user_id,
-            vnc_password=vnc_password,
         )
         self._sandboxes[sandbox_id] = info
 
@@ -151,20 +133,13 @@ class SandboxManager:
         if user_id:
             self._user_sandboxes.setdefault(user_id, set()).add(sandbox_id)
 
-        novnc_url = self.get_novnc_url(sandbox_id)
         cdp_url = f"ws://{cdp_host}:{cdp_port}"
-
-        logger.info(
-            "Started sandbox %s (container %s) — noVNC %s, CDP %s",
-            sandbox_id, container.short_id, novnc_url, cdp_url,
-        )
+        logger.info("Started sandbox %s (container %s) — CDP %s", sandbox_id, container.short_id, cdp_url)
 
         return {
             "sandbox_id": sandbox_id,
-            "novnc_url": novnc_url,
             "cdp_url": cdp_url,
             "status": "running",
-            "vnc_password": vnc_password,
         }
 
     def stop(self, sandbox_id: str) -> None:
@@ -196,8 +171,6 @@ class SandboxManager:
 
         Returns the host path where the profile was saved.
         """
-        from pathlib import Path
-
         info = self._sandboxes.get(sandbox_id)
         if not info:
             raise ValueError(f"Unknown sandbox: {sandbox_id}")
@@ -220,19 +193,12 @@ class SandboxManager:
         logger.info("Saved profile '%s' from sandbox %s to %s", profile_name, sandbox_id, dest)
         return str(dest)
 
-    def get_novnc_url(self, sandbox_id: str) -> str:
-        """Return the noVNC URL for a sandbox."""
-        info = self._sandboxes.get(sandbox_id)
-        if not info:
-            raise ValueError(f"Unknown sandbox: {sandbox_id}")
-        return f"http://localhost:{info.novnc_port}/vnc.html?autoconnect=true&password={info.vnc_password}&resize=scale"
-
     def get_cdp_url(self, sandbox_id: str) -> str:
-        """Return the Chrome DevTools Protocol WebSocket URL."""
+        """Return the internal CDP URL for a sandbox (accessible via Docker network)."""
         info = self._sandboxes.get(sandbox_id)
         if not info:
             raise ValueError(f"Unknown sandbox: {sandbox_id}")
-        return f"ws://localhost:{info.cdp_port}"
+        return f"ws://flowpilot-{sandbox_id}:{info.cdp_port}"
 
     def is_running(self, sandbox_id: str) -> bool:
         """Check if a sandbox container is still running."""
@@ -268,9 +234,9 @@ class SandboxManager:
                         container.stop(timeout=5)
                         container.remove(force=True)
                         removed += 1
-                    except Exception as e:
+                    except (APIError, NotFound) as e:
                         logger.warning("Failed to remove orphan %s: %s", container.name, e)
-        except Exception as e:
+        except APIError as e:
             logger.error("Failed to list containers for orphan cleanup: %s", e)
         return removed
 
@@ -288,10 +254,3 @@ class SandboxManager:
         """H5: Validate profile name is safe (alphanumeric + hyphens + underscores)."""
         return bool(PROFILE_NAME_PATTERN.match(profile_name))
 
-    def _get_host_port(self, container, container_port: int) -> int:
-        """Extract the mapped host port from a container's port bindings."""
-        port_key = f"{container_port}/tcp"
-        ports = container.ports.get(port_key)
-        if not ports:
-            raise RuntimeError(f"No host port mapped for container port {container_port}")
-        return int(ports[0]["HostPort"])
