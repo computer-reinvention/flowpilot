@@ -35,7 +35,7 @@ interface AppSidebarProps {
 const NAV_ITEMS: { key: ActiveSection; label: string; icon: typeof Workflow }[] = [
   { key: "flows",    label: "Flows",    icon: Workflow },
   { key: "runs",     label: "Runs",     icon: History  },
-  { key: "sessions", label: "Sessions", icon: Globe    },
+  { key: "sessions", label: "Auth Sessions", icon: Globe    },
 ];
 
 export function AppSidebar({

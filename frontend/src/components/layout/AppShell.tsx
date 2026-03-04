@@ -15,13 +15,14 @@ interface AppShellProps {
   onLogout: () => void;
   userName?: string;
   activeRunId: string | null;
+  selectedFlowName?: string;
   children: ReactNode;
 }
 
 const SECTION_LABELS: Record<ActiveSection, string> = {
   flows: "Flows",
   runs: "Runs",
-  sessions: "Sessions",
+  sessions: "Auth Sessions",
   settings: "Settings",
 };
 
@@ -34,6 +35,7 @@ export function AppShell({
   onLogout,
   userName,
   activeRunId,
+  selectedFlowName,
   children,
 }: AppShellProps) {
   return (
@@ -52,7 +54,7 @@ export function AppShell({
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 !h-4" />
           <span className="text-sm font-medium">
-            {activeRunId ? "Run" : SECTION_LABELS[activeSection]}
+            {activeRunId ? "Run" : selectedFlowName ? `Flows / ${selectedFlowName}` : SECTION_LABELS[activeSection]}
           </span>
           <div className="ml-auto flex items-center gap-2">
             {activeRuns.map((run) => {

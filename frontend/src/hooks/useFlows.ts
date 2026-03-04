@@ -43,5 +43,25 @@ export function useFlows() {
     [],
   );
 
-  return { flows, loading, error, refetch: fetchFlows, createFlow };
+  const updateFlow = useCallback(
+    async (flowId: string, updates: Record<string, unknown>) => {
+      const updated = await apiFetch<Flow>(`/api/flows/${flowId}`, {
+        method: "PUT",
+        body: JSON.stringify(updates),
+      });
+      setFlows((prev) => prev.map((f) => (f.id === flowId ? updated : f)));
+      return updated;
+    },
+    [],
+  );
+
+  const deleteFlow = useCallback(
+    async (flowId: string) => {
+      await apiFetch(`/api/flows/${flowId}`, { method: "DELETE" });
+      setFlows((prev) => prev.filter((f) => f.id !== flowId));
+    },
+    [],
+  );
+
+  return { flows, loading, error, refetch: fetchFlows, createFlow, updateFlow, deleteFlow };
 }

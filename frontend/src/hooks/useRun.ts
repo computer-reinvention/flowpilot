@@ -38,6 +38,17 @@ interface WsMessage {
   error?: string;
 }
 
+/** Settle all running/connecting steps to "done" except the last one. */
+function settleSteps(steps: RunStep[]): RunStep[] {
+  if (steps.length === 0) return steps;
+  const last = steps.length - 1;
+  return steps.map((s, i) =>
+    i < last && (s.status === "running" || s.status === "connecting")
+      ? { ...s, status: "done" }
+      : s,
+  );
+}
+
 export function useRun() {
   const [runId, setRunId] = useState<string | null>(null);
   const [sandboxId, setSandboxId] = useState<string | null>(null);
@@ -71,7 +82,7 @@ export function useRun() {
 
           // Handle initial state message from reconnection (has steps array)
           if (data.steps && Array.isArray(data.steps)) {
-            setSteps(data.steps);
+            setSteps(settleSteps(data.steps));
             setStatus(data.status || "running");
             setCurrentStep(data.current_step || null);
             if (data.error) setError(data.error);
@@ -198,7 +209,7 @@ export function useRun() {
       try {
         const data = await apiFetch<RunDetailResponse>(`/api/runs/${id}`);
         setRunId(data.id);
-        setSteps(data.steps || []);
+        setSteps(settleSteps(data.steps || []));
         setStatus(data.status);
         setCurrentStep(data.current_step || null);
         setSandboxId(data.sandbox_id || null);

@@ -69,6 +69,17 @@ export interface Webhook {
   secret?: string; // only present on creation
 }
 
+export interface TriggerHook {
+  id: string;
+  flow_id: string;
+  user_id: string;
+  name: string;
+  token: string;
+  url: string;
+  created_at: string;
+  last_used_at?: string;
+}
+
 export interface Session {
   id: string;
   user_id: string;

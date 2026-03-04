@@ -10,7 +10,7 @@ import { SignupForm } from "@/components/auth/SignupForm";
 import { AppShell } from "@/components/layout/AppShell";
 import type { ActiveSection } from "@/components/layout/AppSidebar";
 import { FlowGrid } from "@/components/flows/FlowGrid";
-import { FlowForm } from "@/components/flows/FlowForm";
+import { FlowDetail } from "@/components/flows/FlowDetail";
 import { FlowRunner } from "@/components/flows/FlowRunner";
 import { CreateFlowForm } from "@/components/flows/CreateFlowForm";
 import { RunHistory } from "@/components/runs/RunHistory";
@@ -19,7 +19,7 @@ import { SettingsPanel } from "@/components/settings/SettingsPanel";
 import type { Flow, Run } from "@/lib/types";
 
 type AuthView = "login" | "signup";
-type FlowSubView = "grid" | "form" | "create";
+type FlowSubView = "grid" | "detail" | "create";
 
 export default function App() {
   const auth = useAuth();
@@ -86,7 +86,7 @@ export default function App() {
 
   function selectFlow(flow: Flow) {
     setSelectedFlow(flow);
-    setFlowSubView("form");
+    setFlowSubView("detail");
   }
 
   async function handleRunSubmit(values: Record<string, string>, profileId: string) {
@@ -120,7 +120,7 @@ export default function App() {
     setActiveRunId(null);
     runs.refetch();
     if (selectedFlow) {
-      setFlowSubView("form");
+      setFlowSubView("detail");
     } else {
       setFlowSubView("grid");
     }
@@ -193,17 +193,23 @@ export default function App() {
             </div>
           );
         }
-        if (flowSubView === "form" && selectedFlow) {
+        if (flowSubView === "detail" && selectedFlow) {
           return (
-            <div className="p-6 max-w-2xl mx-auto">
-              <FlowForm
-                flow={selectedFlow}
-                onSubmit={handleRunSubmit}
-                onBack={handleBack}
-                submitting={submitting}
-                defaultProfileId={auth.user?.id ?? ""}
-              />
-            </div>
+            <FlowDetail
+              flow={selectedFlow}
+              runs={runs.runs}
+              runsLoading={runs.loading}
+              runsError={runs.error}
+              onBack={handleBack}
+              onRunSubmit={handleRunSubmit}
+              onSelectRun={handleSelectRunObj}
+              onUpdateFlow={flows.updateFlow}
+              onDeleteFlow={flows.deleteFlow}
+              onFlowDeleted={handleBack}
+              submitting={submitting}
+              defaultProfileId={auth.user?.id ?? ""}
+              allFlows={flows.flows}
+            />
           );
         }
         return (
@@ -257,6 +263,7 @@ export default function App() {
       onLogout={auth.logout}
       userName={auth.user.name}
       activeRunId={activeRunId}
+      selectedFlowName={flowSubView === "detail" && selectedFlow ? selectedFlow.name : undefined}
     >
       {renderContent()}
     </AppShell>
