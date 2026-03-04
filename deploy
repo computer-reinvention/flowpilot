@@ -298,18 +298,20 @@ cmd_cleanup() {
     ok "Removed $CADDY_SITE_FILE"
   fi
 
-  # Remove import line from Caddyfile
-  if grep -q "import /etc/caddy/sites/\*.caddy" /etc/caddy/Caddyfile 2>/dev/null; then
-    sed -i '/import \/etc\/caddy\/sites\/\*\.caddy/d' /etc/caddy/Caddyfile
-    # Remove any resulting blank lines at the top
-    sed -i '/./,$!d' /etc/caddy/Caddyfile
-    ok "Removed FlowPilot import from Caddyfile"
+  # Restore a clean default Caddyfile
+  if [[ -f /etc/caddy/Caddyfile ]]; then
+    cat > /etc/caddy/Caddyfile << 'CADDYEOF'
+# Default Caddyfile — restored by FlowPilot cleanup
+:80 {
+    respond "OK" 200
+}
+CADDYEOF
+    ok "Restored default Caddyfile"
   fi
 
-  # Reload Caddy if running
-  if systemctl is-active --quiet caddy 2>/dev/null; then
-    systemctl reload caddy
-    ok "Caddy reloaded"
+  # Restart Caddy with the clean config (reload fails on broken configs)
+  if systemctl is-enabled --quiet caddy 2>/dev/null; then
+    systemctl restart caddy 2>/dev/null && ok "Caddy restarted" || warn "Caddy failed to restart"
   fi
 
   # Remove dangling Docker images
