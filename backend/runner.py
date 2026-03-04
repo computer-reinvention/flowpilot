@@ -258,8 +258,9 @@ class FlowRunner:
 
                 asyncio.create_task(_send())
 
-            # All default browser tools remain available — reflexes are additive.
-            tools = Tools()
+            # Exclude file I/O — the agent has no reason to write todo files or
+            # read local files; those waste steps and produce no useful output.
+            tools = Tools(exclude_actions=["write_file", "read_file", "replace_file"])
 
             @tools.action(
                 description=(
@@ -390,10 +391,13 @@ class FlowRunner:
                     "1. AUTH WALLS: When you encounter any login page, auth wall, or CAPTCHA, you MUST "
                     "call request_human_help(reason, category). Never call done() to report failure. "
                     "The human will handle it and resume you — this is always the correct action.\n"
-                    "2. SAVE REFLEXES: After completing each distinct phase manually (form filled, "
+                    "2. AUTOCOMPLETE: When you type into a location/search field and suggestions appear, "
+                    "click the FIRST suggestion immediately. Do not retry with different search terms "
+                    "and do not navigate away to search for the address elsewhere.\n"
+                    "3. SAVE REFLEXES: After completing each distinct phase manually (form filled, "
                     "ride selected, booking confirmed, etc.), you MUST immediately call save_reflex() "
                     "with a complete Playwright script reproducing that phase. Do not skip this.\n"
-                    "3. USE REFLEXES: At the start of each phase, call search_reflexes() to check "
+                    "4. USE REFLEXES: At the start of each phase, call search_reflexes() to check "
                     "for an existing solution before doing it manually."
                 ),
             )
