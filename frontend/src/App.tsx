@@ -137,24 +137,22 @@ export default function App() {
   function handleSelectRun(runId: string) {
     setActiveRunId(runId);
     run.reconnectToRun(runId);
+    setActiveSection("flows");
   }
 
   function handleSelectRunObj(r: Run) {
     setActiveRunId(r.id);
     run.reconnectToRun(r.id);
+    setActiveSection("flows");
   }
 
   function handleNavigate(section: ActiveSection) {
     setActiveSection(section);
-    // Clear active run view when navigating to a section
-    if (activeRunId && !run.runId) {
-      setActiveRunId(null);
-    }
   }
 
   // --- Determine what to render ---
 
-  const isViewingRun = activeRunId !== null && run.status !== "idle";
+  const isViewingRun = activeSection === "flows" && activeRunId !== null && run.status !== "idle";
 
   function renderContent() {
     // If viewing a run, show FlowRunner

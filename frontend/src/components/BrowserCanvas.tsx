@@ -343,7 +343,7 @@ export function BrowserCanvas({ sandboxId, isPaused, className }: BrowserCanvasP
           width={CANVAS_W}
           height={CANVAS_H}
           className={cn(
-            "w-full h-full block focus:outline-none cursor-none",
+            "w-full h-full block focus:outline-none cursor-crosshair",
             isPaused && "ring-2 ring-amber-400 ring-inset",
           )}
           tabIndex={0}
