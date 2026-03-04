@@ -67,14 +67,19 @@ _install_caddy() {
 _configure_caddy() {
   local domain="$1"
 
-  # Use a drop-in file so we don't clobber other sites already in /etc/caddy/Caddyfile
   mkdir -p /etc/caddy/sites
 
-  # Add the import directive to the main Caddyfile once
+  # Caddy requires `import` at the top level. The default Caddyfile on Debian/Ubuntu
+  # typically starts with a comment block or a bare `:80` site. We prepend the import
+  # line at the very top so it's parsed before any site blocks.
   if ! grep -q "import /etc/caddy/sites" /etc/caddy/Caddyfile 2>/dev/null; then
-    echo "" >> /etc/caddy/Caddyfile
-    echo "import /etc/caddy/sites/*.caddy" >> /etc/caddy/Caddyfile
-    info "Added 'import /etc/caddy/sites/*.caddy' to Caddyfile."
+    local tmp
+    tmp=$(mktemp)
+    echo "import /etc/caddy/sites/*.caddy" > "$tmp"
+    echo "" >> "$tmp"
+    cat /etc/caddy/Caddyfile >> "$tmp"
+    mv "$tmp" /etc/caddy/Caddyfile
+    info "Added 'import /etc/caddy/sites/*.caddy' to top of Caddyfile."
   fi
 
   cat > "$CADDY_SITE_FILE" << EOF
@@ -91,6 +96,13 @@ ${domain} {
     }
 }
 EOF
+
+  # Validate before restarting — show the error if it fails
+  if ! caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile 2>/dev/null; then
+    warn "Caddy config validation failed. Check /etc/caddy/Caddyfile"
+    warn "You may need to remove the default :80 site block that ships with Caddy."
+    return 1
+  fi
 
   systemctl enable caddy 2>/dev/null || true
   if systemctl is-active --quiet caddy; then
@@ -266,6 +278,61 @@ cmd_status() {
   echo ""
 }
 
+cmd_cleanup() {
+  require_root
+  header "FlowPilot — Cleanup"
+
+  # Stop all containers
+  cmd_stop
+  echo ""
+
+  # Remove Caddy site config
+  if [[ -f "$CADDY_SITE_FILE" ]]; then
+    rm -f "$CADDY_SITE_FILE"
+    ok "Removed $CADDY_SITE_FILE"
+  fi
+
+  # Remove import line from Caddyfile
+  if grep -q "import /etc/caddy/sites/\*.caddy" /etc/caddy/Caddyfile 2>/dev/null; then
+    sed -i '/import \/etc\/caddy\/sites\/\*\.caddy/d' /etc/caddy/Caddyfile
+    # Remove any resulting blank lines at the top
+    sed -i '/./,$!d' /etc/caddy/Caddyfile
+    ok "Removed FlowPilot import from Caddyfile"
+  fi
+
+  # Reload Caddy if running
+  if systemctl is-active --quiet caddy 2>/dev/null; then
+    systemctl reload caddy
+    ok "Caddy reloaded"
+  fi
+
+  # Remove dangling Docker images
+  local dangling
+  dangling=$(docker images -q --filter dangling=true 2>/dev/null || true)
+  if [[ -n "$dangling" ]]; then
+    info "Removing dangling Docker images..."
+    docker image prune -f >/dev/null 2>&1
+    ok "Dangling images removed"
+  fi
+
+  # Prompt before removing .env and profiles
+  echo ""
+  read -rp "  Delete .env and profiles directory? This is irreversible. [y/N]: " confirm
+  if [[ "$confirm" =~ ^[Yy]$ ]]; then
+    rm -f "$ENV_FILE"
+    ok "Removed $ENV_FILE"
+    if [[ -d "$PROJECT_DIR/profiles" ]]; then
+      rm -rf "$PROJECT_DIR/profiles"
+      ok "Removed $PROJECT_DIR/profiles"
+    fi
+  else
+    info "Kept .env and profiles."
+  fi
+
+  echo ""
+  ok "Cleanup complete."
+}
+
 # ── dispatch ──────────────────────────────────────────────────────────────────
 
 CMD="${1:-}"
@@ -278,6 +345,7 @@ case "$CMD" in
   restart)  cmd_restart ;;
   logs)     cmd_logs "${2:-}" ;;
   status)   cmd_status ;;
+  cleanup)  cmd_cleanup ;;
   *)
     echo ""
     echo "  ${bold}FlowPilot deploy utility${reset}"
@@ -293,6 +361,7 @@ case "$CMD" in
     echo "    ${bold}logs${reset}       Follow logs (press q to stop)"
     echo "    ${bold}logs q${reset}     Print last 50 lines without following"
     echo "    ${bold}status${reset}     Container and Caddy status"
+    echo "    ${bold}cleanup${reset}    Stop everything, remove Caddy config + dangling images"
     echo ""
     [[ -n "$CMD" ]] && die "Unknown command: $CMD"
     exit 0
