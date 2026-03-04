@@ -56,26 +56,32 @@ class RunStatus(str, Enum):
 
 
 def _get_llm() -> ChatGoogle | ChatAnthropic | ChatOpenAI:
-    provider = os.environ.get("LLM_PROVIDER", "gemini").lower()
+    provider = (os.environ.get("LLM_PROVIDER") or "gemini").strip().lower()
     if provider == "gemini":
         api_key = os.environ.get("GOOGLE_API_KEY")
         if not api_key:
-            raise ValueError("GOOGLE_API_KEY required when LLM_PROVIDER=gemini")
-        # Fallback order: flash → pro (most capable). flash-lite was too weak to
-        # follow multi-step tool-use instructions reliably.
-        return ChatGoogle(model=os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview"), api_key=api_key)
+            raise ValueError("GOOGLE_API_KEY env var is required when LLM_PROVIDER=gemini")
+        model = os.environ.get("GEMINI_MODEL") or "gemini-3-flash-preview"
+        logger.info("Using Gemini model: %s", model)
+        return ChatGoogle(model=model, api_key=api_key)
     elif provider in ("claude", "anthropic"):
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
-            raise ValueError("ANTHROPIC_API_KEY required when LLM_PROVIDER=claude")
-        return ChatAnthropic(model=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"), api_key=api_key)
+            raise ValueError("ANTHROPIC_API_KEY env var is required when LLM_PROVIDER=claude")
+        model = os.environ.get("ANTHROPIC_MODEL") or "claude-sonnet-4-20250514"
+        logger.info("Using Anthropic model: %s", model)
+        return ChatAnthropic(model=model, api_key=api_key)
     elif provider == "openai":
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
-            raise ValueError("OPENAI_API_KEY required when LLM_PROVIDER=openai")
-        return ChatOpenAI(model=os.environ.get("OPENAI_MODEL", "gpt-4o"), api_key=api_key)
+            raise ValueError("OPENAI_API_KEY env var is required when LLM_PROVIDER=openai")
+        model = os.environ.get("OPENAI_MODEL") or "gpt-4o"
+        logger.info("Using OpenAI model: %s", model)
+        return ChatOpenAI(model=model, api_key=api_key)
     else:
-        raise ValueError(f"Unknown LLM_PROVIDER: {provider}")
+        raise ValueError(
+            f"Unknown LLM_PROVIDER='{provider}'. Valid options: gemini, claude, anthropic, openai"
+        )
 
 
 def _relevance_score(use_case: str, reflex: dict) -> float:

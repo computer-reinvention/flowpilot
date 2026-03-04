@@ -74,32 +74,66 @@ async def handle(
             browser_ws_url,
             additional_headers={"Host": "localhost"},
         ) as cdp:
-            # Attach to the page as a flat session — independent of Playwright's session.
-            result = await cdp.send_raw(
-                "Target.attachToTarget",
-                {"targetId": target_id, "flatten": True},
-            )
-            session_id = result["sessionId"]
+            # Mutable state: which target/session the screencast + input are attached to.
+            # browser-use may open new tabs; we track the active one and re-attach.
+            active = {"target_id": target_id, "session_id": ""}
 
-            # Enable Page domain and bring the tab to front for input focus.
-            await cdp.send_raw("Page.enable", session_id=session_id)
-            await cdp.send_raw("Page.bringToFront", session_id=session_id)
+            async def _attach_to_target(tid: str) -> str:
+                """Attach to a page target, enable screencast, return session_id."""
+                result = await cdp.send_raw(
+                    "Target.attachToTarget",
+                    {"targetId": tid, "flatten": True},
+                )
+                sid = result["sessionId"]
+                await cdp.send_raw("Page.enable", session_id=sid)
+                await cdp.send_raw("Page.bringToFront", session_id=sid)
+                await cdp.send_raw(
+                    "Page.startScreencast",
+                    {"format": "jpeg", "quality": JPEG_QUALITY, "everyNthFrame": 1},
+                    session_id=sid,
+                )
+                active["target_id"] = tid
+                active["session_id"] = sid
+                logger.info("Screencast attached to target %s (session %s)", tid, sid)
 
-            # Send the current URL immediately so the frontend nav bar shows it.
-            nav = await cdp.send_raw("Page.getNavigationHistory", session_id=session_id)
-            entries = nav.get("entries", [])
-            idx = nav.get("currentIndex", -1)
-            if 0 <= idx < len(entries):
-                url = entries[idx].get("url", "")
-                if url and not url.startswith("about:"):
-                    try:
-                        await websocket.send_json({"type": "nav", "url": url})
-                    except Exception:
-                        pass
+                # Send current URL
+                try:
+                    nav = await cdp.send_raw("Page.getNavigationHistory", session_id=sid)
+                    entries = nav.get("entries", [])
+                    idx = nav.get("currentIndex", -1)
+                    if 0 <= idx < len(entries):
+                        url = entries[idx].get("url", "")
+                        if url and not url.startswith("about:"):
+                            await websocket.send_json({"type": "nav", "url": url})
+                except Exception:
+                    pass
+
+                return sid
+
+            # Initial attach
+            await _attach_to_target(target_id)
+
+            # -- Target tracking: follow browser-use when it opens new tabs --
+            async def on_target_created(params: dict, _session_id: str | None) -> None:
+                info = params.get("targetInfo", {})
+                if info.get("type") != "page":
+                    return
+                new_tid = info.get("targetId", "")
+                if not new_tid or new_tid == active["target_id"]:
+                    return
+                logger.info("New page target detected: %s — re-attaching screencast", new_tid)
+                try:
+                    await _attach_to_target(new_tid)
+                except Exception as exc:
+                    logger.warning("Failed to attach to new target %s: %s", new_tid, exc)
+
+            # Discover targets so we get targetCreated events
+            await cdp.send_raw("Target.setDiscoverTargets", {"discover": True})
+            cdp._event_registry.register("Target.targetCreated", on_target_created)
 
             # -- Screencast frame handler --
             async def on_screencast_frame(params: dict, frame_session_id: str | None) -> None:
-                if frame_session_id != session_id:
+                if frame_session_id != active["session_id"]:
                     return
                 screencast_sid = params["sessionId"]
                 try:
@@ -111,21 +145,17 @@ async def handle(
                     })
                 except Exception:
                     return
-                # ACK must be fired as a separate task — NOT awaited here.
-                # cdp._handle_messages runs the event loop that calls this handler;
-                # awaiting cdp.send_raw() inside the handler creates a deadlock where
-                # _handle_messages is blocked waiting for the ACK response it can't read.
                 asyncio.create_task(
                     cdp.send_raw(
                         "Page.screencastFrameAck",
                         {"sessionId": screencast_sid},
-                        session_id=session_id,
+                        session_id=active["session_id"],
                     )
                 )
 
             # -- Navigation handler --
             async def on_frame_navigated(params: dict, frame_session_id: str | None) -> None:
-                if frame_session_id != session_id:
+                if frame_session_id != active["session_id"]:
                     return
                 url = params.get("frame", {}).get("url", "")
                 if url and not url.startswith("about:"):
@@ -137,13 +167,6 @@ async def handle(
             cdp._event_registry.register("Page.screencastFrame", on_screencast_frame)
             cdp._event_registry.register("Page.frameNavigated", on_frame_navigated)
 
-            # Start screencast — no maxWidth/maxHeight, native viewport resolution.
-            await cdp.send_raw(
-                "Page.startScreencast",
-                {"format": "jpeg", "quality": JPEG_QUALITY, "everyNthFrame": 1},
-                session_id=session_id,
-            )
-
             # -- Input relay loop --
             while True:
                 try:
@@ -154,6 +177,7 @@ async def handle(
                     continue
 
                 msg_type = data.get("type")
+                sid = active["session_id"]
 
                 if msg_type == "mouse":
                     logger.debug(
@@ -175,7 +199,7 @@ async def handle(
                                 "deltaY": data.get("deltaY", 0.0),
                                 "pointerType": "mouse",
                             },
-                            session_id=session_id,
+                            session_id=sid,
                         )
                     except Exception:
                         pass
@@ -197,7 +221,7 @@ async def handle(
                                 "isKeypad": data.get("isKeypad", False),
                                 "isSystemKey": False,
                             },
-                            session_id=session_id,
+                            session_id=sid,
                         )
                     except Exception:
                         pass
