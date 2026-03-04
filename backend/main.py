@@ -1,15 +1,16 @@
 """FastAPI backend for browser automation platform."""
 
-import os
-import json
-import uuid
 import asyncio
+import json
 import logging
-from pathlib import Path
+import os
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Awaitable, Callable
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -20,6 +21,7 @@ from .runner import FlowRunner, RunStatus
 from .config import PROFILES_DIR
 from . import auth
 from . import db as platform_db
+from . import cdp_proxy
 from .models import Flow, Run, Session
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -45,7 +47,9 @@ flow_runner = FlowRunner()
 
 _ws_connections: dict[str, list[WebSocket]] = {}  # run_id -> [websocket, ...]
 _run_tasks: dict[str, asyncio.Task] = {}  # run_id -> background task
-_run_agents: dict[str, tuple] = {}  # run_id -> (agent, browser, flow)
+_run_agents: dict[str, tuple] = {}  # run_id -> (agent, browser, flow, paused_ref)
+
+ACTIVE_RUN_STATUSES: frozenset[str] = frozenset({"pending", "connecting", "running", "paused_for_auth"})
 
 
 # ---------------------------------------------------------------------------
@@ -156,7 +160,7 @@ class SessionCaptureRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 @app.get("/health")
-async def health():
+async def health() -> dict:
     return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
@@ -165,7 +169,7 @@ async def health():
 # ---------------------------------------------------------------------------
 
 @app.post("/api/auth/signup")
-async def signup(req: SignupRequest):
+async def signup(req: SignupRequest) -> dict:
     if not req.email or not req.password or not req.name:
         raise HTTPException(status_code=400, detail="email, password, and name are required")
     if len(req.password) < 6:
@@ -179,7 +183,7 @@ async def signup(req: SignupRequest):
 
 
 @app.post("/api/auth/login")
-async def login(req: LoginRequest):
+async def login(req: LoginRequest) -> dict:
     user = await auth.authenticate(req.email, req.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password")
@@ -188,7 +192,7 @@ async def login(req: LoginRequest):
 
 
 @app.get("/api/auth/me")
-async def auth_me(user: dict = Depends(auth.get_current_user)):
+async def auth_me(user: dict = Depends(auth.get_current_user)) -> dict:
     return {"user": user}
 
 
@@ -197,7 +201,7 @@ async def auth_me(user: dict = Depends(auth.get_current_user)):
 # ---------------------------------------------------------------------------
 
 @app.post("/api/sandbox/start")
-async def sandbox_start(req: SandboxStartRequest, user: dict = Depends(auth.get_current_user)):
+async def sandbox_start(req: SandboxStartRequest, user: dict = Depends(auth.get_current_user)) -> dict:
     user_id = user["id"]
     profile_name = req.profile_name or "default"
     if not SandboxManager.validate_profile_name(profile_name):
@@ -220,7 +224,7 @@ async def sandbox_start(req: SandboxStartRequest, user: dict = Depends(auth.get_
 
 
 @app.post("/api/sandbox/stop")
-async def sandbox_stop(req: SandboxStopRequest, user: dict = Depends(auth.get_current_user)):
+async def sandbox_stop(req: SandboxStopRequest, user: dict = Depends(auth.get_current_user)) -> dict:
     user_id = user["id"]
     try:
         owner = sandbox_mgr.get_sandbox_owner(req.sandbox_id)
@@ -242,7 +246,7 @@ async def sandbox_stop(req: SandboxStopRequest, user: dict = Depends(auth.get_cu
 # ---------------------------------------------------------------------------
 
 @app.post("/api/flows")
-async def flow_create(req: FlowCreateRequest, user: dict = Depends(auth.get_current_user)):
+async def flow_create(req: FlowCreateRequest, user: dict = Depends(auth.get_current_user)) -> dict:
     flow = Flow(
         id=str(uuid.uuid4())[:12],
         name=req.name,
@@ -258,7 +262,7 @@ async def flow_create(req: FlowCreateRequest, user: dict = Depends(auth.get_curr
 
 
 @app.get("/api/flows")
-async def flow_list():
+async def flow_list() -> list[dict]:
     rows = await platform_db.list_flows()
     for r in rows:
         r["inputs"] = json.loads(r.get("inputs", "[]"))
@@ -266,7 +270,7 @@ async def flow_list():
 
 
 @app.get("/api/flows/{flow_id}")
-async def flow_get(flow_id: str):
+async def flow_get(flow_id: str) -> dict:
     flow = await platform_db.get_flow(flow_id)
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
@@ -274,7 +278,7 @@ async def flow_get(flow_id: str):
 
 
 @app.put("/api/flows/{flow_id}")
-async def flow_update(flow_id: str, req: FlowUpdateRequest, user: dict = Depends(auth.get_current_user)):
+async def flow_update(flow_id: str, req: FlowUpdateRequest, user: dict = Depends(auth.get_current_user)) -> dict:
     updates = req.model_dump(exclude_none=True)
     if "inputs" in updates:
         updates["inputs"] = json.dumps(updates["inputs"])
@@ -285,11 +289,12 @@ async def flow_update(flow_id: str, req: FlowUpdateRequest, user: dict = Depends
 
 
 @app.delete("/api/flows/{flow_id}")
-async def flow_delete(flow_id: str, user: dict = Depends(auth.get_current_user)):
+async def flow_delete(flow_id: str, user: dict = Depends(auth.get_current_user)) -> dict:
     deleted = await platform_db.delete_flow(flow_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Flow not found")
     return {"status": "deleted"}
+
 
 
 def _flow_to_dict(flow: Flow) -> dict:
@@ -311,7 +316,7 @@ def _flow_to_dict(flow: Flow) -> dict:
 # ---------------------------------------------------------------------------
 
 @app.post("/api/sessions/capture")
-async def session_capture(req: SessionCaptureRequest, user: dict = Depends(auth.get_current_user)):
+async def session_capture(req: SessionCaptureRequest, user: dict = Depends(auth.get_current_user)) -> dict:
     session = Session(
         id=str(uuid.uuid4())[:12],
         user_id=user["id"],
@@ -327,12 +332,12 @@ async def session_capture(req: SessionCaptureRequest, user: dict = Depends(auth.
 
 
 @app.get("/api/sessions")
-async def session_list(user: dict = Depends(auth.get_current_user)):
+async def session_list(user: dict = Depends(auth.get_current_user)) -> list[dict]:
     return await platform_db.list_sessions(user["id"])
 
 
 @app.delete("/api/sessions/{session_id}")
-async def session_delete(session_id: str, user: dict = Depends(auth.get_current_user)):
+async def session_delete(session_id: str, user: dict = Depends(auth.get_current_user)) -> dict:
     deleted = await platform_db.delete_session(session_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -344,7 +349,7 @@ async def session_delete(session_id: str, user: dict = Depends(auth.get_current_
 # ---------------------------------------------------------------------------
 
 @app.post("/api/runs")
-async def run_start(req: RunStartRequest, user: dict = Depends(auth.get_current_user)):
+async def run_start(req: RunStartRequest, user: dict = Depends(auth.get_current_user)) -> dict:
     user_id = user["id"]
 
     flow = await platform_db.get_flow(req.flow_id)
@@ -396,7 +401,7 @@ async def run_start(req: RunStartRequest, user: dict = Depends(auth.get_current_
                 "localStorage": [{"name": k, "value": v} for k, v in local_storage.items()],
             })
 
-    async def on_progress(status: RunStatus, message: str):
+    async def on_progress(status: RunStatus, message: str) -> None:
         steps = json.loads((await platform_db.get_run(run_id)).steps) if await platform_db.get_run(run_id) else []
         steps.append({"status": status.value, "message": message, "timestamp": datetime.now(timezone.utc).isoformat()})
         await platform_db.update_run(run_id, {
@@ -429,7 +434,6 @@ async def run_start(req: RunStartRequest, user: dict = Depends(auth.get_current_
     return {
         "run_id": run_id,
         "sandbox_id": sandbox_id,
-        "novnc_url": sandbox_result.get("novnc_url"),
         "status": "connecting",
     }
 
@@ -442,12 +446,12 @@ async def _execute_run(
     sandbox_id: str,
     cdp_url: str,
     storage_state: dict | None,
-    progress_callback,
-):
+    progress_callback: Callable[[RunStatus, str], Awaitable[None]],
+) -> None:
     """Background task that runs the flow."""
 
-    async def _agent_ready(agent, browser, flow_obj):
-        _run_agents[run_id] = (agent, browser, flow_obj)
+    async def _agent_ready(agent, browser, flow_obj, paused_ref) -> None:
+        _run_agents[run_id] = (agent, browser, flow_obj, paused_ref)
 
     try:
         result = await flow_runner.run_flow(
@@ -500,32 +504,15 @@ async def _execute_run(
 
 
 @app.get("/api/runs")
-async def run_list(user: dict = Depends(auth.get_current_user)):
-    runs = await platform_db.list_runs(user["id"])
-    active_statuses = {"pending", "connecting", "running", "paused_for_auth"}
-    for r in runs:
-        if r.get("status") in active_statuses and r.get("sandbox_id"):
-            try:
-                r["novnc_url"] = sandbox_mgr.get_novnc_url(r["sandbox_id"])
-            except Exception:
-                r["novnc_url"] = None
-        else:
-            r["novnc_url"] = None
-    return runs
+async def run_list(user: dict = Depends(auth.get_current_user)) -> list[dict]:
+    return await platform_db.list_runs(user["id"])
 
 
 @app.get("/api/runs/{run_id}")
-async def run_get(run_id: str, user: dict = Depends(auth.get_current_user)):
+async def run_get(run_id: str, user: dict = Depends(auth.get_current_user)) -> dict:
     run = await platform_db.get_run(run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
-    novnc_url = None
-    active_statuses = {"pending", "connecting", "running", "paused_for_auth"}
-    if run.status in active_statuses and run.sandbox_id:
-        try:
-            novnc_url = sandbox_mgr.get_novnc_url(run.sandbox_id)
-        except Exception:
-            pass
     return {
         "id": run.id,
         "flow_id": run.flow_id,
@@ -537,14 +524,13 @@ async def run_get(run_id: str, user: dict = Depends(auth.get_current_user)):
         "current_step": run.current_step,
         "result": json.loads(run.result) if run.result else None,
         "error": run.error,
-        "novnc_url": novnc_url,
         "created_at": run.created_at,
         "completed_at": run.completed_at,
     }
 
 
 @app.post("/api/runs/{run_id}/cancel")
-async def run_cancel(run_id: str, user: dict = Depends(auth.get_current_user)):
+async def run_cancel(run_id: str, user: dict = Depends(auth.get_current_user)) -> dict:
     run = await platform_db.get_run(run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -562,7 +548,7 @@ async def run_cancel(run_id: str, user: dict = Depends(auth.get_current_user)):
     if run.sandbox_id:
         try:
             sandbox_mgr.stop(run.sandbox_id)
-        except (ValueError, Exception) as e:
+        except Exception as e:
             logger.warning("Failed to stop sandbox %s during cancel: %s", run.sandbox_id, e)
 
     # Update DB and broadcast
@@ -581,7 +567,7 @@ async def run_cancel(run_id: str, user: dict = Depends(auth.get_current_user)):
 
 
 @app.post("/api/runs/{run_id}/resume")
-async def run_resume(run_id: str, user: dict = Depends(auth.get_current_user)):
+async def run_resume(run_id: str, user: dict = Depends(auth.get_current_user)) -> dict:
     run = await platform_db.get_run(run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -594,7 +580,7 @@ async def run_resume(run_id: str, user: dict = Depends(auth.get_current_user)):
     if not agent_info:
         raise HTTPException(status_code=404, detail="Agent not found for this run — it may have already finished")
 
-    agent, browser, flow = agent_info
+    agent, browser, flow, paused_ref = agent_info
 
     # Capture cookies from the browser and persist as a session
     try:
@@ -613,7 +599,7 @@ async def run_resume(run_id: str, user: dict = Depends(auth.get_current_user)):
     except Exception as e:
         logger.warning("Failed to capture storage state on resume (run %s): %s", run_id, e)
 
-    # Resume the agent
+    paused_ref[0] = False
     agent.resume()
 
     # Update DB and broadcast
@@ -629,7 +615,7 @@ async def run_resume(run_id: str, user: dict = Depends(auth.get_current_user)):
 
 
 @app.post("/api/runs/{run_id}/pause")
-async def run_pause(run_id: str, user: dict = Depends(auth.get_current_user)):
+async def run_pause(run_id: str, user: dict = Depends(auth.get_current_user)) -> dict:
     """Manual pause — user can trigger pause from the UI as a fallback."""
     run = await platform_db.get_run(run_id)
     if not run:
@@ -662,7 +648,7 @@ async def run_pause(run_id: str, user: dict = Depends(auth.get_current_user)):
 # ---------------------------------------------------------------------------
 
 @app.websocket("/ws/runs/{run_id}")
-async def ws_run(websocket: WebSocket, run_id: str):
+async def ws_run(websocket: WebSocket, run_id: str) -> None:
     await websocket.accept()
 
     if run_id not in _ws_connections:
@@ -698,7 +684,17 @@ async def ws_run(websocket: WebSocket, run_id: str):
                 del _ws_connections[run_id]
 
 
-async def _broadcast_run_progress(run_id: str, data: dict):
+@app.websocket("/ws/browser/{sandbox_id}")
+async def ws_browser(
+    websocket: WebSocket,
+    sandbox_id: str,
+    token: str = Query(default=""),
+) -> None:
+    """CDP screencast proxy — streams browser frames and forwards input events."""
+    await cdp_proxy.handle(websocket, sandbox_id, sandbox_mgr, token=token)
+
+
+async def _broadcast_run_progress(run_id: str, data: dict) -> None:
     clients = _ws_connections.get(run_id, [])
     dead = []
     for ws in clients:
@@ -718,7 +714,7 @@ async def _broadcast_run_progress(run_id: str, data: dict):
 # ---------------------------------------------------------------------------
 
 @app.post("/api/profile/save")
-async def profile_save(req: ProfileSaveRequest, user: dict = Depends(auth.get_current_user)):
+async def profile_save(req: ProfileSaveRequest, user: dict = Depends(auth.get_current_user)) -> dict:
     user_id = user["id"]
     if not SandboxManager.validate_profile_name(req.profile_name):
         raise HTTPException(status_code=400, detail="Invalid profile name.")
@@ -738,7 +734,7 @@ async def profile_save(req: ProfileSaveRequest, user: dict = Depends(auth.get_cu
 
 
 @app.get("/api/profile/status")
-async def profile_status(profile_name: str = "default", user: dict = Depends(auth.get_current_user)):
+async def profile_status(profile_name: str = "default", user: dict = Depends(auth.get_current_user)) -> dict:
     user_id = user["id"]
     info = profile_mgr.get_profile_info(user_id, profile_name)
     return {

@@ -1,8 +1,8 @@
-"""Database layer — SQLite via aiosqlite for flows, runs, sessions."""
+"""Database layer — SQLite via aiosqlite for flows, runs, sessions, reflexes."""
 
 import json
 import logging
-from datetime import datetime, timezone
+import uuid
 
 import aiosqlite
 
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 # Init
 # ---------------------------------------------------------------------------
 
-async def init_db():
+async def init_db() -> None:
     """Create all tables if they don't exist."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(str(DB_PATH)) as db:
@@ -38,7 +38,10 @@ async def init_db():
                 inputs TEXT NOT NULL DEFAULT '[]',
                 icon TEXT,
                 created_by TEXT NOT NULL,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                script TEXT,
+                script_version INTEGER NOT NULL DEFAULT 0,
+                scripts TEXT NOT NULL DEFAULT '[]'
             )
         """)
         await db.execute("""
@@ -71,11 +74,35 @@ async def init_db():
                 captured_at TEXT NOT NULL
             )
         """)
-        # Migration: add profile_name column if missing (existing DBs)
-        try:
-            await db.execute("ALTER TABLE sessions ADD COLUMN profile_name TEXT NOT NULL DEFAULT 'default'")
-        except Exception:
-            pass  # column already exists
+        # Reflexes: global, domain-scoped Playwright snippets the agent builds over time.
+        # Named within a domain (e.g., domain="uber.com", name="fill_booking_form").
+        # The agent discovers them via search_reflexes(), fires them via run_reflex(),
+        # and writes/updates them via save_reflex().
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS reflexes (
+                id TEXT PRIMARY KEY,
+                domain TEXT NOT NULL,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                script TEXT NOT NULL,
+                pause_after TEXT,
+                tags TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(domain, name)
+            )
+        """)
+        # Migrations: add columns that may be missing in existing DBs
+        for migration in [
+            "ALTER TABLE sessions ADD COLUMN profile_name TEXT NOT NULL DEFAULT 'default'",
+            "ALTER TABLE flows ADD COLUMN script TEXT",
+            "ALTER TABLE flows ADD COLUMN script_version INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE flows ADD COLUMN scripts TEXT NOT NULL DEFAULT '[]'",
+        ]:
+            try:
+                await db.execute(migration)
+            except aiosqlite.OperationalError:
+                pass  # column already exists
         await db.commit()
     logger.info("Platform DB initialized at %s", DB_PATH)
 
@@ -87,10 +114,12 @@ async def init_db():
 async def create_flow(flow: Flow) -> Flow:
     async with aiosqlite.connect(str(DB_PATH)) as db:
         await db.execute(
-            """INSERT INTO flows (id, name, domain, description, entry_url, inputs, icon, created_by, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            """INSERT INTO flows
+               (id, name, domain, description, entry_url, inputs, icon, created_by, created_at, scripts, script_version)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (flow.id, flow.name, flow.domain, flow.description, flow.entry_url,
-             flow.inputs, flow.icon, flow.created_by, flow.created_at),
+             flow.inputs, flow.icon, flow.created_by, flow.created_at,
+             flow.scripts, flow.script_version),
         )
         await db.commit()
     return flow
@@ -115,7 +144,7 @@ async def list_flows() -> list[dict]:
 
 
 async def update_flow(flow_id: str, updates: dict) -> Flow | None:
-    allowed = {"name", "domain", "description", "entry_url", "inputs", "icon"}
+    allowed = {"name", "domain", "description", "entry_url", "inputs", "icon", "scripts", "script_version"}
     filtered = {k: v for k, v in updates.items() if k in allowed}
     if not filtered:
         return await get_flow(flow_id)
@@ -250,15 +279,99 @@ async def delete_session(session_id: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Reflexes
+# ---------------------------------------------------------------------------
+
+async def upsert_reflex(
+    domain: str,
+    name: str,
+    description: str,
+    script: str,
+    pause_after: str | None = None,
+    tags: list[str] | None = None,
+) -> dict:
+    """Insert or replace a reflex. Returns the stored row as a dict."""
+    now = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
+    tags_json = json.dumps(tags or [])
+    reflex_id = str(uuid.uuid4())[:12]
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        # Try to get existing id so we don't churn it on updates
+        cursor = await db.execute(
+            "SELECT id FROM reflexes WHERE domain = ? AND name = ?", (domain, name)
+        )
+        existing = await cursor.fetchone()
+        if existing:
+            reflex_id = existing["id"]
+            await db.execute(
+                """UPDATE reflexes
+                   SET description=?, script=?, pause_after=?, tags=?, updated_at=?
+                   WHERE domain=? AND name=?""",
+                (description, script, pause_after, tags_json, now, domain, name),
+            )
+        else:
+            await db.execute(
+                """INSERT INTO reflexes (id, domain, name, description, script, pause_after, tags, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (reflex_id, domain, name, description, script, pause_after, tags_json, now, now),
+            )
+        await db.commit()
+        cursor = await db.execute("SELECT * FROM reflexes WHERE id = ?", (reflex_id,))
+        row = await cursor.fetchone()
+    result = dict(row)
+    result["tags"] = json.loads(result.get("tags", "[]"))
+    return result
+
+
+async def get_reflex(domain: str, name: str) -> dict | None:
+    """Get a single reflex by domain + name."""
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT * FROM reflexes WHERE domain = ? AND name = ?", (domain, name)
+        )
+        row = await cursor.fetchone()
+    if not row:
+        return None
+    result = dict(row)
+    result["tags"] = json.loads(result.get("tags", "[]"))
+    return result
+
+
+async def list_reflexes_for_domain(domain: str) -> list[dict]:
+    """Return all reflexes for a domain, ordered by creation time."""
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT * FROM reflexes WHERE domain = ? ORDER BY created_at ASC", (domain,)
+        )
+        rows = await cursor.fetchall()
+    result = []
+    for row in rows:
+        r = dict(row)
+        r["tags"] = json.loads(r.get("tags", "[]"))
+        result.append(r)
+    return result
+
+
+async def delete_reflex(domain: str, name: str) -> bool:
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        cursor = await db.execute(
+            "DELETE FROM reflexes WHERE domain = ? AND name = ?", (domain, name)
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
 # Seed default flows
 # ---------------------------------------------------------------------------
 
-async def seed_default_flows():
+async def seed_default_flows() -> None:
     """Seed the default Uber flow if no flows exist."""
     flows = await list_flows()
     if flows:
         return
-    import uuid
     uber_flow = Flow(
         id=str(uuid.uuid4())[:12],
         name="Uber Ride",
