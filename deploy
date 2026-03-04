@@ -68,10 +68,13 @@ _configure_caddy() {
   local domain="$1"
 
   mkdir -p /etc/caddy/sites
+  chown -R caddy:caddy /etc/caddy/sites
 
   # Own the Caddyfile — write a clean one with just the import directive.
   # Any previous content (stock :80 block, broken imports, etc.) is replaced.
   echo "import /etc/caddy/sites/*.caddy" > /etc/caddy/Caddyfile
+  chown caddy:caddy /etc/caddy/Caddyfile
+  chmod 644 /etc/caddy/Caddyfile
   info "Caddyfile reset to import /etc/caddy/sites/*.caddy"
 
   cat > "$CADDY_SITE_FILE" << EOF
