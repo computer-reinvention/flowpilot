@@ -69,24 +69,10 @@ _configure_caddy() {
 
   mkdir -p /etc/caddy/sites
 
-  # If the Caddyfile is the stock default (contains `:80` site block) or has
-  # never been customised, replace it entirely. Otherwise prepend the import.
-  if ! grep -q "import /etc/caddy/sites" /etc/caddy/Caddyfile 2>/dev/null; then
-    if grep -qE '^\s*:80\s*\{' /etc/caddy/Caddyfile 2>/dev/null; then
-      # Stock Caddyfile — replace with just the import
-      info "Replacing default Caddyfile (had stock :80 block)."
-      echo "import /etc/caddy/sites/*.caddy" > /etc/caddy/Caddyfile
-    else
-      # Custom Caddyfile — prepend import at the top
-      local tmp
-      tmp=$(mktemp)
-      echo "import /etc/caddy/sites/*.caddy" > "$tmp"
-      echo "" >> "$tmp"
-      cat /etc/caddy/Caddyfile >> "$tmp"
-      mv "$tmp" /etc/caddy/Caddyfile
-    fi
-    info "Caddyfile now imports /etc/caddy/sites/*.caddy"
-  fi
+  # Own the Caddyfile — write a clean one with just the import directive.
+  # Any previous content (stock :80 block, broken imports, etc.) is replaced.
+  echo "import /etc/caddy/sites/*.caddy" > /etc/caddy/Caddyfile
+  info "Caddyfile reset to import /etc/caddy/sites/*.caddy"
 
   cat > "$CADDY_SITE_FILE" << EOF
 ${domain} {
