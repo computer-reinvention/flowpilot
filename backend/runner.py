@@ -118,23 +118,26 @@ def _build_task(flow: Flow, inputs: dict, domain_reflexes: list[dict]) -> str:
     if input_keys:
         lines.append(f"Input keys available in reflexes: {input_keys}")
 
-    lines += ["", "--- Reflexes ---"]
+    lines += ["", "--- Workflow ---"]
     if domain_reflexes:
-        lines.append(f"Saved reflexes for {flow.domain}:")
+        lines.append(f"Saved reflexes for {flow.domain} (try these first):")
         for r in domain_reflexes:
             pause_note = " [pauses for auth after]" if r.get("pause_after") == "auth" else ""
             lines.append(f"  • {r['name']}{pause_note} — {r['description']}")
         lines += [
             "",
-            "At each phase: call search_reflexes() first. If a match exists, run it with run_reflex().",
-            "After completing any phase manually: IMMEDIATELY call save_reflex() before moving on.",
+            "1. Call search_reflexes() to find relevant saved scripts.",
+            "2. Run matching scripts with run_reflex().",
+            "3. For new interactions: take a screenshot, write a complete execute_script(), run it.",
         ]
     else:
         lines += [
             f"No reflexes saved yet for {flow.domain}.",
-            "After you complete each distinct phase of the task manually (e.g. filling the booking form,",
-            "selecting a ride type), IMMEDIATELY call save_reflex() with the script you just executed.",
-            "Name it descriptively, e.g. 'fill_booking_form' or 'select_ride_type'.",
+            "1. Take a screenshot to understand each page.",
+            "2. Write a complete Playwright script for each phase via execute_script().",
+            "   The script is auto-saved as a reflex on success.",
+            "3. Break the task into phases: one script per logical step.",
+            "   e.g. 'fill_booking_form', 'select_ride_type', 'confirm_booking'",
         ]
 
     return "\n".join(lines)
@@ -258,9 +261,62 @@ class FlowRunner:
 
                 asyncio.create_task(_send())
 
-            # Exclude file I/O — the agent has no reason to write todo files or
-            # read local files; those waste steps and produce no useful output.
-            tools = Tools(exclude_actions=["write_file", "read_file", "replace_file"])
+            # Exclude direct one-at-a-time browser actions — the agent must write
+            # Playwright scripts via execute_script() instead of clicking/typing
+            # element by element. This prevents the multi-step retry loops that
+            # burn through the step budget without making progress.
+            _DIRECT_ACTIONS = [
+                "click", "input", "send_keys", "scroll", "find_text",
+                "upload_file", "dropdown_options", "select_dropdown",
+                "switch", "close",
+                "write_file", "read_file", "replace_file",
+            ]
+            tools = Tools(exclude_actions=_DIRECT_ACTIONS)
+
+            @tools.action(
+                description=(
+                    "Write and execute a Playwright Python script against the live browser. "
+                    "The script receives `page` (Playwright Page) and `inputs` (dict of user values). "
+                    "Use inputs['key'] to reference user-provided values — never hardcode them. "
+                    "Always start with: await page.goto('<url>'). "
+                    "Use page.wait_for_load_state('networkidle') after navigations. "
+                    "For autocomplete fields: type the value, wait 1s, then click the first option: "
+                    "  await page.locator('[role=option]').first.click(). "
+                    "On success the script is automatically saved as a reflex for future runs."
+                )
+            )
+            async def execute_script(
+                name: str,
+                description: str,
+                script: str,
+                tags: list[str] | None = None,
+                pause_after_auth: bool = False,
+            ) -> ActionResult:
+                try:
+                    result_str = await asyncio.wait_for(
+                        FlowRunner._exec_playwright(script, inputs, cdp_url),
+                        timeout=120,
+                    )
+                    # Auto-save as reflex on success
+                    await _db.upsert_reflex(
+                        domain=flow.domain,
+                        name=name,
+                        description=description,
+                        script=script,
+                        pause_after="auth" if pause_after_auth else None,
+                        tags=tags or [],
+                    )
+                    return ActionResult(
+                        extracted_content=(
+                            f"Script executed successfully and saved as reflex '{flow.domain}/{name}'. "
+                            f"Result: {result_str}"
+                        ),
+                    )
+                except Exception:
+                    tb = _traceback.format_exc()
+                    return ActionResult(
+                        error=f"Script failed:\n{tb}\nRevise and retry with execute_script().",
+                    )
 
             @tools.action(
                 description=(
@@ -387,18 +443,21 @@ class FlowRunner:
                 register_new_step_callback=_on_step,
                 tools=tools,
                 extend_system_message=(
-                    "MANDATORY RULES — follow these exactly:\n"
-                    "1. AUTH WALLS: When you encounter any login page, auth wall, or CAPTCHA, you MUST "
-                    "call request_human_help(reason, category). Never call done() to report failure. "
-                    "The human will handle it and resume you — this is always the correct action.\n"
-                    "2. AUTOCOMPLETE: When you type into a location/search field and suggestions appear, "
-                    "click the FIRST suggestion immediately. Do not retry with different search terms "
-                    "and do not navigate away to search for the address elsewhere.\n"
-                    "3. SAVE REFLEXES: After completing each distinct phase manually (form filled, "
-                    "ride selected, booking confirmed, etc.), you MUST immediately call save_reflex() "
-                    "with a complete Playwright script reproducing that phase. Do not skip this.\n"
-                    "4. USE REFLEXES: At the start of each phase, call search_reflexes() to check "
-                    "for an existing solution before doing it manually."
+                    "HOW TO WORK:\n"
+                    "You accomplish browser tasks by writing and running Playwright scripts via execute_script(). "
+                    "You cannot click or type directly — write a script that does the whole interaction, run it, "
+                    "and it is automatically saved as a reusable reflex.\n"
+                    "\n"
+                    "MANDATORY RULES:\n"
+                    "1. AUTH WALLS: Any login page, CAPTCHA, or auth wall → call request_human_help(). "
+                    "Never call done() with failure. The human will act and resume you.\n"
+                    "2. SCRIPT FIRST: Before doing anything manually, take a screenshot to understand the page, "
+                    "then write a complete execute_script() call. Don't try individual actions.\n"
+                    "3. AUTOCOMPLETE IN SCRIPTS: To fill a location/autocomplete field use this pattern:\n"
+                    "   await field.fill(value)\n"
+                    "   await page.wait_for_timeout(1000)\n"
+                    "   await page.locator('[role=option]').first.click()\n"
+                    "4. EXISTING REFLEXES: Call search_reflexes() first. If a match exists, run it with run_reflex()."
                 ),
             )
 
