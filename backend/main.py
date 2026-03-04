@@ -52,6 +52,7 @@ flow_runner = FlowRunner()
 # ---------------------------------------------------------------------------
 
 _ws_connections: dict[str, list[WebSocket]] = {}  # run_id -> [websocket, ...]
+_flow_ws_connections: dict[str, list[WebSocket]] = {}  # flow_id -> [websocket, ...]
 _run_tasks: dict[str, asyncio.Task] = {}  # run_id -> background task
 _run_agents: dict[str, tuple] = {}  # run_id -> (agent, browser, flow, paused_ref)
 _exploration_tasks: dict[str, asyncio.Task] = {}  # flow_id -> background exploration task
@@ -169,7 +170,7 @@ class FlowUpdateRequest(BaseModel):
 class RunStartRequest(BaseModel):
     flow_id: str
     inputs: dict = {}
-    profile_id: str | None = None  # defaults to user_id
+    profile_id: str | None = None  # defaults to user's id
 
 
 class ApiKeyCreateRequest(BaseModel):
@@ -187,7 +188,7 @@ class TriggerHookCreateRequest(BaseModel):
 
 class TriggerHookExecuteRequest(BaseModel):
     inputs: dict = {}
-    profile_id: str | None = None
+    profile_id: str | None = None  # defaults to hook owner's user id
 
 
 class SessionCaptureRequest(BaseModel):
@@ -247,7 +248,7 @@ async def auth_me(user: dict = Depends(auth.get_current_user)) -> dict:
 @app.post("/api/sandbox/start")
 async def sandbox_start(req: SandboxStartRequest, user: dict = Depends(auth.get_current_user)) -> dict:
     user_id = user["id"]
-    profile_name = req.profile_name or "default"
+    profile_name = req.profile_name or user_id
     if not SandboxManager.validate_profile_name(profile_name):
         raise HTTPException(status_code=400, detail="Invalid profile name.")
     profile_path = None
@@ -306,7 +307,7 @@ async def flow_create(req: FlowCreateRequest, user: dict = Depends(auth.get_curr
     if flow.entry_url:
         await platform_db.update_flow(flow.id, {"exploration_status": "exploring"})
         flow.exploration_status = "exploring"
-        task = asyncio.create_task(_run_exploration(flow, user["id"]))
+        task = asyncio.create_task(_run_exploration(flow, user["id"], profile_id=user["id"]))
         _exploration_tasks[flow.id] = task
         task.add_done_callback(lambda t: _exploration_tasks.pop(flow.id, None))
     return _flow_to_dict(flow)
@@ -318,6 +319,9 @@ async def flow_list() -> list[dict]:
     for r in rows:
         r["inputs"] = json.loads(r.get("inputs", "[]"))
         r["exploration_tree"] = json.loads(r.get("exploration_tree", "[]"))
+        eir = r.get("exploration_input_request")
+        r["exploration_input_request"] = json.loads(eir) if eir else None
+        r["exploration_confirmation_request"] = r.get("exploration_confirmation_request")
         agent_info = _exploration_agents.get(r["id"])
         r["exploration_sandbox_id"] = agent_info[3] if agent_info and r.get("exploration_status") in ("exploring", "paused_for_hitl") else None
     return rows
@@ -350,16 +354,16 @@ async def flow_delete(flow_id: str, user: dict = Depends(auth.get_current_user))
     return {"status": "deleted"}
 
 
-_exploration_agents: dict[str, tuple] = {}  # flow_id -> (agent, browser, paused_ref, sandbox_id)
+_exploration_agents: dict[str, tuple] = {}  # flow_id -> (agent, browser, paused_ref, sandbox_id, hitl_response_ref, profile_id)
 
 
-async def _run_exploration(flow: Flow, user_id: str, profile_id: str | None = None) -> None:
+async def _run_exploration(flow: Flow, user_id: str, profile_id: str = "") -> None:
     """Background task: spin up sandbox, run explorer with HITL support, tear down."""
     sandbox_result = None
     try:
         profile_path = None
-        if profile_mgr.has_profile(user_id, "default"):
-            profile_path = str(PROFILES_DIR / user_id / "default")
+        if profile_mgr.has_profile(user_id, profile_id):
+            profile_path = str(PROFILES_DIR / user_id / profile_id)
         sandbox_result = sandbox_mgr.start(profile_path=profile_path, user_id=user_id)
         sandbox_id = sandbox_result["sandbox_id"]
         cdp_url = sandbox_result.get("cdp_url", "ws://localhost:9222")
@@ -369,10 +373,7 @@ async def _run_exploration(flow: Flow, user_id: str, profile_id: str | None = No
 
         # Load saved session cookies if available
         storage_state = None
-        effective_profile = profile_id or user_id
-        domain_session = await platform_db.get_session_for_domain(user_id, flow.domain, profile_name=effective_profile)
-        if not domain_session:
-            domain_session = await platform_db.get_session_for_domain(user_id, flow.domain)
+        domain_session = await platform_db.get_session_for_domain(user_id, flow.domain, profile_name=profile_id)
         if domain_session:
             cookies = json.loads(domain_session.cookies)
             local_storage = json.loads(domain_session.local_storage)
@@ -382,15 +383,16 @@ async def _run_exploration(flow: Flow, user_id: str, profile_id: str | None = No
                     "origin": flow.entry_url.rstrip("/"),
                     "localStorage": [{"name": k, "value": v} for k, v in local_storage.items()],
                 })
-            logger.info("Exploration using %d saved cookies for %s (profile=%s)", len(cookies), flow.domain, effective_profile)
+            logger.info("Exploration using %d saved cookies for %s (profile=%s)", len(cookies), flow.domain, profile_id)
 
-        def on_agent_ready(agent, browser, paused_ref, sb_id):
-            _exploration_agents[flow.id] = (agent, browser, paused_ref, sb_id)
+        def on_agent_ready(agent, browser, paused_ref, sb_id, hitl_response_ref=None):
+            _exploration_agents[flow.id] = (agent, browser, paused_ref, sb_id, hitl_response_ref, profile_id)
 
         await explore_flow(
             flow, sandbox_id, cdp_url,
             storage_state=storage_state,
             agent_ready_callback=on_agent_ready,
+            on_status_change=_broadcast_flow_update,
         )
     except Exception as e:
         logger.error("Exploration failed for flow %s: %s", flow.id, e, exc_info=True)
@@ -399,7 +401,25 @@ async def _run_exploration(flow: Flow, user_id: str, profile_id: str | None = No
             "exploration_error": str(e),
         })
     finally:
-        _exploration_agents.pop(flow.id, None)
+        # Capture cookies before tearing down the sandbox
+        agent_info = _exploration_agents.pop(flow.id, None)
+        if agent_info:
+            _, browser_ref, _, _, _, _ = agent_info
+            try:
+                storage_state_final = await browser_ref.export_storage_state()
+                cookies = storage_state_final.get("cookies", [])
+                if cookies:
+                    session = Session(
+                        id=str(uuid.uuid4())[:12],
+                        user_id=user_id,
+                        domain=flow.domain,
+                        cookies=json.dumps(cookies),
+                        profile_name=profile_id,
+                    )
+                    await platform_db.create_session(session)
+                    logger.info("Captured %d cookies at end of exploration for %s (profile=%s)", len(cookies), flow.domain, profile_id)
+            except Exception as e:
+                logger.debug("Could not capture cookies at end of exploration for %s: %s", flow.id, e)
         if sandbox_result:
             try:
                 sandbox_mgr.stop(sandbox_result["sandbox_id"])
@@ -409,7 +429,7 @@ async def _run_exploration(flow: Flow, user_id: str, profile_id: str | None = No
 
 
 class ExploreRequest(BaseModel):
-    profile_id: str | None = None
+    profile_id: str | None = None  # defaults to user's id
 
 
 @app.post("/api/flows/{flow_id}/explore")
@@ -439,20 +459,29 @@ async def flow_explore(flow_id: str, req: ExploreRequest | None = None, user: di
         "exploration_tree": "[]",
     })
     flow = await platform_db.get_flow(flow_id)
-    profile_id = req.profile_id if req else None
+    profile_id = (req.profile_id if req and req.profile_id else None) or user["id"]
     task = asyncio.create_task(_run_exploration(flow, user["id"], profile_id=profile_id))
     _exploration_tasks[flow_id] = task
     task.add_done_callback(lambda t: _exploration_tasks.pop(flow_id, None))
     return {"status": "exploring", "flow_id": flow_id}
 
 
+class ExploreResumeBody(BaseModel):
+    values: dict[str, str] | None = None
+    confirmed: bool | None = None
+
+
 @app.post("/api/flows/{flow_id}/explore/resume")
-async def flow_explore_resume(flow_id: str, user: dict = Depends(auth.get_current_user)) -> dict:
-    """Resume exploration after HITL — user completed auth in the browser."""
+async def flow_explore_resume(flow_id: str, body: ExploreResumeBody | None = None, user: dict = Depends(auth.get_current_user)) -> dict:
+    """Resume exploration after HITL — user provided values, confirmation, or completed auth."""
     agent_info = _exploration_agents.get(flow_id)
     if not agent_info:
         raise HTTPException(status_code=404, detail="No active exploration for this flow")
-    agent, browser, paused_ref, sandbox_id = agent_info
+    agent, browser, paused_ref, sandbox_id, hitl_response_ref, explore_profile = agent_info
+
+    # Store user response on the shared ref so the paused tool can read it
+    if hitl_response_ref is not None and body:
+        hitl_response_ref[0] = body.model_dump(exclude_none=True)
 
     # Capture cookies from the browser for future runs
     try:
@@ -465,16 +494,21 @@ async def flow_explore_resume(flow_id: str, user: dict = Depends(auth.get_curren
                 user_id=user["id"],
                 domain=flow.domain,
                 cookies=json.dumps(cookies),
-                profile_name=user["id"],
+                profile_name=explore_profile,
             )
             await platform_db.create_session(session)
-            logger.info("Captured %d cookies during exploration resume for %s", len(cookies), flow.domain)
+            logger.info("Captured %d cookies during exploration resume for %s (profile=%s)", len(cookies), flow.domain, explore_profile)
     except Exception as e:
         logger.warning("Failed to capture cookies on exploration resume: %s", e)
 
     paused_ref[0] = False
     agent.resume()
-    await platform_db.update_flow(flow_id, {"exploration_status": "exploring"})
+    await platform_db.update_flow(flow_id, {
+        "exploration_status": "exploring",
+        "exploration_input_request": None,
+        "exploration_confirmation_request": None,
+    })
+    await _broadcast_flow_update(flow_id)
     return {"status": "exploring", "flow_id": flow_id}
 
 
@@ -500,6 +534,8 @@ def _flow_to_dict(flow: Flow) -> dict:
         "exploration_notes": flow.exploration_notes,
         "exploration_tree": json.loads(flow.exploration_tree),
         "exploration_sandbox_id": exploration_sandbox_id,
+        "exploration_input_request": json.loads(flow.exploration_input_request) if flow.exploration_input_request else None,
+        "exploration_confirmation_request": flow.exploration_confirmation_request,
     }
 
 
@@ -598,8 +634,8 @@ async def _start_run_impl(
 
     # Start sandbox
     profile_path = None
-    if profile_mgr.has_profile(user_id, "default"):
-        profile_path = str(PROFILES_DIR / user_id / "default")
+    if profile_mgr.has_profile(user_id, profile_id):
+        profile_path = str(PROFILES_DIR / user_id / profile_id)
     try:
         sandbox_result = sandbox_mgr.start(profile_path=profile_path, user_id=user_id)
     except RuntimeError as e:
@@ -614,17 +650,15 @@ async def _start_run_impl(
 
     await platform_db.update_run(run_id, {"sandbox_id": sandbox_id, "status": "connecting", "profile_id": profile_id})
 
-    if profile_mgr.has_profile(user_id, "default"):
+    if profile_mgr.has_profile(user_id, profile_id):
         try:
-            profile_mgr.restore_profile(user_id, "default", sandbox_id)
+            profile_mgr.restore_profile(user_id, profile_id, sandbox_id)
         except Exception as e:
             logger.warning("Profile restore failed: %s", e)
 
     # Build storage_state from saved session for the flow's domain (scoped to profile_id)
     storage_state = None
     domain_session = await platform_db.get_session_for_domain(user_id, flow.domain, profile_name=profile_id)
-    if not domain_session:
-        domain_session = await platform_db.get_session_for_domain(user_id, flow.domain)
     if domain_session:
         cookies = json.loads(domain_session.cookies)
         local_storage = json.loads(domain_session.local_storage)
@@ -691,8 +725,7 @@ async def _start_run_impl(
 @app.post("/api/runs")
 async def run_start(req: RunStartRequest, user: dict = Depends(auth.get_current_user)) -> dict:
     user_id = user["id"]
-    effective_profile_id = req.profile_id or user_id
-    return await _start_run_impl(req.flow_id, req.inputs, user_id, effective_profile_id)
+    return await _start_run_impl(req.flow_id, req.inputs, user_id, req.profile_id or user_id)
 
 
 async def _execute_run(
@@ -760,7 +793,25 @@ async def _execute_run(
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
     finally:
-        _run_agents.pop(run_id, None)
+        # Capture cookies before tearing down the sandbox
+        agent_info = _run_agents.pop(run_id, None)
+        if agent_info:
+            _, browser, flow_obj, _ = agent_info
+            try:
+                storage_state = await browser.export_storage_state()
+                cookies = storage_state.get("cookies", [])
+                if cookies:
+                    session = Session(
+                        id=str(uuid.uuid4())[:12],
+                        user_id=user_id,
+                        domain=flow.domain,
+                        cookies=json.dumps(cookies),
+                        profile_name=profile_id,
+                    )
+                    await platform_db.create_session(session)
+                    logger.info("Captured %d cookies at end of run %s for %s (profile=%s)", len(cookies), run_id, flow.domain, session.profile_name)
+            except Exception as e:
+                logger.debug("Could not capture cookies at end of run %s: %s", run_id, e)
         try:
             sandbox_mgr.stop(sandbox_id)
             await platform_db.delete_sandbox(sandbox_id)
@@ -875,7 +926,7 @@ async def run_resume(run_id: str, user: dict = Depends(auth.get_current_user)) -
                 user_id=user["id"],
                 domain=flow.domain,
                 cookies=json.dumps(cookies),
-                profile_name=run.profile_id or flow.domain,
+                profile_name=run.profile_id,
             )
             await platform_db.create_session(session)
             logger.info(
@@ -984,6 +1035,49 @@ async def ws_browser(
 ) -> None:
     """CDP screencast proxy — streams browser frames and forwards input events."""
     await cdp_proxy.handle(websocket, sandbox_id, sandbox_mgr, token=token)
+
+
+@app.websocket("/ws/flows/{flow_id}")
+async def ws_flow(websocket: WebSocket, flow_id: str) -> None:
+    """Stream flow updates (exploration status, HITL requests) to the frontend."""
+    await websocket.accept()
+    if flow_id not in _flow_ws_connections:
+        _flow_ws_connections[flow_id] = []
+    _flow_ws_connections[flow_id].append(websocket)
+    try:
+        while True:
+            await websocket.receive_text()  # keep alive; ignore client messages
+    except WebSocketDisconnect:
+        pass
+    finally:
+        if flow_id in _flow_ws_connections:
+            _flow_ws_connections[flow_id] = [
+                ws for ws in _flow_ws_connections[flow_id] if ws != websocket
+            ]
+            if not _flow_ws_connections[flow_id]:
+                del _flow_ws_connections[flow_id]
+
+
+async def _broadcast_flow_update(flow_id: str) -> None:
+    """Push current flow state to all subscribed WebSocket clients."""
+    clients = _flow_ws_connections.get(flow_id, [])
+    if not clients:
+        return
+    flow = await platform_db.get_flow(flow_id)
+    if not flow:
+        return
+    data = _flow_to_dict(flow)
+    dead = []
+    for ws in clients:
+        try:
+            await ws.send_json(data)
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        if flow_id in _flow_ws_connections:
+            _flow_ws_connections[flow_id] = [
+                w for w in _flow_ws_connections[flow_id] if w != ws
+            ]
 
 
 async def _broadcast_run_progress(run_id: str, data: dict) -> None:
@@ -1165,8 +1259,7 @@ async def trigger_hook_execute(token: str, req: TriggerHookExecuteRequest) -> di
     hook = await platform_db.get_trigger_hook_by_token(token)
     if not hook:
         raise HTTPException(status_code=404, detail="Invalid hook token")
-    effective_profile_id = req.profile_id or hook["user_id"]
-    result = await _start_run_impl(hook["flow_id"], req.inputs, hook["user_id"], effective_profile_id)
+    result = await _start_run_impl(hook["flow_id"], req.inputs, hook["user_id"], req.profile_id or hook["user_id"])
     await platform_db.touch_trigger_hook(hook["id"])
     return result
 
@@ -1178,8 +1271,7 @@ async def trigger_hook_execute(token: str, req: TriggerHookExecuteRequest) -> di
 @app.post("/api/v1/runs")
 async def v1_run_start(req: RunStartRequest, user: dict = Depends(auth.get_current_user)) -> dict:
     user_id = user["id"]
-    effective_profile_id = req.profile_id or user_id
-    return await _start_run_impl(req.flow_id, req.inputs, user_id, effective_profile_id)
+    return await _start_run_impl(req.flow_id, req.inputs, user_id, req.profile_id or user_id)
 
 
 @app.get("/api/v1/runs/{run_id}")

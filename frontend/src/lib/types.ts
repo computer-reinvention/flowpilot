@@ -29,6 +29,8 @@ export interface Flow {
   exploration_notes?: string;
   exploration_tree?: ExplorationStage[];
   exploration_sandbox_id?: string;
+  exploration_input_request?: { name: string; label: string; description?: string; type?: "text" | "select"; options?: string[] }[];
+  exploration_confirmation_request?: string;
 }
 
 export interface ExplorationStage {

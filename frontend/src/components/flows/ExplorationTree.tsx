@@ -15,9 +15,20 @@ import {
   RefreshCw,
   AlertTriangle,
   Hand,
+  Check,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { Flow, ExplorationStage } from "@/lib/types";
 
 const TYPE_CONFIG: Record<
@@ -35,14 +46,20 @@ const TYPE_CONFIG: Record<
 function StageNode({
   stage,
   depth = 0,
+  hitlNode,
 }: {
   stage: ExplorationStage;
   depth?: number;
+  /** Rendered after the last leaf node in the tree */
+  hitlNode?: React.ReactNode;
 }) {
   const [expanded, setExpanded] = useState(true);
   const config = TYPE_CONFIG[stage.type] ?? TYPE_CONFIG["page"]!;
   const Icon = config.icon;
   const hasChildren = stage.children.length > 0;
+
+  // hitlNode attaches after the deepest last child
+  const lastChildIndex = stage.children.length - 1;
 
   return (
     <div className={cn(depth > 0 && "ml-5 border-l border-border/50 pl-0")}>
@@ -110,17 +127,150 @@ function StageNode({
       {/* Children */}
       {expanded &&
         hasChildren &&
-        stage.children.map((child) => (
-          <StageNode key={child.id} stage={child} depth={depth + 1} />
+        stage.children.map((child, i) => (
+          <StageNode
+            key={child.id}
+            stage={child}
+            depth={depth + 1}
+            hitlNode={i === lastChildIndex ? hitlNode : undefined}
+          />
         ))}
+
+      {/* HITL node attaches here if this is a leaf (no children) */}
+      {!hasChildren && hitlNode && (
+        <div className={cn("ml-5 border-l border-border/50 pl-0")}>
+          <div className="ml-1">{hitlNode}</div>
+        </div>
+      )}
     </div>
   );
 }
 
+// -----------------------------------------------------------------------
+// Inline HITL form components
+// -----------------------------------------------------------------------
+
+function HitlInputForm({
+  fields,
+  values,
+  onChange,
+  onSubmit,
+}: {
+  fields: NonNullable<Flow["exploration_input_request"]>;
+  values: Record<string, string>;
+  onChange: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  onSubmit: () => void;
+}) {
+  return (
+    <div className="rounded-md border border-dashed bg-muted/40 px-3 py-3 my-1 space-y-3">
+      <div className="flex items-center gap-2">
+        <Hand className="size-3.5 text-muted-foreground shrink-0" />
+        <span className="text-xs font-medium text-foreground">
+          Enter values for these fields
+        </span>
+      </div>
+      <div className="space-y-2">
+        {fields.map((field) => (
+          <div key={field.name} className="space-y-1">
+            <Label htmlFor={`hitl-${field.name}`} className="text-xs text-muted-foreground">
+              {field.label || field.name}
+              {field.description && (
+                <span className="ml-1 opacity-60">— {field.description}</span>
+              )}
+            </Label>
+            {field.type === "select" && field.options ? (
+              <Select
+                value={values[field.name] ?? ""}
+                onValueChange={(val) => onChange((prev) => ({ ...prev, [field.name]: val }))}
+              >
+                <SelectTrigger id={`hitl-${field.name}`} className="h-8 text-sm">
+                  <SelectValue placeholder={field.label || field.name} />
+                </SelectTrigger>
+                <SelectContent>
+                  {field.options.map((opt) => (
+                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                id={`hitl-${field.name}`}
+                type="text"
+                placeholder={field.description || field.label || field.name}
+                className="h-8 text-sm"
+                value={values[field.name] ?? ""}
+                onChange={(e) => onChange((prev) => ({ ...prev, [field.name]: e.target.value }))}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+      <Button size="sm" onClick={onSubmit} className="w-full">
+        Submit Values
+      </Button>
+    </div>
+  );
+}
+
+function HitlConfirmation({
+  summary,
+  onApprove,
+  onDecline,
+}: {
+  summary: string;
+  onApprove: () => void;
+  onDecline: () => void;
+}) {
+  return (
+    <div className="rounded-md border border-dashed bg-muted/40 px-3 py-3 my-1 space-y-2">
+      <div className="flex items-center gap-2">
+        <Hand className="size-3.5 text-muted-foreground shrink-0" />
+        <span className="text-xs font-medium text-foreground">
+          Confirm action
+        </span>
+      </div>
+      <p className="text-sm text-foreground">{summary}</p>
+      <div className="flex gap-2">
+        <Button size="sm" variant="outline" onClick={onDecline} className="flex-1 gap-1">
+          <X className="size-3.5" /> Decline
+        </Button>
+        <Button size="sm" onClick={onApprove} className="flex-1 gap-1">
+          <Check className="size-3.5" /> Approve
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function HitlAuthWall({ onResume }: { onResume: () => void }) {
+  return (
+    <div className="rounded-md border border-dashed bg-muted/40 px-3 py-3 my-1 space-y-2">
+      <div className="flex items-center gap-2">
+        <Hand className="size-3.5 text-muted-foreground shrink-0" />
+        <span className="text-xs font-medium text-foreground">
+          Waiting for you
+        </span>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Log in or complete the action in the browser above, then resume.
+      </p>
+      <Button size="sm" onClick={onResume} className="w-full">
+        Resume Exploration
+      </Button>
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------
+// Main tree
+// -----------------------------------------------------------------------
+
 interface ExplorationTreeProps {
   flow: Flow;
   onExplore?: () => void;
-  onResume?: () => void;
+  onResume?: (body?: Record<string, unknown>) => void;
+  hitlInputValues?: Record<string, string>;
+  onHitlInputChange?: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   exploring?: boolean;
 }
 
@@ -128,12 +278,41 @@ export function ExplorationTree({
   flow,
   onExplore,
   onResume,
+  hitlInputValues = {},
+  onHitlInputChange,
   exploring,
 }: ExplorationTreeProps) {
   const status = flow.exploration_status ?? "pending";
   const tree = flow.exploration_tree ?? [];
   const hasTree = tree.length > 0;
   const isPaused = status === "paused_for_hitl";
+
+  // Build the inline HITL node to attach after the last stage
+  let hitlNode: React.ReactNode = null;
+  if (isPaused && onResume) {
+    if (flow.exploration_input_request && onHitlInputChange) {
+      hitlNode = (
+        <HitlInputForm
+          fields={flow.exploration_input_request}
+          values={hitlInputValues}
+          onChange={onHitlInputChange}
+          onSubmit={() => onResume({ values: hitlInputValues })}
+        />
+      );
+    } else if (flow.exploration_confirmation_request) {
+      hitlNode = (
+        <HitlConfirmation
+          summary={flow.exploration_confirmation_request}
+          onApprove={() => onResume({ confirmed: true })}
+          onDecline={() => onResume({ confirmed: false })}
+        />
+      );
+    } else {
+      hitlNode = <HitlAuthWall onResume={() => onResume()} />;
+    }
+  }
+
+  const lastStageIndex = tree.length - 1;
 
   return (
     <div className="space-y-3">
@@ -150,9 +329,9 @@ export function ExplorationTree({
           )}
           {isPaused && (
             <>
-              <Hand className="size-4 text-amber-500" />
-              <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
-                Needs your help
+              <Hand className="size-4 text-muted-foreground" />
+              <span className="text-sm font-medium text-muted-foreground">
+                Needs your input
               </span>
             </>
           )}
@@ -185,16 +364,6 @@ export function ExplorationTree({
           )}
         </div>
 
-        {isPaused && onResume && (
-          <Button
-            size="sm"
-            onClick={onResume}
-            className="bg-amber-600 hover:bg-amber-700 text-white gap-1.5 shrink-0"
-          >
-            Resume Exploration
-          </Button>
-        )}
-
         {onExplore && !isPaused && (
           <Button
             variant={status === "exploring" ? "destructive" : "outline"}
@@ -225,9 +394,20 @@ export function ExplorationTree({
       {/* Tree */}
       {hasTree && (
         <div className="rounded-lg border bg-card p-2">
-          {tree.map((stage) => (
-            <StageNode key={stage.id} stage={stage} />
+          {tree.map((stage, i) => (
+            <StageNode
+              key={stage.id}
+              stage={stage}
+              hitlNode={i === lastStageIndex ? hitlNode : undefined}
+            />
           ))}
+        </div>
+      )}
+
+      {/* HITL with no tree yet */}
+      {isPaused && !hasTree && hitlNode && (
+        <div className="rounded-lg border bg-card p-2">
+          {hitlNode}
         </div>
       )}
 

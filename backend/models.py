@@ -19,6 +19,8 @@ class Flow:
     exploration_error: str | None = None
     exploration_notes: str | None = None
     exploration_tree: str = "[]"  # JSON array of exploration stage nodes
+    exploration_input_request: str | None = None  # JSON array of {name, label, description?}
+    exploration_confirmation_request: str | None = None  # summary string
 
 
 @dataclass

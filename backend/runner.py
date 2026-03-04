@@ -864,6 +864,7 @@ class FlowRunner:
                 tools=tools,
                 max_actions_per_step=10,
                 use_vision="auto",
+                llm_screenshot_size=(1024, 768),
                 extend_system_message=_AGENT_RULES,
             )
 

@@ -20,7 +20,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Hand } from "lucide-react";
 import { RunHistory } from "@/components/runs/RunHistory";
 import { FlowIntegration } from "./FlowIntegration";
 import { FlowSettings } from "./FlowSettings";
@@ -114,19 +113,18 @@ export function FlowDetail({
     });
   }, [liveFlow.inputs.length]);
 
-  // Poll for exploration updates while exploring
+  // Stream exploration updates via WebSocket
   useEffect(() => {
     if (liveFlow.exploration_status !== "exploring" && liveFlow.exploration_status !== "paused_for_hitl") return;
-    const interval = setInterval(async () => {
+    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    const ws = new WebSocket(`${protocol}//${location.host}/ws/flows/${flow.id}`);
+    ws.onmessage = (event) => {
       try {
-        const updated = await apiFetch<Flow>(`/api/flows/${flow.id}`);
+        const updated = JSON.parse(event.data) as Flow;
         setLiveFlow(updated);
-        if (updated.exploration_status !== "exploring" && updated.exploration_status !== "paused_for_hitl") {
-          clearInterval(interval);
-        }
-      } catch { /* ignore */ }
-    }, 5000);
-    return () => clearInterval(interval);
+      } catch { /* ignore parse errors */ }
+    };
+    return () => ws.close();
   }, [liveFlow.exploration_status, flow.id]);
 
   const handleExplore = useCallback(async () => {
@@ -138,10 +136,21 @@ export function FlowDetail({
     finally { setExplorationLoading(false); }
   }, [flow.id]);
 
-  const handleExploreResume = useCallback(async () => {
+  const [hitlInputValues, setHitlInputValues] = useState<Record<string, string>>({});
+
+  const handleExploreResume = useCallback(async (body?: Record<string, unknown>) => {
     try {
-      await apiFetch(`/api/flows/${flow.id}/explore/resume`, { method: "POST" });
-      setLiveFlow((f) => ({ ...f, exploration_status: "exploring" }));
+      await apiFetch(`/api/flows/${flow.id}/explore/resume`, {
+        method: "POST",
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+      setLiveFlow((f) => ({
+        ...f,
+        exploration_status: "exploring",
+        exploration_input_request: undefined,
+        exploration_confirmation_request: undefined,
+      }));
+      setHitlInputValues({});
     } catch { /* ignore */ }
   }, [flow.id]);
 
@@ -185,21 +194,6 @@ export function FlowDetail({
       {/* Live browser during exploration */}
       {(liveFlow.exploration_status === "exploring" || liveFlow.exploration_status === "paused_for_hitl") && liveFlow.exploration_sandbox_id && (
         <div className="flex flex-col shrink-0" style={{ height: "50%" }}>
-          {liveFlow.exploration_status === "paused_for_hitl" && (
-            <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 flex items-center gap-2 shrink-0">
-              <Hand className="size-4 text-amber-600 shrink-0" />
-              <span className="text-sm font-medium text-amber-700 dark:text-amber-400 flex-1">
-                The explorer needs your help — log in or complete the action below, then resume
-              </span>
-              <Button
-                size="sm"
-                onClick={handleExploreResume}
-                className="bg-amber-600 hover:bg-amber-700 text-white shrink-0"
-              >
-                Resume Exploration
-              </Button>
-            </div>
-          )}
           <BrowserCanvas
             sandboxId={liveFlow.exploration_sandbox_id}
             isPaused={liveFlow.exploration_status === "paused_for_hitl"}
@@ -233,6 +227,8 @@ export function FlowDetail({
               flow={liveFlow}
               onExplore={handleExplore}
               onResume={handleExploreResume}
+              hitlInputValues={hitlInputValues}
+              onHitlInputChange={setHitlInputValues}
               exploring={explorationLoading || liveFlow.exploration_status === "exploring"}
             />
           </div>

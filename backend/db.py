@@ -43,7 +43,9 @@ async def init_db() -> None:
                 exploration_status TEXT NOT NULL DEFAULT 'pending',
                 exploration_error TEXT,
                 exploration_notes TEXT,
-                exploration_tree TEXT NOT NULL DEFAULT '[]'
+                exploration_tree TEXT NOT NULL DEFAULT '[]',
+                exploration_input_request TEXT,
+                exploration_confirmation_request TEXT
             )
         """)
         await db.execute("""
@@ -164,6 +166,8 @@ async def init_db() -> None:
             "ALTER TABLE flows ADD COLUMN exploration_error TEXT",
             "ALTER TABLE flows ADD COLUMN exploration_notes TEXT",
             "ALTER TABLE flows ADD COLUMN exploration_tree TEXT NOT NULL DEFAULT '[]'",
+            "ALTER TABLE flows ADD COLUMN exploration_input_request TEXT",
+            "ALTER TABLE flows ADD COLUMN exploration_confirmation_request TEXT",
         ]:
             try:
                 await db.execute(migration)
@@ -181,18 +185,18 @@ async def create_flow(flow: Flow) -> Flow:
     async with aiosqlite.connect(str(DB_PATH)) as db:
         await db.execute(
             """INSERT INTO flows
-               (id, name, domain, task, entry_url, inputs, icon, created_by, created_at, exploration_status, exploration_error, exploration_notes, exploration_tree)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (id, name, domain, task, entry_url, inputs, icon, created_by, created_at, exploration_status, exploration_error, exploration_notes, exploration_tree, exploration_input_request, exploration_confirmation_request)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (flow.id, flow.name, flow.domain, flow.task, flow.entry_url,
              flow.inputs, flow.icon, flow.created_by, flow.created_at,
              flow.exploration_status, flow.exploration_error, flow.exploration_notes,
-             flow.exploration_tree),
+             flow.exploration_tree, flow.exploration_input_request, flow.exploration_confirmation_request),
         )
         await db.commit()
     return flow
 
 
-_FLOW_COLS = "id, name, domain, task, entry_url, inputs, icon, created_by, created_at, exploration_status, exploration_error, exploration_notes, exploration_tree"
+_FLOW_COLS = "id, name, domain, task, entry_url, inputs, icon, created_by, created_at, exploration_status, exploration_error, exploration_notes, exploration_tree, exploration_input_request, exploration_confirmation_request"
 
 
 async def get_flow(flow_id: str) -> Flow | None:
@@ -214,7 +218,7 @@ async def list_flows() -> list[dict]:
 
 
 async def update_flow(flow_id: str, updates: dict) -> Flow | None:
-    allowed = {"name", "domain", "task", "entry_url", "inputs", "icon", "exploration_status", "exploration_error", "exploration_notes", "exploration_tree"}
+    allowed = {"name", "domain", "task", "entry_url", "inputs", "icon", "exploration_status", "exploration_error", "exploration_notes", "exploration_tree", "exploration_input_request", "exploration_confirmation_request"}
     filtered = {k: v for k, v in updates.items() if k in allowed}
     if not filtered:
         return await get_flow(flow_id)
