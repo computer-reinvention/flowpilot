@@ -13,6 +13,7 @@ Key design:
     so mouse coordinates from the canvas are 1:1 with the browser viewport.
 """
 
+import asyncio
 import http.client
 import json
 import logging
@@ -110,15 +111,17 @@ async def handle(
                     })
                 except Exception:
                     return
-                # ACK immediately so the next frame is sent.
-                try:
-                    await cdp.send_raw(
+                # ACK must be fired as a separate task — NOT awaited here.
+                # cdp._handle_messages runs the event loop that calls this handler;
+                # awaiting cdp.send_raw() inside the handler creates a deadlock where
+                # _handle_messages is blocked waiting for the ACK response it can't read.
+                asyncio.create_task(
+                    cdp.send_raw(
                         "Page.screencastFrameAck",
                         {"sessionId": screencast_sid},
                         session_id=session_id,
                     )
-                except Exception:
-                    pass
+                )
 
             # -- Navigation handler --
             async def on_frame_navigated(params: dict, frame_session_id: str | None) -> None:
