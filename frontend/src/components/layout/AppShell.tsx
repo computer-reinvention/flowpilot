@@ -23,6 +23,9 @@ const SECTION_LABELS: Record<ActiveSection, string> = {
   flows: "Flows",
   runs: "Runs",
   sessions: "Auth Sessions",
+  profiles: "Profiles",
+  "api-keys": "API Keys",
+  webhooks: "Webhooks",
   settings: "Settings",
 };
 
