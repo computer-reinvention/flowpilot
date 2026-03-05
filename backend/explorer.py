@@ -64,47 +64,46 @@ def _build_exploration_prompt(flow: Flow) -> str:
 Explore {flow.entry_url} to map the journey for: "{flow.task}"
 
 Follow the EXACT order implied by the task description. If the task mentions
-auth/login first, handle auth first. If it says "book a ride from X to Y",
-navigate to booking before exploring other pages.
+auth/login first, handle auth first.
 
-JOBS (do in order as you navigate):
+AGENT LOOP — repeat for every stage:
 
-1. REPORT STAGES — call report_stage() for each distinct page/interaction.
-2. DISCOVER INPUTS — call declare_inputs() when you see form fields needing
-   user values. Each input needs: name, label, type. Do NOT pass empty objects.
-3. EXPLORE THE STAGE FULLY — interact with the page to understand all steps
-   (fill fields, trigger dropdowns, observe behaviour). Do NOT save a reflex yet.
-4. GENERATE ONE REFLEX PER STAGE — after fully exploring a stage, call
-   generate_and_save_reflex() ONCE with a description covering the ENTIRE stage
-   flow. One reflex = one stage. Do not split a stage into multiple reflexes.
-5. TEST REFLEXES — optionally call test_reflex() to verify a saved reflex works.
+1. ARRIVE at a page → call report_stage().
+2. SEARCH — call search_reflexes(query) to check if a reflex already exists.
+   If found: call test_reflex(name). If it passes, navigate forward. Done.
+3. PROBE — interact minimally to discover dynamic elements: type into a field
+   to see what autocomplete/suggestions appear, trigger a dropdown to see its
+   options. Note the exact CSS selectors you observe in the DOM.
+4. DECLARE INPUTS — call declare_inputs() for any fields that need user values
+   (text inputs, dropdowns, card selectors, toggles — anything the user must
+   provide). Each input needs name, label, type.
+5. WRITE REFLEX — call generate_and_save_reflex() with a precise description
+   including the selectors you discovered and the complete stage interaction.
+6. TEST — call test_reflex(name). If it fails, read the error and call
+   generate_and_save_reflex() again with a corrected description. Repeat once.
+7. NAVIGATE forward to the next stage.
 
-REFLEX SCOPE — a reflex must cover the complete stage interaction end-to-end:
+REFLEX SCOPE — one reflex covers the entire stage end-to-end:
   BAD:  "Click the first autocomplete suggestion"
-  BAD:  "Type pickup location into the field"
-  GOOD: "Fill pickup field with inputs.pickup_location and select first suggestion,
-         fill dropoff field with inputs.dropoff_location and select first suggestion,
-         then tap the Search/Confirm button"
+  GOOD: "Fill pickup input[placeholder*='pickup'] with inputs.pickup_location,
+         wait for ul.suggestions li to appear, click first item,
+         repeat for dropoff, then click button[type=submit]"
 
 STAGE TYPES: page, form, auth_wall, navigation, extraction, dynamic
 
-WHEN TO GENERATE A REFLEX:
-- Forms with predictable selectors (fill + submit in one script)
-- Navigation sequences (click A → wait → click B)
-- Data extraction (scrape prices, titles)
+INPUTS — declare ALL user-controlled values including:
+- Text fields (locations, names, dates)
+- Dropdowns and select elements
+- Card/tile selectors (e.g. ride type: UberX, Comfort, Black)
+- Toggles and radio groups
 
-WHEN NOT TO:
-- Unpredictable layouts — mark stage as "dynamic"
+SKIP reflexes for:
 - Auth walls — call request_human_help() instead
+- Truly unpredictable layouts — mark as "dynamic"
 
-For fields needing real user values, call request_input_values().
-Before any final submit/confirm/book button, call request_confirmation().
+For fields needing real values during probe/test, call request_input_values().
+Before any final submit/confirm/book, call request_confirmation().
 If you hit auth/login, report as "auth_wall" and call request_human_help().
-
-EFFICIENCY:
-- Do NOT repeat stages for the same URL+type.
-- Move forward after mapping each stage.
-- Keep tool call arguments concise.
 """
 
 
@@ -222,12 +221,12 @@ async def explore_flow(
             is_child: bool = False,
         ) -> ActionResult:
             for s in stages:
-                if s["url"] == url and s["type"] == type:
+                if (s["url"] == url and s["type"] == type) or (s["title"] == title and s["type"] == type):
                     current_stage_id[0] = s["id"]
                     if note:
                         s["note"] = note
                     return ActionResult(
-                        extracted_content=f"Stage exists for {url} (id={s['id']}). Move to next page."
+                        extracted_content=f"Stage exists for '{title}' (id={s['id']}). Move to next page."
                     )
 
             stage_id = str(uuid.uuid4())[:8]
@@ -339,7 +338,7 @@ async def explore_flow(
         async def search_reflexes(query: str) -> ActionResult:
             reflexes = await _db.search_reflexes(flow.domain, query)
             if not reflexes:
-                return ActionResult(extracted_content=f"No reflexes found for '{query}' on {flow.domain}.")
+                return ActionResult(extracted_content=f"No reflexes found for '{query}' on {flow.domain}. Proceed with exploration and save a reflex after completing this stage.")
             lines = [f"Reflexes matching '{query}' on {flow.domain}:"]
             for r in reflexes:
                 lines.append(f"  - {r['name']}: {r['description']}")
@@ -573,17 +572,16 @@ async def explore_flow(
                 "Do NOT try to complete the actual task.\n\n"
                 "RULES:\n"
                 "1. Follow the task description ORDER. Auth first if task says so.\n"
-                "2. Before exploring any stage, call search_reflexes(query) with a keyword "
-                "   describing the stage (e.g. 'login', 'booking form', 'pickup'). "
-                "   If a matching reflex exists, call test_reflex(name) to verify it — "
-                "   do NOT re-explore or regenerate it.\n"
+                "2. call search_reflexes(query) before probing any stage. "
+                "   If a match exists, test_reflex(name) and move on — do NOT re-explore.\n"
+                "   If nothing found, that is expected on first exploration — proceed.\n"
                 "3. Call report_stage() BEFORE generate_and_save_reflex().\n"
-                "4. Call declare_inputs() when you see form fields needing user values.\n"
-                "5. Explore a stage FULLY before generating its reflex.\n"
-                "6. ONE reflex per stage — it must cover the ENTIRE stage end-to-end.\n"
-                "   Do NOT generate separate reflexes for individual steps within a stage.\n"
-                "7. NAVIGATE FORWARD after each stage — don't stay on the same page.\n"
-                "8. For form fields needing real values, call request_input_values().\n"
+                "4. PROBE minimally — interact only enough to discover selectors for "
+                "   dynamic elements (autocomplete lists, dropdown options, card tiles).\n"
+                "5. Call declare_inputs() for every user-controlled field you find.\n"
+                "6. ONE reflex per stage covering the ENTIRE stage end-to-end.\n"
+                "7. NAVIGATE FORWARD after each stage.\n"
+                "8. For fields needing real values to probe, call request_input_values().\n"
                 "9. Before final submit/confirm/book, call request_confirmation().\n"
                 "10. Keep your reasoning SHORT. Do not repeat observations."
             ),
@@ -594,7 +592,7 @@ async def explore_flow(
         if agent_ready_callback:
             agent_ready_callback(agent, browser, _paused, sandbox_id, _hitl_response)
 
-        await agent.run(max_steps=15)
+        await agent.run(max_steps=30)
 
         # ── Post-run: auto-extract inputs from reflexes if agent forgot ─
         current_flow = await _db.get_flow(flow.id)
