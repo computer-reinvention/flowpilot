@@ -443,6 +443,27 @@ async def list_reflexes_for_domain(domain: str) -> list[dict]:
     return result
 
 
+async def search_reflexes(domain: str, query: str) -> list[dict]:
+    """Search reflexes for a domain by keyword match on name and description."""
+    pattern = f"%{query}%"
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            """SELECT * FROM reflexes
+               WHERE domain = ?
+                 AND (name LIKE ? OR description LIKE ?)
+               ORDER BY created_at ASC""",
+            (domain, pattern, pattern),
+        )
+        rows = await cursor.fetchall()
+    result = []
+    for row in rows:
+        r = dict(row)
+        r["tags"] = json.loads(r.get("tags", "[]"))
+        result.append(r)
+    return result
+
+
 
 
 # ---------------------------------------------------------------------------

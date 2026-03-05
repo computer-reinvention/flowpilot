@@ -326,6 +326,25 @@ async def explore_flow(
                 extracted_content=f"Reflex '{name}' generated and saved. Move to next stage."
             )
 
+        # ── search_reflexes ──────────────────────────────────────────────
+        @tools.action(
+            description=(
+                "Search saved reflexes for this domain by keyword. "
+                "Matches against reflex name and description. "
+                "Call this before exploring a stage to check if a reflex already "
+                "covers it — if one exists, call test_reflex(name) instead of "
+                "re-exploring. Args: query (keyword or phrase to search for)."
+            )
+        )
+        async def search_reflexes(query: str) -> ActionResult:
+            reflexes = await _db.search_reflexes(flow.domain, query)
+            if not reflexes:
+                return ActionResult(extracted_content=f"No reflexes found for '{query}' on {flow.domain}.")
+            lines = [f"Reflexes matching '{query}' on {flow.domain}:"]
+            for r in reflexes:
+                lines.append(f"  - {r['name']}: {r['description']}")
+            return ActionResult(extracted_content="\n".join(lines))
+
         # ── test_reflex (execute + return summary) ──────────────────────
         @tools.action(
             description=(
@@ -554,15 +573,19 @@ async def explore_flow(
                 "Do NOT try to complete the actual task.\n\n"
                 "RULES:\n"
                 "1. Follow the task description ORDER. Auth first if task says so.\n"
-                "2. Call report_stage() BEFORE generate_and_save_reflex().\n"
-                "3. Call declare_inputs() when you see form fields needing user values.\n"
-                "4. Explore a stage FULLY before generating its reflex.\n"
-                "5. ONE reflex per stage — it must cover the ENTIRE stage end-to-end.\n"
+                "2. Before exploring any stage, call search_reflexes(query) with a keyword "
+                "   describing the stage (e.g. 'login', 'booking form', 'pickup'). "
+                "   If a matching reflex exists, call test_reflex(name) to verify it — "
+                "   do NOT re-explore or regenerate it.\n"
+                "3. Call report_stage() BEFORE generate_and_save_reflex().\n"
+                "4. Call declare_inputs() when you see form fields needing user values.\n"
+                "5. Explore a stage FULLY before generating its reflex.\n"
+                "6. ONE reflex per stage — it must cover the ENTIRE stage end-to-end.\n"
                 "   Do NOT generate separate reflexes for individual steps within a stage.\n"
-                "6. NAVIGATE FORWARD after each stage — don't stay on the same page.\n"
-                "7. For form fields needing real values, call request_input_values().\n"
-                "8. Before final submit/confirm/book, call request_confirmation().\n"
-                "9. Keep your reasoning SHORT. Do not repeat observations."
+                "7. NAVIGATE FORWARD after each stage — don't stay on the same page.\n"
+                "8. For form fields needing real values, call request_input_values().\n"
+                "9. Before final submit/confirm/book, call request_confirmation().\n"
+                "10. Keep your reasoning SHORT. Do not repeat observations."
             ),
         )
 
