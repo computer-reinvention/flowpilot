@@ -355,10 +355,28 @@ async def _execute_reflex(
     # Inject the user script into our wrapper
     wrapped = _REFLEX_JS_WRAPPER.replace("__REFLEX_SCRIPT__", script)
 
+    pre_url = ""
+    try:
+        pre_url = await page.get_url()
+    except Exception:
+        pass
+
     try:
         await page.evaluate(wrapped, inputs, entry_url)
         return True, "Reflex executed successfully"
     except Exception as e:
+        # window.location.href / navigation scripts cause CDP to drop the
+        # evaluate context mid-execution — the exception fires even though
+        # the navigation succeeded. Detect this by checking if the URL changed.
+        await asyncio.sleep(1.0)  # let navigation settle
+        try:
+            post_url = await page.get_url()
+            if pre_url and post_url and post_url != pre_url and post_url not in ("about:blank", "chrome://newtab/"):
+                logger.debug("Reflex caused navigation %s → %s (evaluate threw but treated as success)", pre_url, post_url)
+                return True, f"Reflex navigated to {post_url}"
+        except Exception:
+            pass
+
         # Dump page state so the agent can pick up where the script stopped
         try:
             fail_url = await page.get_url()

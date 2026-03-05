@@ -185,40 +185,56 @@ async def _watch_run(
     deadline = time.monotonic() + timeout
 
     logger.info("[run:%s] connecting WS", run_id)
-    async with websockets.connect(ws_url) as ws:
+    try:
+        async with websockets.connect(ws_url) as ws:
+            while time.monotonic() < deadline:
+                remaining = deadline - time.monotonic()
+                try:
+                    raw = await asyncio.wait_for(ws.recv(), timeout=min(30, remaining))
+                except asyncio.TimeoutError:
+                    await ws.send("ping")
+                    continue
+
+                if raw == "pong":
+                    continue
+                try:
+                    event = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+
+                status  = event.get("status", "")
+                message = event.get("message") or event.get("current_step", "")
+                logger.info("[run:%s] %-22s  %s", run_id, status, (message or "")[:80])
+                last_event = event
+
+                if status == "paused_for_hitl":
+                    logger.info("[run:%s] HITL pause — auto-resuming", run_id)
+                    r = await client.post(
+                        f"/api/runs/{run_id}/resume",
+                        headers=_headers(token),
+                    )
+                    if r.status_code not in (200, 409):
+                        logger.warning("run resume returned %d: %s", r.status_code, r.text)
+                    deadline = time.monotonic() + timeout
+                    continue
+
+                if status in TERMINAL_RUN:
+                    break
+    except Exception as e:
+        # WS closed by server (run ended) or network hiccup — fall back to REST
+        logger.info("[run:%s] WS closed (%s), polling REST for final status", run_id, e)
+
+    # If WS closed before we got a terminal event, poll REST until done
+    if last_event.get("status") not in TERMINAL_RUN:
         while time.monotonic() < deadline:
-            remaining = deadline - time.monotonic()
-            try:
-                raw = await asyncio.wait_for(ws.recv(), timeout=min(30, remaining))
-            except asyncio.TimeoutError:
-                await ws.send("ping")
-                continue
-
-            if raw == "pong":
-                continue
-            try:
-                event = json.loads(raw)
-            except json.JSONDecodeError:
-                continue
-
-            status  = event.get("status", "")
-            message = event.get("message") or event.get("current_step", "")
-            logger.info("[run:%s] %-22s  %s", run_id, status, (message or "")[:80])
-            last_event = event
-
-            if status == "paused_for_hitl":
-                logger.info("[run:%s] HITL pause — auto-resuming (no actual auth needed)", run_id)
-                r = await client.post(
-                    f"/api/runs/{run_id}/resume",
-                    headers=_headers(token),
-                )
-                if r.status_code not in (200, 409):
-                    logger.warning("run resume returned %d: %s", r.status_code, r.text)
-                deadline = time.monotonic() + timeout
-                continue
-
-            if status in TERMINAL_RUN:
+            resp = await client.get(f"/api/runs/{run_id}", headers=_headers(token))
+            resp.raise_for_status()
+            data = resp.json()
+            last_event = {"status": data["status"], "message": data.get("current_step", "")}
+            logger.info("[run:%s] REST poll: status=%s", run_id, data["status"])
+            if data["status"] in TERMINAL_RUN:
                 break
+            await asyncio.sleep(3)
 
     return last_event
 
