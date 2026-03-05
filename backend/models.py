@@ -21,6 +21,8 @@ class Flow:
     exploration_tree: str = "[]"  # JSON array of exploration stage nodes
     exploration_input_request: str | None = None  # JSON array of {name, label, description?}
     exploration_confirmation_request: str | None = None  # summary string
+    auth_url: str | None = None
+    auth_before_explore: bool = False
 
 
 @dataclass

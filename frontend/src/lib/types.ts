@@ -24,13 +24,16 @@ export interface Flow {
   icon?: string;
   created_by: string;
   created_at: string;
-  exploration_status?: "pending" | "exploring" | "ready" | "failed" | "paused_for_hitl";
+  exploration_status?: "pending" | "exploring" | "ready" | "failed" | "paused_for_hitl" | "awaiting_auth";
   exploration_error?: string;
   exploration_notes?: string;
   exploration_tree?: ExplorationStage[];
   exploration_sandbox_id?: string;
   exploration_input_request?: { name: string; label: string; description?: string; type?: "text" | "select"; options?: string[] }[];
   exploration_confirmation_request?: string;
+  auth_url?: string;
+  auth_before_explore?: boolean;
+  auth_sandbox_id?: string;
 }
 
 export interface ExplorationStage {

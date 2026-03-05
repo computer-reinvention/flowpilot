@@ -132,6 +132,9 @@ export default function App() {
     domain: string;
     task: string;
     entry_url?: string;
+    auth_url?: string;
+    auth_before_explore?: boolean;
+    inputs?: { name: string; label: string; type: string }[];
   }) {
     setSubmitting(true);
     try {

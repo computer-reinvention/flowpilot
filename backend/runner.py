@@ -51,21 +51,27 @@ def _get_llm() -> ChatGoogle | ChatAnthropic | ChatOpenAI:
     if provider == "gemini":
         api_key = os.environ.get("GOOGLE_API_KEY")
         if not api_key:
-            raise ValueError("GOOGLE_API_KEY env var is required when LLM_PROVIDER=gemini")
-        model = os.environ.get("GEMINI_MODEL") or "gemini-3-pro-preview"
+            raise ValueError(
+                "GOOGLE_API_KEY env var is required when LLM_PROVIDER=gemini"
+            )
+        model = os.environ.get("GEMINI_MODEL") or "gemini-3.1-pro-preview-customtools"
         logger.info("Using Gemini model: %s", model)
         return ChatGoogle(model=model, api_key=api_key, max_output_tokens=65536)
     elif provider in ("claude", "anthropic"):
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
-            raise ValueError("ANTHROPIC_API_KEY env var is required when LLM_PROVIDER=claude")
+            raise ValueError(
+                "ANTHROPIC_API_KEY env var is required when LLM_PROVIDER=claude"
+            )
         model = os.environ.get("ANTHROPIC_MODEL") or "claude-sonnet-4-20250514"
         logger.info("Using Anthropic model: %s", model)
         return ChatAnthropic(model=model, api_key=api_key)
     elif provider == "openai":
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
-            raise ValueError("OPENAI_API_KEY env var is required when LLM_PROVIDER=openai")
+            raise ValueError(
+                "OPENAI_API_KEY env var is required when LLM_PROVIDER=openai"
+            )
         model = os.environ.get("OPENAI_MODEL") or "gpt-4o"
         logger.info("Using OpenAI model: %s", model)
         return ChatOpenAI(model=model, api_key=api_key)
@@ -73,6 +79,46 @@ def _get_llm() -> ChatGoogle | ChatAnthropic | ChatOpenAI:
         raise ValueError(
             f"Unknown LLM_PROVIDER='{provider}'. Valid options: gemini, claude, anthropic, openai"
         )
+
+
+def _get_exploration_llm() -> ChatGoogle | ChatAnthropic | ChatOpenAI:
+    """Return the LLM used for the exploration agent — optimised for long output."""
+    provider = (os.environ.get("LLM_PROVIDER") or "gemini").strip().lower()
+    if provider == "gemini":
+        api_key = os.environ.get("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError("GOOGLE_API_KEY env var is required when LLM_PROVIDER=gemini")
+        model = os.environ.get("GEMINI_EXPLORATION_MODEL") or "gemini-3.1-pro-preview"
+        logger.info("Using exploration Gemini model: %s", model)
+        return ChatGoogle(model=model, api_key=api_key, max_output_tokens=65536)
+    # For non-Gemini providers, fall back to the default LLM
+    return _get_llm()
+
+
+def _get_fast_llm() -> ChatGoogle | ChatAnthropic | ChatOpenAI:
+    """Return a cheap/fast model for page extraction. Falls back to _get_llm()."""
+    provider = (os.environ.get("LLM_PROVIDER") or "gemini").strip().lower()
+    if provider == "gemini":
+        model = os.environ.get("GEMINI_FAST_MODEL") or "gemini-3-flash-preview"
+        api_key = os.environ.get("GOOGLE_API_KEY", "")
+        logger.info("Using fast Gemini model: %s", model)
+        return ChatGoogle(model=model, api_key=api_key, max_output_tokens=16384)
+    elif provider in ("claude", "anthropic"):
+        model = os.environ.get("ANTHROPIC_FAST_MODEL")
+        if not model:
+            return _get_llm()
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        logger.info("Using fast Anthropic model: %s", model)
+        return ChatAnthropic(model=model, api_key=api_key)
+    elif provider == "openai":
+        model = os.environ.get("OPENAI_FAST_MODEL")
+        if not model:
+            return _get_llm()
+        api_key = os.environ.get("OPENAI_API_KEY", "")
+        logger.info("Using fast OpenAI model: %s", model)
+        return ChatOpenAI(model=model, api_key=api_key)
+    else:
+        return _get_llm()
 
 
 # JavaScript wrapper that provides helpers to reflex scripts.
@@ -100,20 +146,20 @@ async (inputs, entryUrl) => {
         el.value = '';
         for (const ch of text) {
             el.value += ch;
-            el.dispatchEvent(new Event('input', {bubbles: true}));
-            el.dispatchEvent(new KeyboardEvent('keydown', {key: ch, bubbles: true}));
-            el.dispatchEvent(new KeyboardEvent('keyup', {key: ch, bubbles: true}));
+            el.dispatchEvent(new Event('input', {bubbles: true, composed: true}));
+            el.dispatchEvent(new KeyboardEvent('keydown', {key: ch, bubbles: true, composed: true}));
+            el.dispatchEvent(new KeyboardEvent('keyup', {key: ch, bubbles: true, composed: true}));
             await sleep(delay);
         }
-        el.dispatchEvent(new Event('change', {bubbles: true}));
+        el.dispatchEvent(new Event('change', {bubbles: true, composed: true}));
     };
 
     // Set value instantly (for fields that don't need autocomplete)
     const fillInput = (el, value) => {
         el.focus();
         el.value = value;
-        el.dispatchEvent(new Event('input', {bubbles: true}));
-        el.dispatchEvent(new Event('change', {bubbles: true}));
+        el.dispatchEvent(new Event('input', {bubbles: true, composed: true}));
+        el.dispatchEvent(new Event('change', {bubbles: true, composed: true}));
     };
 
     // Default selectors for suggestion/autocomplete dropdowns
@@ -155,18 +201,18 @@ async (inputs, entryUrl) => {
             // Clear and type
             el.focus();
             el.value = '';
-            el.dispatchEvent(new Event('input', {bubbles: true}));
+            el.dispatchEvent(new Event('input', {bubbles: true, composed: true}));
             await sleep(100);
 
             // Type char by char
             for (const ch of text) {
                 el.value += ch;
-                el.dispatchEvent(new Event('input', {bubbles: true}));
-                el.dispatchEvent(new KeyboardEvent('keydown', {key: ch, bubbles: true}));
-                el.dispatchEvent(new KeyboardEvent('keyup', {key: ch, bubbles: true}));
+                el.dispatchEvent(new Event('input', {bubbles: true, composed: true}));
+                el.dispatchEvent(new KeyboardEvent('keydown', {key: ch, bubbles: true, composed: true}));
+                el.dispatchEvent(new KeyboardEvent('keyup', {key: ch, bubbles: true, composed: true}));
                 await sleep(typeDelay);
             }
-            el.dispatchEvent(new Event('change', {bubbles: true}));
+            el.dispatchEvent(new Event('change', {bubbles: true, composed: true}));
 
             // Wait for suggestions to appear
             let suggestions;
@@ -186,7 +232,7 @@ async (inputs, entryUrl) => {
                 if (attempt < retries) {
                     // Retry: clear and retype (sometimes the first attempt doesn't trigger)
                     el.value = '';
-                    el.dispatchEvent(new Event('input', {bubbles: true}));
+                    el.dispatchEvent(new Event('input', {bubbles: true, composed: true}));
                     await sleep(500);
                     continue;
                 }
@@ -356,6 +402,7 @@ async def _repair_reflex(
 
         try:
             from browser_use.llm.messages import UserMessage
+
             response = await llm.ainvoke([UserMessage(content=repair_prompt)])
             fixed_script = response.completion.strip()
             # Strip markdown fences if the model included them anyway
@@ -423,7 +470,9 @@ async def _generate_reflex(
         return False, f"Failed to read page state: {e}", None
 
     # Build input description
-    input_desc = ", ".join(f"{k}={v!r}" for k, v in inputs.items()) if inputs else "none"
+    input_desc = (
+        ", ".join(f"{k}={v!r}" for k, v in inputs.items()) if inputs else "none"
+    )
 
     generate_prompt = (
         "You are a browser automation script writer. Write a JavaScript script that "
@@ -452,6 +501,7 @@ async def _generate_reflex(
 
     try:
         from browser_use.llm.messages import UserMessage
+
         response = await llm.ainvoke([UserMessage(content=generate_prompt)])
         script = response.completion.strip()
         # Strip markdown fences
@@ -497,11 +547,13 @@ async def _generate_reflex(
 def _tree_reflex_order(tree: list[dict]) -> list[str]:
     """Return reflex names from the exploration tree in depth-first order."""
     order: list[str] = []
+
     def _walk(nodes: list[dict]) -> None:
         for node in nodes:
             if node.get("reflex_name"):
                 order.append(node["reflex_name"])
             _walk(node.get("children", []))
+
     _walk(tree)
     return order
 
@@ -535,7 +587,11 @@ call request_human_help(). NEVER type passwords or credentials yourself.
 - SAVE REFLEXES: After completing a repeatable interaction, call save_reflex() with a \
 JS script. Helpers available: waitFor(sel), sleep(ms), typeInto(el, text), \
 fillInput(el, value), acceptSuggestion(sel), typeAndSelect(el, text, opts). \
-For fields requiring suggestion selection (locations, addresses), use typeAndSelect().\
+For fields requiring suggestion selection (locations, addresses), use typeAndSelect().
+- CAPTCHA: CAPTCHAs are NOT auto-solved. Call request_human_help(category="captcha") immediately.
+- CLICK FALLBACK: If click_element fails, try send_keys("Tab Tab Enter") to navigate and activate.
+- FORM PACING: On dynamic forms with autocomplete, fill ONE field per action batch. \
+Don't batch dependent fields.\
 """
 
 
@@ -596,7 +652,9 @@ class FlowRunner:
             by_name = {r["name"]: r for r in all_reflexes}
             # Tree-ordered first, then any reflexes not in the tree appended at the end
             domain_reflexes = [by_name[n] for n in tree_order if n in by_name]
-            domain_reflexes += [r for r in all_reflexes if r["name"] not in {n for n in tree_order}]
+            domain_reflexes += [
+                r for r in all_reflexes if r["name"] not in {n for n in tree_order}
+            ]
         else:
             domain_reflexes = all_reflexes
 
@@ -635,7 +693,9 @@ class FlowRunner:
             if domain_reflexes:
                 # Try the first matching reflex
                 for reflex in domain_reflexes:
-                    await _update(RunStatus.RUNNING, f"Trying reflex '{reflex['name']}'...")
+                    await _update(
+                        RunStatus.RUNNING, f"Trying reflex '{reflex['name']}'..."
+                    )
                     success, msg = await _execute_reflex(
                         script=reflex["script"],
                         inputs=inputs,
@@ -643,7 +703,10 @@ class FlowRunner:
                         browser_session=browser,
                     )
                     if success:
-                        await _update(RunStatus.COMPLETED, f"Reflex '{reflex['name']}' completed flow")
+                        await _update(
+                            RunStatus.COMPLETED,
+                            f"Reflex '{reflex['name']}' completed flow",
+                        )
                         return {
                             "raw_result": f"Completed via reflex '{reflex['name']}'",
                             "flow_name": flow.name,
@@ -651,7 +714,10 @@ class FlowRunner:
                             "completed_at": datetime.now(timezone.utc).isoformat(),
                         }
                     # Try auto-repair
-                    await _update(RunStatus.RUNNING, f"Reflex '{reflex['name']}' failed, repairing...")
+                    await _update(
+                        RunStatus.RUNNING,
+                        f"Reflex '{reflex['name']}' failed, repairing...",
+                    )
                     repaired, _, fixed_script = await _repair_reflex(
                         broken_script=reflex["script"],
                         error_msg=msg,
@@ -667,20 +733,33 @@ class FlowRunner:
                             description=reflex["description"],
                             script=fixed_script,
                             pause_after=reflex.get("pause_after"),
-                            tags=json.loads(reflex.get("tags", "[]")) if isinstance(reflex.get("tags"), str) else reflex.get("tags", []),
+                            tags=(
+                                json.loads(reflex.get("tags", "[]"))
+                                if isinstance(reflex.get("tags"), str)
+                                else reflex.get("tags", [])
+                            ),
                         )
-                        await _update(RunStatus.COMPLETED, f"Reflex '{reflex['name']}' repaired and completed flow")
+                        await _update(
+                            RunStatus.COMPLETED,
+                            f"Reflex '{reflex['name']}' repaired and completed flow",
+                        )
                         return {
                             "raw_result": f"Completed via repaired reflex '{reflex['name']}'",
                             "flow_name": flow.name,
                             "inputs": inputs,
                             "completed_at": datetime.now(timezone.utc).isoformat(),
                         }
-                    logger.info("Reflex '%s' repair failed, trying next or falling through", reflex["name"])
+                    logger.info(
+                        "Reflex '%s' repair failed, trying next or falling through",
+                        reflex["name"],
+                    )
 
             elif flow.entry_url:
                 # No saved reflexes — try generating one from the live page
-                await _update(RunStatus.RUNNING, "No reflexes found. Generating script from page...")
+                await _update(
+                    RunStatus.RUNNING,
+                    "No reflexes found. Generating script from page...",
+                )
                 gen_ok, gen_msg, gen_script = await _generate_reflex(
                     flow=flow,
                     inputs=inputs,
@@ -697,14 +776,18 @@ class FlowRunner:
                         pause_after=None,
                         tags=["auto"],
                     )
-                    await _update(RunStatus.COMPLETED, "Generated script completed flow")
+                    await _update(
+                        RunStatus.COMPLETED, "Generated script completed flow"
+                    )
                     return {
                         "raw_result": "Completed via auto-generated reflex",
                         "flow_name": flow.name,
                         "inputs": inputs,
                         "completed_at": datetime.now(timezone.utc).isoformat(),
                     }
-                logger.info("Script generation failed (%s), falling through to agent", gen_msg)
+                logger.info(
+                    "Script generation failed (%s), falling through to agent", gen_msg
+                )
 
             # ----------------------------------------------------------
             # Slow path: full agent loop (only if fast paths failed)
@@ -769,7 +852,10 @@ class FlowRunner:
 
                 # Reflex failed — try auto-repair with a subagent LLM call.
                 # This keeps the DOM dump + repair loop out of the main agent context.
-                await _update(RunStatus.RUNNING, f"Reflex '{name}' failed, attempting auto-repair...")
+                await _update(
+                    RunStatus.RUNNING,
+                    f"Reflex '{name}' failed, attempting auto-repair...",
+                )
                 repaired, repair_msg, fixed_script = await _repair_reflex(
                     broken_script=reflex["script"],
                     error_msg=msg,
@@ -787,7 +873,11 @@ class FlowRunner:
                         description=reflex["description"],
                         script=fixed_script,
                         pause_after=reflex.get("pause_after"),
-                        tags=json.loads(reflex.get("tags", "[]")) if isinstance(reflex.get("tags"), str) else reflex.get("tags", []),
+                        tags=(
+                            json.loads(reflex.get("tags", "[]"))
+                            if isinstance(reflex.get("tags"), str)
+                            else reflex.get("tags", [])
+                        ),
                     )
                     return ActionResult(
                         extracted_content=f"Reflex '{name}' was broken but auto-repaired and executed. "
@@ -847,7 +937,9 @@ class FlowRunner:
                     "dropdowns, cookie banners, forms you can fill."
                 )
             )
-            async def request_human_help(reason: str, category: str = "other") -> ActionResult:
+            async def request_human_help(
+                reason: str, category: str = "other"
+            ) -> ActionResult:
                 _paused[0] = True
                 await _update(RunStatus.PAUSED_FOR_HITL, f"[{category}] {reason}")
                 if _agent_ref:
@@ -862,9 +954,12 @@ class FlowRunner:
                 browser=browser,
                 register_new_step_callback=_on_step,
                 tools=tools,
-                max_actions_per_step=10,
+                max_history_items=8,
+                max_actions_per_step=4,
                 use_vision="auto",
+                vision_detail_level="low",
                 llm_screenshot_size=(1024, 768),
+                page_extraction_llm=_get_fast_llm(),
                 extend_system_message=_AGENT_RULES,
             )
 
@@ -875,11 +970,15 @@ class FlowRunner:
 
             await _update(RunStatus.RUNNING, f"Agent running flow '{flow.name}'...")
 
-            result = await agent.run(max_steps=20)
+            result = await agent.run(max_steps=30)
 
             if hasattr(result, "is_successful") and not result.is_successful():
                 errors = result.errors() if hasattr(result, "errors") else []
-                error_msg = "; ".join(str(e) for e in errors) if errors else "Agent failed to complete the task"
+                error_msg = (
+                    "; ".join(str(e) for e in errors)
+                    if errors
+                    else "Agent failed to complete the task"
+                )
                 await _update(RunStatus.FAILED, f"Flow failed: {error_msg}")
                 raise RuntimeError(error_msg)
 

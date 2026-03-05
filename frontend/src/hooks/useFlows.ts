@@ -32,6 +32,9 @@ export function useFlows(enabled = true) {
       task: string;
       entry_url?: string;
       icon?: string;
+      auth_url?: string;
+      auth_before_explore?: boolean;
+      inputs?: { name: string; label: string; type: string }[];
     }) => {
       const created = await apiFetch<Flow>("/api/flows", {
         method: "POST",

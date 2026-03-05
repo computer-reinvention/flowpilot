@@ -4,10 +4,12 @@ Triggered on flow creation (if entry_url exists) or on-demand via
 POST /api/flows/{flow_id}/explore. Uses a full browser-use agent with
 custom tools to map the journey and save reflexes for repeatable stages.
 
-The explorer builds a tree of stages as it navigates. Each stage node:
-  {id, url, title, type, reflex_name?, note?, children[]}
-
-type: "page" | "form" | "auth_wall" | "navigation" | "extraction" | "dynamic"
+Context management strategy:
+  - The main agent loop is kept lean: short tool descriptions, small screenshots,
+    low max_history_items.
+  - Reflex generation is offloaded to a separate fast-LLM call so the agent
+    never sees bulky JS in its conversation history.
+  - Reflex testing executes scripts and returns only a pass/fail summary.
 """
 
 import asyncio
@@ -21,59 +23,87 @@ from browser_use import Agent, Browser, ActionResult, Tools
 
 from . import db as _db
 from .models import Flow
-from .runner import _get_llm
+from .runner import _get_exploration_llm, _get_fast_llm, _REFLEX_JS_WRAPPER
 
 logger = logging.getLogger(__name__)
+
+# ── Reflex generation prompt (runs on fast LLM, outside agent context) ──────
+
+_REFLEX_GEN_PROMPT = """\
+Write a JavaScript reflex script for the following browser interaction.
+
+CONTEXT:
+- Page URL: {url}
+- Stage: {stage_title}
+- Description: {description}
+
+AVAILABLE HELPERS (already in scope — do NOT declare them):
+  waitFor(sel, timeout)     — wait for CSS selector, returns element
+  sleep(ms)                 — async delay
+  typeInto(el, text, delay) — type char-by-char (triggers autocomplete)
+  fillInput(el, value)      — set value instantly
+  acceptSuggestion(sel, timeout) — click first suggestion match
+  typeAndSelect(el, text, opts?) — type + select from dropdown
+
+VARIABLES IN SCOPE:
+  inputs — object with user-provided values (use inputs.field_name)
+  entryUrl — the flow's entry URL
+
+RULES:
+- Output ONLY the script body (no function wrapper, no markdown fences)
+- Use inputs.field_name for user-specific values
+- Use snake_case for all field references
+- Keep it short and robust — prefer waitFor() over hardcoded delays
+- Do NOT use document.querySelector chains when waitFor() works
+"""
 
 
 def _build_exploration_prompt(flow: Flow) -> str:
     return f"""\
-You are exploring {flow.entry_url} to map the journey for: "{flow.task}"
+Explore {flow.entry_url} to map the journey for: "{flow.task}"
 
-You have THREE jobs — do them IN ORDER as you navigate:
+Follow the EXACT order implied by the task description. If the task mentions
+auth/login first, handle auth first. If it says "book a ride from X to Y",
+navigate to booking before exploring other pages.
 
-1. REPORT STAGES: As you move through the site, call report_stage() for each
-   distinct page or interaction point. This builds a tree map of the journey.
-   Call it BEFORE you save a reflex for that stage.
+JOBS (do in order as you navigate):
 
-2. DISCOVER INPUTS: Identify what user-provided values this flow needs.
-   Call declare_inputs() ONLY after you know the exact field names/labels.
-   Each input MUST have a "name" (e.g. "pickup_location"). Do NOT call
-   declare_inputs with empty objects or placeholders — wait until you can
-   see the actual form fields.
+1. REPORT STAGES — call report_stage() for each distinct page/interaction.
+2. DISCOVER INPUTS — call declare_inputs() when you see form fields needing
+   user values. Each input needs: name, label, type. Do NOT pass empty objects.
+3. EXPLORE THE STAGE FULLY — interact with the page to understand all steps
+   (fill fields, trigger dropdowns, observe behaviour). Do NOT save a reflex yet.
+4. GENERATE ONE REFLEX PER STAGE — after fully exploring a stage, call
+   generate_and_save_reflex() ONCE with a description covering the ENTIRE stage
+   flow. One reflex = one stage. Do not split a stage into multiple reflexes.
+5. TEST REFLEXES — optionally call test_reflex() to verify a saved reflex works.
 
-3. MAP REFLEXES: For repeatable stages, call save_reflex() with a JS script.
-   The reflex gets attached to the most recent stage you reported.
+REFLEX SCOPE — a reflex must cover the complete stage interaction end-to-end:
+  BAD:  "Click the first autocomplete suggestion"
+  BAD:  "Type pickup location into the field"
+  GOOD: "Fill pickup field with inputs.pickup_location and select first suggestion,
+         fill dropoff field with inputs.dropoff_location and select first suggestion,
+         then tap the Search/Confirm button"
 
-STAGE TYPES:
-- "page": A distinct page/view the user lands on
-- "form": A form that needs to be filled
-- "auth_wall": Login/OTP/CAPTCHA — requires human help
-- "navigation": A click-through step (e.g., "click Book Now")
-- "extraction": Reading data from the page (e.g., scraping a title)
-- "dynamic": Content that changes per session (don't reflex this)
+STAGE TYPES: page, form, auth_wall, navigation, extraction, dynamic
 
-SAVE A REFLEX when:
-- A form has fixed input fields (same selectors every time)
-- Navigation follows a predictable path
-- The logic can be expressed as JS
-- Selecting options, parsing prices, reading text — JS problems
+WHEN TO GENERATE A REFLEX:
+- Forms with predictable selectors (fill + submit in one script)
+- Navigation sequences (click A → wait → click B)
+- Data extraction (scrape prices, titles)
 
-DO NOT save a reflex when:
-- Page structure is unpredictable (A/B tests, random layouts)
-- Mark these as "dynamic" stages instead
+WHEN NOT TO:
+- Unpredictable layouts — mark stage as "dynamic"
+- Auth walls — call request_human_help() instead
 
-When you encounter form fields needing user-specific values (addresses, names,
-dates, etc.), call request_input_values() with the field details. The user will
-provide real values. Do NOT use placeholder/dummy values for these fields.
-Write scripts with inputs.field_name so real values work at run time.
+For fields needing real user values, call request_input_values().
+Before any final submit/confirm/book button, call request_confirmation().
+If you hit auth/login, report as "auth_wall" and call request_human_help().
 
-Before clicking any final submit/confirm/book/order button, call
-request_confirmation() with a summary of what will happen. The user will
-approve or decline. Do NOT click submit buttons without confirmation.
-
-If you hit auth/login, report it as an "auth_wall" stage and call request_human_help().
-The user will log in for you in the live browser, then exploration resumes.
+EFFICIENCY:
+- Do NOT repeat stages for the same URL+type.
+- Move forward after mapping each stage.
+- Keep tool call arguments concise.
 """
 
 
@@ -84,18 +114,20 @@ async def explore_flow(
     storage_state: dict | None = None,
     agent_ready_callback=None,
     on_status_change=None,
+    # Injected session-capture callback: async (browser) -> None
+    # Lets callers (main.py) persist cookies without explorer knowing the user context.
+    on_session_capture=None,
 ) -> None:
     """Run the exploration agent against a flow's entry_url."""
 
     async def _update_and_notify(updates: dict) -> None:
-        """Update flow in DB and notify WebSocket subscribers."""
         await _db.update_flow(flow.id, updates)
         if on_status_change:
             await on_status_change(flow.id)
 
     await _update_and_notify({"exploration_status": "exploring"})
 
-    # Wait for CDP
+    # ── Wait for CDP ────────────────────────────────────────────────────
     _cdp_hp = cdp_url.split("//")[1].split("/")[0]
     _cdp_h, _cdp_p = _cdp_hp.rsplit(":", 1)
     _cdp_info = None
@@ -121,12 +153,11 @@ async def explore_flow(
     notes: list[str] = []
     reflexes_saved = 0
 
-    # Tree state — flat list of stage nodes, each with a parent_id
+    # ── Stage tree state ────────────────────────────────────────────────
     stages: list[dict] = []
-    current_stage_id: list[str | None] = [None]  # mutable ref for closures
+    current_stage_id: list[str | None] = [None]
 
     def _build_tree() -> list[dict]:
-        """Convert flat stages list into nested tree."""
         by_id = {s["id"]: {**s, "children": []} for s in stages}
         roots: list[dict] = []
         for s in stages:
@@ -136,20 +167,19 @@ async def explore_flow(
                 by_id[parent]["children"].append(node)
             else:
                 roots.append(node)
-        # Strip parent_id from output
-        def _clean(node: dict) -> dict:
-            return {k: v for k, v in node.items() if k != "parent_id"}
+
         def _clean_tree(nodes: list[dict]) -> list[dict]:
-            result = []
-            for n in nodes:
-                cleaned = _clean(n)
-                cleaned["children"] = _clean_tree(n.get("children", []))
-                result.append(cleaned)
-            return result
+            return [
+                {
+                    **{k: v for k, v in n.items() if k != "parent_id"},
+                    "children": _clean_tree(n.get("children", [])),
+                }
+                for n in nodes
+            ]
+
         return _clean_tree(roots)
 
     async def _persist_tree() -> None:
-        """Save current tree to DB and notify subscribers."""
         tree = _build_tree()
         await _update_and_notify({"exploration_tree": json.dumps(tree)})
 
@@ -158,27 +188,20 @@ async def explore_flow(
             cdp_url=cdp_url,
             storage_state=storage_state,
             headers={"Host": "localhost"},
-            wait_between_actions=2.0,
+            wait_between_actions=0.5,
             wait_for_network_idle_page_load_time=1.0,
         )
 
-        llm = _get_llm()
+        llm = _get_exploration_llm()
+        fast_llm = _get_fast_llm()
         tools = Tools()
 
-        # ----------------------------------------------------------
-        # report_stage: build the exploration tree
-        # ----------------------------------------------------------
+        # ── report_stage ────────────────────────────────────────────────
         @tools.action(
             description=(
-                "Report a stage in the exploration journey. Call this as you navigate "
-                "to build a tree map. Each stage becomes a node in the journey tree.\n"
-                "Parameters:\n"
-                "  title: Short description (e.g., 'Homepage', 'Booking form', 'Login page')\n"
-                "  url: Current page URL\n"
-                "  type: One of: page, form, auth_wall, navigation, extraction, dynamic\n"
-                "  note: Optional observation about this stage\n"
-                "  is_child: If true, this stage is a sub-step of the previous stage. "
-                "If false (default), it's a sibling (next step in the flow)."
+                "Report a stage in the journey. "
+                "Args: title, url, type (page|form|auth_wall|navigation|extraction|dynamic), "
+                "note (optional), is_child (bool, default false)."
             )
         )
         async def report_stage(
@@ -188,22 +211,17 @@ async def explore_flow(
             note: str | None = None,
             is_child: bool = False,
         ) -> ActionResult:
-            # Deduplicate: if same URL + type already exists, reuse it
             for s in stages:
                 if s["url"] == url and s["type"] == type:
                     current_stage_id[0] = s["id"]
                     if note:
-                        s["note"] = note  # update note if provided
+                        s["note"] = note
                     return ActionResult(
-                        extracted_content=(
-                            f"Stage already recorded for {url} (type={type}, id={s['id']}). "
-                            "Reusing existing stage. Navigate to a NEW page before reporting another stage."
-                        )
+                        extracted_content=f"Stage exists for {url} (id={s['id']}). Move to next page."
                     )
 
             stage_id = str(uuid.uuid4())[:8]
             parent_id = current_stage_id[0] if is_child else None
-            # If not a child, find the parent of the current stage to make this a sibling
             if not is_child and current_stage_id[0]:
                 for s in stages:
                     if s["id"] == current_stage_id[0]:
@@ -222,32 +240,61 @@ async def explore_flow(
             stages.append(stage)
             current_stage_id[0] = stage_id
             await _persist_tree()
-            return ActionResult(
-                extracted_content=f"Stage '{title}' recorded (id={stage_id})."
-            )
+            return ActionResult(extracted_content=f"Stage '{title}' recorded (id={stage_id}).")
 
-        # ----------------------------------------------------------
-        # save_reflex: save a JS script, attach to current stage
-        # ----------------------------------------------------------
+        # ── generate_and_save_reflex (offloaded to fast LLM) ───────────
         @tools.action(
             description=(
-                "Save a JavaScript reflex script for a repeatable interaction. "
-                "The script gets attached to the most recently reported stage.\n"
-                "The script runs as an async function body receiving (inputs, entryUrl) "
-                "plus helpers: waitFor(sel, timeout), sleep(ms), typeInto(el, text, delay), "
-                "fillInput(el, value), acceptSuggestion(sel, timeout), "
-                "typeAndSelect(el, text, opts?).\n"
-                "Use inputs.field_name for user values. Name: snake_case."
+                "Generate and save a JS reflex for the ENTIRE current stage — not a single action. "
+                "The reflex must cover ALL interactions in the stage from start to finish. "
+                "Example: a booking form reflex fills pickup, fills dropoff, selects autocomplete "
+                "suggestions for both, picks ride type, all in one script. "
+                "Call this ONCE per stage after you have fully explored it. "
+                "YOU provide a plain-English description; a separate model writes the JS. "
+                "Args: name (snake_case), description (full stage flow to automate), "
+                "tags (optional list), pause_after_auth (bool, default false)."
             )
         )
-        async def save_reflex(
+        async def generate_and_save_reflex(
             name: str,
             description: str,
-            script: str,
             tags: list[str] | None = None,
             pause_after_auth: bool = False,
         ) -> ActionResult:
             nonlocal reflexes_saved
+
+            # Get current stage info for context
+            stage_title = "unknown"
+            stage_url = flow.entry_url
+            if current_stage_id[0]:
+                for s in stages:
+                    if s["id"] == current_stage_id[0]:
+                        stage_title = s["title"]
+                        stage_url = s["url"]
+                        break
+
+            # Generate the script using the fast LLM (outside agent context)
+            gen_prompt = _REFLEX_GEN_PROMPT.format(
+                url=stage_url,
+                stage_title=stage_title,
+                description=description,
+            )
+            try:
+                from browser_use.llm.messages import UserMessage
+                response = await fast_llm.ainvoke([UserMessage(content=gen_prompt)])
+                script = response.completion.strip()
+                # Strip markdown fences if the model wrapped them
+                if script.startswith("```"):
+                    script = "\n".join(script.split("\n")[1:])
+                if script.endswith("```"):
+                    script = "\n".join(script.split("\n")[:-1])
+                script = script.strip()
+            except Exception as e:
+                logger.warning("Reflex generation failed for '%s': %s", name, e)
+                return ActionResult(
+                    extracted_content=f"Reflex generation failed: {e}. Move on."
+                )
+
             pause_after = "auth" if pause_after_auth else None
             await _db.upsert_reflex(
                 domain=flow.domain,
@@ -258,7 +305,7 @@ async def explore_flow(
                 tags=tags or ["explored"],
             )
             reflexes_saved += 1
-            # Attach to current stage
+
             if current_stage_id[0]:
                 for s in stages:
                     if s["id"] == current_stage_id[0]:
@@ -266,56 +313,101 @@ async def explore_flow(
                         break
             await _persist_tree()
             return ActionResult(
-                extracted_content=f"Reflex '{flow.domain}/{name}' saved and attached to current stage."
+                extracted_content=f"Reflex '{name}' generated and saved. Move to next stage."
             )
 
-        # ----------------------------------------------------------
-        # declare_inputs: agent reports what inputs this flow needs
-        # ----------------------------------------------------------
+        # ── test_reflex (execute + return summary) ──────────────────────
         @tools.action(
             description=(
-                "Declare the inputs this flow requires. Each item MUST have: "
-                "{name: string, label: string, type: string, placeholder?, required?}. "
-                "name, label, and type are REQUIRED — do NOT pass empty objects. "
-                "type: text, textarea, number, select, date, time. "
-                "Call this ONLY when you can see the actual form fields. "
-                "Can be called multiple times — later calls replace earlier ones."
+                "Test a saved reflex by executing it on the current page. "
+                "Returns pass/fail with error details. Args: name (the reflex name)."
             )
         )
-        async def declare_inputs(inputs: list[dict]) -> ActionResult:
-            # Validate: each input must have at least name and label
+        async def test_reflex(name: str) -> ActionResult:
+            reflex = await _db.get_reflex(flow.domain, name)
+            if not reflex:
+                return ActionResult(extracted_content=f"Reflex '{name}' not found.")
+
+            script = reflex.get("script", "") if isinstance(reflex, dict) else getattr(reflex, "script", "")
+            if not script:
+                return ActionResult(extracted_content=f"Reflex '{name}' has no script.")
+
+            # Wrap and execute
+            wrapped = _REFLEX_JS_WRAPPER.replace("__REFLEX_SCRIPT__", script)
+            try:
+                page = await browser.must_get_current_page()
+                test_inputs = {}  # empty inputs for dry-run
+                result = await page.evaluate(wrapped, test_inputs, flow.entry_url)
+                return ActionResult(
+                    extracted_content=f"Reflex '{name}' PASSED. Result: {str(result)[:200]}"
+                )
+            except Exception as e:
+                error_msg = str(e)[:300]
+                return ActionResult(
+                    extracted_content=f"Reflex '{name}' FAILED: {error_msg}"
+                )
+
+        # ── declare_inputs ──────────────────────────────────────────────
+        @tools.action(
+            description=(
+                "Declare inputs this flow needs. Pass a JSON string array. "
+                'Example: [{"name":"pickup_location","label":"Pickup Location","type":"text"},'
+                '{"name":"dropoff_location","label":"Dropoff Location","type":"text"}]. '
+                "Each object MUST have name, label, type. "
+                "type: text|textarea|number|select|date|time. "
+                "Call ONLY when you can see actual form fields."
+            )
+        )
+        async def declare_inputs(inputs_json: str) -> ActionResult:
+            try:
+                inputs = json.loads(inputs_json)
+            except (json.JSONDecodeError, TypeError):
+                return ActionResult(
+                    extracted_content="Invalid JSON. Pass a JSON array string like: "
+                    '[{"name":"pickup","label":"Pickup","type":"text"}]'
+                )
+            if not isinstance(inputs, list):
+                inputs = [inputs]
             valid = []
             for inp in inputs:
+                if not isinstance(inp, dict):
+                    continue
                 name = inp.get("name", "").strip()
                 itype = inp.get("type", "").strip()
                 if not name or not itype:
                     continue
-                valid.append({
-                    "name": name,
-                    "label": inp.get("label", name).strip() or name,
-                    "type": itype,
-                    "placeholder": inp.get("placeholder", ""),
-                    "required": inp.get("required", True),
-                })
+                valid.append(
+                    {
+                        "name": name,
+                        "label": inp.get("label", name).strip() or name,
+                        "type": itype,
+                        "placeholder": inp.get("placeholder", ""),
+                        "required": inp.get("required", True),
+                    }
+                )
             if not valid:
                 return ActionResult(
-                    extracted_content="No valid inputs provided. Each must have at least a 'name' field."
+                    extracted_content="No valid inputs parsed. Each object needs 'name', 'label', 'type'. "
+                    'Example: [{"name":"email","label":"Email","type":"text"}]'
                 )
-            await _db.update_flow(flow.id, {"inputs": json.dumps(valid)})
-            names = [i["name"] for i in valid]
-            return ActionResult(
-                extracted_content=f"Inputs declared: {', '.join(names)}"
-            )
+            # Merge with existing inputs (preserve creation-time inputs)
+            current_flow = await _db.get_flow(flow.id)
+            existing_raw = json.loads(current_flow.inputs or "[]") if current_flow else []
+            existing_names = {i["name"] for i in existing_raw}
+            merged = list(existing_raw)
+            for inp in valid:
+                if inp["name"] not in existing_names:
+                    merged.append(inp)
+            await _db.update_flow(flow.id, {"inputs": json.dumps(merged)})
+            names = [i["name"] for i in merged]
+            return ActionResult(extracted_content=f"Inputs declared: {', '.join(names)}")
 
-        # ----------------------------------------------------------
-        # request_human_help: pause for HITL (same as runs)
-        # ----------------------------------------------------------
+        # ── HITL tools ──────────────────────────────────────────────────
         _paused = [False]
         _agent_ref: list = []
-        _hitl_response: list = [None]  # shared ref: resume endpoint stores user response here
+        _hitl_response: list = [None]
 
         async def _wait_for_resume(poll_interval: float = 0.5, timeout: float = 300) -> dict | None:
-            """Block until _paused is set back to False by the resume endpoint."""
             elapsed = 0.0
             while _paused[0] and elapsed < timeout:
                 await asyncio.sleep(poll_interval)
@@ -326,48 +418,44 @@ async def explore_flow(
 
         @tools.action(
             description=(
-                "Request human help. The browser will be shown to the user so they "
-                "can log in, solve CAPTCHAs, etc. Exploration pauses until they resume. "
-                "ONLY for: login forms, CAPTCHAs, OTP/SMS, consent dialogs."
+                "Pause for human help (login, CAPTCHA, OTP). "
+                "Args: reason, category (auth|captcha|consent|verification|other)."
             )
         )
         async def request_human_help(reason: str, category: str = "other") -> ActionResult:
             _paused[0] = True
             notes.append(f"AUTH WALL: [{category}] {reason}")
-            await _update_and_notify({
-                "exploration_status": "paused_for_hitl",
-            })
+            await _update_and_notify({"exploration_status": "paused_for_hitl"})
             if _agent_ref:
                 _agent_ref[0].pause()
-            # Block until the user finishes and clicks resume
             await _wait_for_resume()
-            return ActionResult(
-                extracted_content="Human assisted. Continue exploring from current page state."
-            )
+            return ActionResult(extracted_content="Human assisted. Continue from current page.")
 
-        # ----------------------------------------------------------
-        # request_input_values: pause for user-provided form values
-        # ----------------------------------------------------------
         @tools.action(
             description=(
-                "Pause exploration and ask the user for real form values. "
-                "Call this when you encounter form fields that need user-specific data "
-                "(addresses, names, dates, payment info, etc.).\n"
-                "Parameters:\n"
-                "  fields: list of objects, each MUST have:\n"
-                '    - "name": snake_case identifier (e.g. "pickup_location")\n'
-                '    - "label": human-readable label (e.g. "Pickup Location")\n'
-                '    - "description": optional hint (e.g. "Street address for pickup")\n'
-                '    - "type": "text" (default) or "select" for dropdowns\n'
-                '    - "options": list of strings (required when type is "select")\n'
-                "Returns a dict mapping field names to user-provided values."
+                "Ask user for real form values (addresses, names, dates). "
+                "Pass a JSON string array of fields. "
+                'Example: [{"name":"pickup_location","label":"Pickup Location"},'
+                '{"name":"dropoff_location","label":"Dropoff Location"}]. '
+                "Each object MUST have name and label. Optional: description, type (text|select), options (for select). "
+                "Returns dict of name→value."
             )
         )
-        async def request_input_values(fields: list[dict]) -> ActionResult:
+        async def request_input_values(fields_json: str) -> ActionResult:
+            try:
+                fields = json.loads(fields_json)
+            except (json.JSONDecodeError, TypeError):
+                return ActionResult(
+                    extracted_content="Invalid JSON. Pass a JSON array string like: "
+                    '[{"name":"pickup","label":"Pickup Location"}]'
+                )
+            if not isinstance(fields, list):
+                fields = [fields]
             _paused[0] = True
-            # Validate/normalize fields before saving
             validated = []
             for f in fields:
+                if not isinstance(f, dict):
+                    continue
                 name = (f.get("name") or f.get("field_name") or f.get("id") or "").strip()
                 label = (f.get("label") or f.get("title") or name).strip()
                 if not name:
@@ -388,72 +476,57 @@ async def explore_flow(
                     entry["options"] = [str(o) for o in options]
                 validated.append(entry)
             if not validated:
+                _paused[0] = False
                 return ActionResult(
-                    extracted_content="No valid fields provided. Each must have at least a 'name' and 'label'."
+                    extracted_content="No valid fields parsed. Each needs 'name' and 'label'. "
+                    'Example: [{"name":"pickup","label":"Pickup Location"}]'
                 )
-            await _update_and_notify({
-                "exploration_status": "paused_for_hitl",
-                "exploration_input_request": json.dumps(validated),
-            })
+            await _update_and_notify(
+                {
+                    "exploration_status": "paused_for_hitl",
+                    "exploration_input_request": json.dumps(validated),
+                }
+            )
             if _agent_ref:
                 _agent_ref[0].pause()
-            # Block until the resume endpoint sets _paused back to False
             response = await _wait_for_resume()
             if response and isinstance(response, dict):
                 values = response.get("values", {})
                 return ActionResult(
                     extracted_content=(
-                        f"User provided values: {json.dumps(values)}. "
-                        "For EACH field: 1) click the input, 2) type the value, "
-                        "3) wait 2 seconds for a suggestion/autocomplete dropdown to appear, "
-                        "4) click the first suggestion in the list. "
-                        "Do this one field at a time."
+                        f"User values: {json.dumps(values)}. "
+                        "Fill each field: click → type → wait 2s for suggestions → click first suggestion."
                     )
                 )
-            return ActionResult(
-                extracted_content="User resumed without providing values. Continue with best effort."
-            )
+            return ActionResult(extracted_content="User resumed without values. Continue best effort.")
 
-        # ----------------------------------------------------------
-        # request_confirmation: pause before final submit
-        # ----------------------------------------------------------
         @tools.action(
             description=(
-                "Pause exploration and ask the user for confirmation before clicking "
-                "a final submit/confirm/book/order button. Describe what will happen.\n"
-                "Parameters:\n"
-                "  summary: What the action will do (e.g., 'Book ride from X to Y for $15').\n"
-                "Returns whether the user approved or declined."
+                "Ask user to confirm before a final submit/book/order action. "
+                "Args: summary (what will happen)."
             )
         )
         async def request_confirmation(summary: str) -> ActionResult:
             _paused[0] = True
-            await _update_and_notify({
-                "exploration_status": "paused_for_hitl",
-                "exploration_confirmation_request": summary,
-            })
+            await _update_and_notify(
+                {
+                    "exploration_status": "paused_for_hitl",
+                    "exploration_confirmation_request": summary,
+                }
+            )
             if _agent_ref:
                 _agent_ref[0].pause()
-            # Block until the resume endpoint sets _paused back to False
             response = await _wait_for_resume()
             if response and isinstance(response, dict) and not response.get("confirmed", True):
-                return ActionResult(
-                    extracted_content="User declined. Stop this action and do not proceed."
-                )
-            return ActionResult(
-                extracted_content="User approved. Proceed with the action."
-            )
+                return ActionResult(extracted_content="User declined. Do NOT proceed.")
+            return ActionResult(extracted_content="User approved. Proceed.")
 
-        # ----------------------------------------------------------
-        # add_notes: record observations
-        # ----------------------------------------------------------
-        @tools.action(
-            description="Record an observation about the site for developers to review."
-        )
+        @tools.action(description="Record an observation for developers.")
         async def add_notes(note: str) -> ActionResult:
             notes.append(note)
-            return ActionResult(extracted_content="Note recorded.")
+            return ActionResult(extracted_content="Noted.")
 
+        # ── Build agent ─────────────────────────────────────────────────
         task_prompt = _build_exploration_prompt(flow)
 
         agent = Agent(
@@ -461,24 +534,25 @@ async def explore_flow(
             llm=llm,
             browser=browser,
             tools=tools,
-            max_actions_per_step=10,
-            use_vision="auto",
-            llm_screenshot_size=(1024, 768),  # downscale before sending to LLM
+            max_history_items=6,
+            max_actions_per_step=3,
+            use_vision=True,
+            llm_screenshot_size=(768, 576),
+            page_extraction_llm=fast_llm,
             extend_system_message=(
-                "You are an EXPLORER, not a runner. Your job is to map the site and "
-                "save reflexes. Don't try to complete the actual task.\n\n"
-                "CRITICAL RULES:\n"
-                "1. ALWAYS call report_stage() BEFORE save_reflex() so the reflex gets "
-                "attached to the right stage in the tree.\n"
-                "2. ALWAYS call declare_inputs() when you see form fields that need "
-                "user-provided values. This is MANDATORY — without it, the flow has no "
-                "inputs and reflexes using inputs.X will fail at runtime.\n"
-                "3. NAVIGATE FORWARD. Don't stay on the same page. After mapping a stage "
-                "and saving its reflex, click through to the next page/view.\n"
-                "4. For form fields needing real values, call request_input_values() to "
-                "get actual values from the user, THEN fill them in.\n"
-                "5. Before any final submit/confirm/book button, call request_confirmation().\n"
-                "6. Do NOT report the same page twice — move forward in the journey."
+                "You are an EXPLORER. Map the site and generate reflexes. "
+                "Do NOT try to complete the actual task.\n\n"
+                "RULES:\n"
+                "1. Follow the task description ORDER. Auth first if task says so.\n"
+                "2. Call report_stage() BEFORE generate_and_save_reflex().\n"
+                "3. Call declare_inputs() when you see form fields needing user values.\n"
+                "4. Explore a stage FULLY before generating its reflex.\n"
+                "5. ONE reflex per stage — it must cover the ENTIRE stage end-to-end.\n"
+                "   Do NOT generate separate reflexes for individual steps within a stage.\n"
+                "6. NAVIGATE FORWARD after each stage — don't stay on the same page.\n"
+                "7. For form fields needing real values, call request_input_values().\n"
+                "8. Before final submit/confirm/book, call request_confirmation().\n"
+                "9. Keep your reasoning SHORT. Do not repeat observations."
             ),
         )
 
@@ -489,15 +563,17 @@ async def explore_flow(
 
         await agent.run(max_steps=15)
 
-        # Final persist — auto-extract inputs from reflex scripts if agent forgot
+        # ── Post-run: auto-extract inputs from reflexes if agent forgot ─
         current_flow = await _db.get_flow(flow.id)
         declared_inputs = json.loads(current_flow.inputs) if current_flow else []
         if not declared_inputs and reflexes_saved > 0:
-            # Scan all reflexes for inputs.X references
             all_reflexes = await _db.list_reflexes_for_domain(flow.domain)
             discovered: dict[str, dict] = {}
             for r in all_reflexes:
-                for match in re.finditer(r"inputs\.(\w+)", r.get("script", "") if isinstance(r, dict) else getattr(r, "script", "")):
+                script_text = (
+                    r.get("script", "") if isinstance(r, dict) else getattr(r, "script", "")
+                )
+                for match in re.finditer(r"inputs\.(\w+)", script_text):
                     name = match.group(1)
                     if name not in discovered:
                         discovered[name] = {
@@ -510,18 +586,22 @@ async def explore_flow(
             if discovered:
                 auto_inputs = list(discovered.values())
                 await _db.update_flow(flow.id, {"inputs": json.dumps(auto_inputs)})
-                notes.append(f"Auto-extracted {len(auto_inputs)} inputs from reflex scripts: {', '.join(discovered.keys())}")
+                notes.append(
+                    f"Auto-extracted {len(auto_inputs)} inputs from reflexes: {', '.join(discovered.keys())}"
+                )
                 logger.info("Auto-extracted inputs for flow %s: %s", flow.id, list(discovered.keys()))
 
         status = "ready" if reflexes_saved > 0 else "failed"
         error = None if reflexes_saved > 0 else "No reflexes saved — site may need manual exploration"
         exploration_notes = "\n".join(notes) if notes else None
-        await _update_and_notify({
-            "exploration_status": status,
-            "exploration_error": error,
-            "exploration_notes": exploration_notes,
-            "exploration_tree": json.dumps(_build_tree()),
-        })
+        await _update_and_notify(
+            {
+                "exploration_status": status,
+                "exploration_error": error,
+                "exploration_notes": exploration_notes,
+                "exploration_tree": json.dumps(_build_tree()),
+            }
+        )
         logger.info(
             "Exploration of flow %s complete: status=%s, reflexes=%d, stages=%d",
             flow.id, status, reflexes_saved, len(stages),
@@ -529,15 +609,22 @@ async def explore_flow(
 
     except Exception as e:
         exploration_notes = "\n".join(notes) if notes else None
-        await _update_and_notify({
-            "exploration_status": "failed",
-            "exploration_error": str(e),
-            "exploration_notes": exploration_notes,
-            "exploration_tree": json.dumps(_build_tree()),
-        })
+        await _update_and_notify(
+            {
+                "exploration_status": "failed",
+                "exploration_error": str(e),
+                "exploration_notes": exploration_notes,
+                "exploration_tree": json.dumps(_build_tree()),
+            }
+        )
         raise
     finally:
         if browser is not None:
+            if on_session_capture:
+                try:
+                    await on_session_capture(browser)
+                except Exception as e:
+                    logger.debug("Session capture callback failed: %s", e)
             try:
                 await browser.close()
             except Exception:

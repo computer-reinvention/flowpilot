@@ -115,7 +115,7 @@ export function FlowDetail({
 
   // Stream exploration updates via WebSocket
   useEffect(() => {
-    if (liveFlow.exploration_status !== "exploring" && liveFlow.exploration_status !== "paused_for_hitl") return;
+    if (liveFlow.exploration_status !== "exploring" && liveFlow.exploration_status !== "paused_for_hitl" && liveFlow.exploration_status !== "awaiting_auth") return;
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(`${protocol}//${location.host}/ws/flows/${flow.id}`);
     ws.onmessage = (event) => {
@@ -134,6 +134,13 @@ export function FlowDetail({
       setLiveFlow((f) => ({ ...f, exploration_status: "exploring", exploration_tree: [] }));
     } catch { /* ignore */ }
     finally { setExplorationLoading(false); }
+  }, [flow.id]);
+
+  const handleAuthDone = useCallback(async () => {
+    try {
+      await apiFetch(`/api/flows/${flow.id}/auth/done`, { method: "POST" });
+      setLiveFlow((f) => ({ ...f, exploration_status: "exploring", auth_sandbox_id: undefined }));
+    } catch { /* ignore */ }
   }, [flow.id]);
 
   const [hitlInputValues, setHitlInputValues] = useState<Record<string, string>>({});
@@ -191,6 +198,19 @@ export function FlowDetail({
         </Button>
       </div>
 
+      {/* Auth pre-step browser view */}
+      {liveFlow.exploration_status === "awaiting_auth" && liveFlow.auth_sandbox_id && (
+        <div className="flex flex-col shrink-0" style={{ height: "50%" }}>
+          <div className="flex items-center justify-between px-4 py-2 bg-amber-50 border-b text-sm">
+            <span className="text-amber-800">Please log in, then click Done</span>
+            <Button size="sm" variant="outline" onClick={handleAuthDone}>
+              Done — I've logged in
+            </Button>
+          </div>
+          <BrowserCanvas sandboxId={liveFlow.auth_sandbox_id} className="flex-1" />
+        </div>
+      )}
+
       {/* Live browser during exploration */}
       {(liveFlow.exploration_status === "exploring" || liveFlow.exploration_status === "paused_for_hitl") && liveFlow.exploration_sandbox_id && (
         <div className="flex flex-col shrink-0" style={{ height: "50%" }}>
@@ -203,12 +223,12 @@ export function FlowDetail({
       )}
 
       {/* Tabs */}
-      <Tabs defaultValue={liveFlow.exploration_status && liveFlow.exploration_status !== "pending" ? "exploration" : "runs"} className="flex-1 flex flex-col overflow-hidden">
+      <Tabs defaultValue={liveFlow.exploration_status && liveFlow.exploration_status !== "pending" ? "exploration" : "runs"} className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <div className="px-6 pt-2 shrink-0">
           <TabsList variant="line">
             <TabsTrigger value="exploration" className="gap-1.5">
               Exploration
-              {liveFlow.exploration_status === "exploring" && (
+              {(liveFlow.exploration_status === "exploring" || liveFlow.exploration_status === "awaiting_auth") && (
                 <span className="size-1.5 rounded-full bg-blue-500 animate-pulse" />
               )}
               {liveFlow.exploration_status === "ready" && (
