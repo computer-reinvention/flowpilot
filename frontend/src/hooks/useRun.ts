@@ -247,6 +247,15 @@ export function useRun() {
     }
   }, [runId]);
 
+  const pauseRun = useCallback(async () => {
+    if (!runId) return;
+    try {
+      await apiFetch(`/api/runs/${runId}/pause`, { method: "POST" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to pause run");
+    }
+  }, [runId]);
+
   const reset = useCallback(() => {
     cleanup();
     stopTitleFlash();
@@ -269,6 +278,7 @@ export function useRun() {
     reconnectToRun,
     resumeRun,
     cancelRun,
+    pauseRun,
     reset,
   };
 }

@@ -5,6 +5,7 @@ import {
   Circle,
   ArrowLeft,
   Hand,
+  Pause,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,7 @@ interface FlowRunnerProps {
   sandboxId: string | null;
   onReset: () => void;
   onResume?: () => void;
+  onPause?: () => void;
   onCancel?: () => void;
 }
 
@@ -85,6 +87,7 @@ export function FlowRunner({
   sandboxId,
   onReset,
   onResume,
+  onPause,
   onCancel,
 }: FlowRunnerProps) {
   const isFinished = status === "completed" || status === "failed" || status === "cancelled";
@@ -120,6 +123,12 @@ export function FlowRunner({
               className="bg-amber-600 hover:bg-amber-700 text-white h-7 text-xs"
             >
               Resume Agent
+            </Button>
+          )}
+          {status === "running" && onPause && (
+            <Button variant="ghost" size="sm" onClick={onPause} className="h-7 text-xs gap-1">
+              <Pause className="size-3" />
+              Pause
             </Button>
           )}
           {!isFinished && onCancel && (

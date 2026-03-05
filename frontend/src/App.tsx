@@ -186,6 +186,7 @@ export default function App() {
           sandboxId={run.sandboxId}
           onReset={handleRunReset}
           onResume={run.resumeRun}
+          onPause={run.pauseRun}
           onCancel={run.cancelRun}
         />
       );
