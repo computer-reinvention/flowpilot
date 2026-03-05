@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   XCircle,
   RefreshCw,
+  StopCircle,
   AlertTriangle,
   Hand,
   Check,
@@ -268,6 +269,7 @@ function HitlAuthWall({ onResume }: { onResume: () => void }) {
 interface ExplorationTreeProps {
   flow: Flow;
   onExplore?: () => void;
+  onCancel?: () => void;
   onResume?: (body?: Record<string, unknown>) => void;
   hitlInputValues?: Record<string, string>;
   onHitlInputChange?: React.Dispatch<React.SetStateAction<Record<string, string>>>;
@@ -277,6 +279,7 @@ interface ExplorationTreeProps {
 export function ExplorationTree({
   flow,
   onExplore,
+  onCancel,
   onResume,
   hitlInputValues = {},
   onHitlInputChange,
@@ -354,6 +357,14 @@ export function ExplorationTree({
               </span>
             </>
           )}
+          {status === "cancelled" && (
+            <>
+              <StopCircle className="size-4 text-muted-foreground" />
+              <span className="text-sm font-medium text-muted-foreground">
+                Exploration cancelled
+              </span>
+            </>
+          )}
           {status === "pending" && !exploring && (
             <>
               <AlertTriangle className="size-4 text-muted-foreground" />
@@ -364,17 +375,30 @@ export function ExplorationTree({
           )}
         </div>
 
-        {onExplore && !isPaused && (
-          <Button
-            variant={status === "exploring" ? "destructive" : "outline"}
-            size="sm"
-            onClick={onExplore}
-            className="gap-1.5 shrink-0"
-          >
-            <RefreshCw className="size-3" />
-            {status === "exploring" ? "Restart" : hasTree ? "Re-explore" : "Explore"}
-          </Button>
-        )}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {onCancel && status === "exploring" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onCancel}
+              className="gap-1.5"
+            >
+              <StopCircle className="size-3" />
+              Stop
+            </Button>
+          )}
+          {onExplore && !isPaused && (
+            <Button
+              variant={status === "exploring" ? "destructive" : "outline"}
+              size="sm"
+              onClick={onExplore}
+              className="gap-1.5"
+            >
+              <RefreshCw className="size-3" />
+              {status === "exploring" ? "Restart" : hasTree ? "Re-explore" : "Explore"}
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Error message */}

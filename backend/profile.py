@@ -114,6 +114,29 @@ class ProfileManager:
         logger.info("Restored profile '%s' for user %s into sandbox %s", profile_name, user_id, sandbox_id)
         return True
 
+    def list_profiles(self, user_id: str) -> list[dict]:
+        """List all profiles for a user."""
+        user_dir = self.profiles_dir / user_id
+        if not user_dir.is_dir():
+            return []
+        profiles = []
+        for child in sorted(user_dir.iterdir()):
+            if child.is_dir():
+                info = self.get_profile_info(user_id, child.name)
+                if info.get("exists"):
+                    profiles.append(info)
+        return profiles
+
+    def delete_profile(self, user_id: str, profile_name: str) -> bool:
+        """Delete a profile directory."""
+        import shutil
+        profile_dir = self._user_profile_dir(user_id, profile_name)
+        if not profile_dir.is_dir():
+            return False
+        shutil.rmtree(profile_dir)
+        logger.info("Deleted profile '%s' for user %s", profile_name, user_id)
+        return True
+
     def has_profile(self, user_id: str, profile_name: str) -> bool:
         """Check if a saved profile exists (tar archive or imported cookies)."""
         profile_dir = self._user_profile_dir(user_id, profile_name)

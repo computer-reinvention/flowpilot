@@ -615,6 +615,36 @@ async def flow_explore(flow_id: str, req: ExploreRequest | None = None, user: di
     return {"status": "exploring", "flow_id": flow_id}
 
 
+@app.post("/api/flows/{flow_id}/explore/cancel")
+async def flow_explore_cancel(flow_id: str, user: dict = Depends(auth.get_current_user)) -> dict:
+    """Cancel a running exploration without restarting it."""
+    flow = await platform_db.get_flow(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+
+    # Tear down agent + sandbox
+    agent_info = _exploration_agents.pop(flow_id, None)
+    if agent_info:
+        old_sandbox_id = agent_info[3]
+        try:
+            sandbox_mgr.stop(old_sandbox_id)
+            await platform_db.delete_sandbox(old_sandbox_id)
+        except Exception:
+            pass
+
+    # Cancel asyncio task
+    old_task = _exploration_tasks.pop(flow_id, None)
+    if old_task and not old_task.done():
+        old_task.cancel()
+
+    await platform_db.update_flow(flow_id, {
+        "exploration_status": "cancelled",
+        "exploration_error": None,
+    })
+    await _broadcast_flow_update(flow_id)
+    return {"status": "cancelled", "flow_id": flow_id}
+
+
 class ExploreResumeBody(BaseModel):
     values: dict[str, str] | None = None
     confirmed: bool | None = None
@@ -715,6 +745,23 @@ async def session_delete(session_id: str, user: dict = Depends(auth.get_current_
     deleted = await platform_db.delete_session(session_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Session not found")
+    return {"status": "deleted"}
+
+
+# ---------------------------------------------------------------------------
+# Profile endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/api/profiles")
+async def profiles_list(user: dict = Depends(auth.get_current_user)) -> list[dict]:
+    return profile_mgr.list_profiles(user["id"])
+
+
+@app.delete("/api/profiles/{profile_name}")
+async def profile_delete(profile_name: str, user: dict = Depends(auth.get_current_user)) -> dict:
+    deleted = profile_mgr.delete_profile(user["id"], profile_name)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Profile not found")
     return {"status": "deleted"}
 
 

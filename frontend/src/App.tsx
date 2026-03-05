@@ -20,6 +20,8 @@ import { ApiKeySettings } from "@/components/settings/ApiKeySettings";
 import { WebhookSettings } from "@/components/settings/WebhookSettings";
 import { useApiKeys } from "@/hooks/useApiKeys";
 import { useWebhooks } from "@/hooks/useWebhooks";
+import { useProfiles } from "@/hooks/useProfiles";
+import { ProfileList } from "@/components/profiles/ProfileList";
 import type { Flow, Run } from "@/lib/types";
 
 type AuthView = "login" | "signup";
@@ -34,6 +36,7 @@ export default function App() {
   const sessions = useSessions(authed);
   const apiKeys = useApiKeys();
   const webhooks = useWebhooks();
+  const profiles = useProfiles();
 
   const [authView, setAuthView] = useState<AuthView>("login");
   const [activeSection, setActiveSection] = useState<ActiveSection>("flows");
@@ -253,6 +256,17 @@ export default function App() {
               sessions={sessions.sessions}
               loading={sessions.loading}
               onDelete={sessions.deleteSession}
+            />
+          </div>
+        );
+
+      case "profiles":
+        return (
+          <div className="p-6 max-w-2xl mx-auto">
+            <ProfileList
+              profiles={profiles.profiles}
+              loading={profiles.loading}
+              onDelete={profiles.deleteProfile}
             />
           </div>
         );

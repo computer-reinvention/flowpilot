@@ -143,6 +143,13 @@ export function FlowDetail({
     } catch { /* ignore */ }
   }, [flow.id]);
 
+  const handleExploreCancel = useCallback(async () => {
+    try {
+      await apiFetch(`/api/flows/${flow.id}/explore/cancel`, { method: "POST" });
+      setLiveFlow((f) => ({ ...f, exploration_status: "cancelled" }));
+    } catch { /* ignore */ }
+  }, [flow.id]);
+
   const [hitlInputValues, setHitlInputValues] = useState<Record<string, string>>({});
 
   const handleExploreResume = useCallback(async (body?: Record<string, unknown>) => {
@@ -246,6 +253,7 @@ export function FlowDetail({
             <ExplorationTree
               flow={liveFlow}
               onExplore={handleExplore}
+              onCancel={handleExploreCancel}
               onResume={handleExploreResume}
               hitlInputValues={hitlInputValues}
               onHitlInputChange={setHitlInputValues}

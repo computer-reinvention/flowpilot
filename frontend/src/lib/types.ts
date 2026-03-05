@@ -24,7 +24,7 @@ export interface Flow {
   icon?: string;
   created_by: string;
   created_at: string;
-  exploration_status?: "pending" | "exploring" | "ready" | "failed" | "paused_for_hitl" | "awaiting_auth";
+  exploration_status?: "pending" | "exploring" | "ready" | "failed" | "cancelled" | "paused_for_hitl" | "awaiting_auth";
   exploration_error?: string;
   exploration_notes?: string;
   exploration_tree?: ExplorationStage[];
