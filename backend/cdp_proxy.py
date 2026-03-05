@@ -18,6 +18,7 @@ import json
 import logging
 
 import httpx
+from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 
 from cdp_use.client import CDPClient
 from fastapi import WebSocket, WebSocketDisconnect
@@ -203,13 +204,17 @@ async def handle(
                     })
                 except Exception:
                     return
-                asyncio.create_task(
-                    cdp.send_raw(
-                        "Page.screencastFrameAck",
-                        {"sessionId": screencast_sid},
-                        session_id=active["session_id"],
-                    )
-                )
+                async def _ack_frame(sid: str, sc_sid: str) -> None:
+                    try:
+                        await cdp.send_raw(
+                            "Page.screencastFrameAck",
+                            {"sessionId": sc_sid},
+                            session_id=sid,
+                        )
+                    except (ConnectionClosedError, ConnectionClosedOK, ConnectionError):
+                        pass
+
+                asyncio.create_task(_ack_frame(active["session_id"], screencast_sid))
 
             # -- Navigation handler --
             async def on_frame_navigated(params: dict, frame_session_id: str | None) -> None:
@@ -278,6 +283,8 @@ async def handle(
                             },
                             session_id=sid,
                         )
+                    except (ConnectionClosedError, ConnectionClosedOK, ConnectionError):
+                        break
                     except Exception:
                         pass
 
@@ -300,6 +307,8 @@ async def handle(
                             },
                             session_id=sid,
                         )
+                    except (ConnectionClosedError, ConnectionClosedOK, ConnectionError):
+                        break
                     except Exception:
                         pass
 
@@ -345,11 +354,15 @@ async def handle(
                                 await cdp.send_raw(
                                     "Page.navigate", {"url": url}, session_id=sid,
                                 )
+                    except (ConnectionClosedError, ConnectionClosedOK, ConnectionError):
+                        break
                     except Exception as exc:
                         logger.warning("Navigate %s failed: %s", action, exc)
 
     except WebSocketDisconnect:
         pass
+    except (ConnectionClosedError, ConnectionClosedOK, ConnectionError):
+        logger.debug("CDP connection closed for sandbox %s (sandbox stopped)", sandbox_id)
     except Exception as exc:
         logger.error("CDP proxy error (sandbox=%s): %s", sandbox_id, exc)
     finally:
