@@ -18,13 +18,14 @@ the same domain skip the LLM entirely for known flows.
 """
 
 import asyncio
-import http.client
 import json
 import logging
 import os
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Callable, Awaitable
+
+import httpx
 
 from browser_use import Agent, Browser, ActionResult, Tools
 from browser_use.llm.google import ChatGoogle
@@ -35,6 +36,18 @@ from . import db as _db
 from .models import Flow
 
 logger = logging.getLogger(__name__)
+
+
+async def _async_cdp_get(host: str, port: int, path: str) -> dict | None:
+    """Non-blocking CDP HTTP request — replaces http.client calls that block the event loop."""
+    try:
+        async with httpx.AsyncClient(timeout=3) as client:
+            resp = await client.get(f"http://{host}:{port}{path}", headers={"Host": "localhost"})
+            if resp.status_code == 200:
+                return resp.json()
+    except (httpx.HTTPError, Exception):
+        pass
+    return None
 
 
 class RunStatus(str, Enum):
@@ -625,13 +638,10 @@ class FlowRunner:
         _cdp_info = None
         for _attempt in range(20):
             try:
-                _conn = http.client.HTTPConnection(_cdp_h, int(_cdp_p), timeout=3)
-                _conn.request("GET", "/json/version", headers={"Host": "localhost"})
-                _resp = _conn.getresponse()
-                if _resp.status == 200:
-                    _cdp_info = json.loads(_resp.read())
+                _cdp_info = await _async_cdp_get(_cdp_h, int(_cdp_p), "/json/version")
+                if _cdp_info is not None:
                     break
-            except (OSError, http.client.HTTPException):
+            except Exception:
                 pass
             if _attempt < 19:
                 await asyncio.sleep(2)
@@ -684,6 +694,7 @@ class FlowRunner:
                 wait_between_actions=2.0,
                 wait_for_network_idle_page_load_time=1.0,
             )
+            await browser.start()
 
             if storage_state:
                 await _update(

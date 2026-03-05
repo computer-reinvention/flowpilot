@@ -43,9 +43,9 @@ load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 BASE_URL = os.environ.get("E2E_BASE_URL", "http://localhost:8080")
 WS_BASE  = BASE_URL.replace("http://", "ws://").replace("https://", "wss://")
 
-TEST_EMAIL    = "e2e-exploration@flowpilot.local"
-TEST_PASSWORD = "e2e-exploration-pass"
-TEST_NAME     = "E2E Exploration Tester"
+TEST_EMAIL    = os.environ.get("E2E_EMAIL", "garkotipankaj@gmail.com")
+TEST_PASSWORD = os.environ.get("E2E_PASSWORD", "")  # set E2E_PASSWORD or pass via env
+TEST_NAME     = "Pankaj Garkoti"
 
 EXPLORATION_TIMEOUT = 600   # 10 min — exploration involves LLM calls
 RUN_TIMEOUT         = 300   # 5 min per run
@@ -64,13 +64,11 @@ def _headers(token: str) -> dict:
 
 
 async def _auth(client: httpx.AsyncClient) -> str:
-    resp = await client.post("/api/auth/signup", json={
-        "email": TEST_EMAIL, "password": TEST_PASSWORD, "name": TEST_NAME,
+    if not TEST_PASSWORD:
+        raise RuntimeError("Set E2E_PASSWORD env var to your FlowPilot password")
+    resp = await client.post("/api/auth/login", json={
+        "email": TEST_EMAIL, "password": TEST_PASSWORD,
     })
-    if resp.status_code == 409:
-        resp = await client.post("/api/auth/login", json={
-            "email": TEST_EMAIL, "password": TEST_PASSWORD,
-        })
     resp.raise_for_status()
     token = resp.json()["token"]
     logger.info("Authenticated as %s", TEST_EMAIL)
@@ -318,16 +316,18 @@ async def run_e2e() -> None:
                 f"Last step: {run1_data.get('current_step')}"
             )
 
-            # Verify the run used a reflex (step messages should mention it)
+            # Verify the run used a reflex — result.raw_result says "Completed via reflex 'X'"
             steps1 = run1_data.get("steps", [])
-            step_messages1 = " ".join(s.get("message", "") for s in steps1).lower()
-            reflex_used1 = "reflex" in step_messages1
+            result1 = run1_data.get("result") or {}
+            raw_result1 = result1.get("raw_result", "")
+            reflex_used1 = "reflex" in raw_result1.lower()
             logger.info(
-                "Run 1 completed. Reflex used: %s. Steps: %d",
-                reflex_used1, len(steps1)
+                "Run 1 completed. result=%s  steps=%d",
+                raw_result1, len(steps1),
             )
             assert reflex_used1, (
-                f"Run 1 completed but no reflex was used.\n"
+                f"Run 1 completed but result doesn't indicate a reflex was used.\n"
+                f"raw_result: {raw_result1}\n"
                 f"Steps: {json.dumps(steps1, indent=2)}"
             )
 
@@ -359,14 +359,16 @@ async def run_e2e() -> None:
             )
 
             steps2 = run2_data.get("steps", [])
-            step_messages2 = " ".join(s.get("message", "") for s in steps2).lower()
-            reflex_used2 = "reflex" in step_messages2
+            result2 = run2_data.get("result") or {}
+            raw_result2 = result2.get("raw_result", "")
+            reflex_used2 = "reflex" in raw_result2.lower()
             logger.info(
-                "Run 2 completed in %.1fs. Reflex used: %s. Steps: %d",
-                run2_elapsed, reflex_used2, len(steps2)
+                "Run 2 completed in %.1fs. result=%s  steps=%d",
+                run2_elapsed, raw_result2, len(steps2),
             )
             assert reflex_used2, (
-                f"Run 2 completed but no reflex was used.\n"
+                f"Run 2 completed but result doesn't indicate a reflex was used.\n"
+                f"raw_result: {raw_result2}\n"
                 f"Steps: {json.dumps(steps2, indent=2)}"
             )
 
@@ -400,18 +402,15 @@ async def run_e2e() -> None:
             logger.info("=" * 60)
 
         finally:
-            # ── Cleanup ───────────────────────────────────────────────────
+            # Cancel any in-flight runs but do NOT delete the flow —
+            # reflexes are domain-scoped and survive flow deletion anyway,
+            # but keeping the flow lets you inspect the exploration tree in the UI.
             for run_id in run_ids:
                 try:
                     await client.post(f"/api/runs/{run_id}/cancel", headers=_headers(token))
                 except Exception:
                     pass
-            if flow_id:
-                try:
-                    await client.delete(f"/api/flows/{flow_id}", headers=_headers(token))
-                    logger.info("Cleaned up flow %s", flow_id)
-                except Exception:
-                    pass
+            logger.info("Flow %s preserved — inspect at %s", flow_id, BASE_URL)
 
 
 def test_e2e_exploration_and_run() -> None:

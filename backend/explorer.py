@@ -360,19 +360,37 @@ async def explore_flow(
             if not script:
                 return ActionResult(extracted_content=f"Reflex '{name}' has no script.")
 
+            # Build sample inputs from declared flow inputs so the reflex
+            # runs with real-looking values rather than empty dict.
+            # Empty inputs cause inputs.field === undefined which silently
+            # produces wrong behavior (e.g. navigating to /tag/undefined/).
+            current_flow = await _db.get_flow(flow.id)
+            declared = json.loads(current_flow.inputs or "[]") if current_flow else []
+            test_inputs = {}
+            for inp in declared:
+                iname = inp.get("name", "")
+                itype = inp.get("type", "text")
+                if itype == "text":
+                    test_inputs[iname] = inp.get("placeholder") or iname.replace("_", " ")
+                elif itype == "number":
+                    test_inputs[iname] = "1"
+                elif itype == "date":
+                    test_inputs[iname] = "2026-01-01"
+                else:
+                    test_inputs[iname] = iname
+
             # Wrap and execute
             wrapped = _REFLEX_JS_WRAPPER.replace("__REFLEX_SCRIPT__", script)
             try:
                 page = await browser.must_get_current_page()
-                test_inputs = {}  # empty inputs for dry-run
                 result = await page.evaluate(wrapped, test_inputs, flow.entry_url)
                 return ActionResult(
-                    extracted_content=f"Reflex '{name}' PASSED. Result: {str(result)[:200]}"
+                    extracted_content=f"Reflex '{name}' PASSED with inputs {test_inputs}. Result: {str(result)[:200]}"
                 )
             except Exception as e:
                 error_msg = str(e)[:300]
                 return ActionResult(
-                    extracted_content=f"Reflex '{name}' FAILED: {error_msg}"
+                    extracted_content=f"Reflex '{name}' FAILED with inputs {test_inputs}: {error_msg}"
                 )
 
         # ── declare_inputs ──────────────────────────────────────────────
