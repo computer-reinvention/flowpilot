@@ -1,8 +1,10 @@
 """Browser profile management — save/restore Chromium profiles to/from sandbox containers."""
 
 import logging
+import os
 import tarfile
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,54 +30,81 @@ class ProfileManager:
     @property
     def client(self):
         if self._client is None:
-            self._client = docker.from_env()
+            docker_host = os.environ.get("DOCKER_HOST")
+            if docker_host:
+                self._client = docker.DockerClient(base_url=docker_host)
+            else:
+                self._client = docker.from_env()
         return self._client
 
     def _user_profile_dir(self, user_id: str, profile_name: str) -> Path:
         """Get the profile directory for a user: profiles_dir / user_id / profile_name."""
         return self.profiles_dir / user_id / profile_name
 
-    def save_profile(self, sandbox_id: str, profile_name: str, user_id: str) -> Path:
-        """Extract the Chrome profile directory from a running container and save as tar.gz."""
+    def save_profile(self, sandbox_id: str, profile_name: str, user_id: str, retries: int = 2) -> Path:
+        """Extract the Chrome profile directory from a running container and save as tar.gz.
+
+        Retries on transient Docker/network errors. Raises on persistent failure.
+        """
         container_name = f"flowpilot-{sandbox_id}"
         profile_dir = self._user_profile_dir(user_id, profile_name)
         profile_dir.mkdir(parents=True, exist_ok=True)
         archive_path = profile_dir / PROFILE_ARCHIVE_FILENAME
 
-        try:
-            container = self.client.containers.get(container_name)
-        except NotFound:
-            raise ValueError(f"Container {container_name} not found")
+        last_err: Exception | None = None
+        for attempt in range(1, retries + 1):
+            try:
+                container = self.client.containers.get(container_name)
+                # Verify container is still running
+                container.reload()
+                if container.status != "running":
+                    raise RuntimeError(f"Container {container_name} is {container.status}, not running")
 
-        bits, _stat = container.get_archive(CHROME_PROFILE_CONTAINER_PATH)
+                bits, _stat = container.get_archive(CHROME_PROFILE_CONTAINER_PATH)
 
-        with tempfile.NamedTemporaryFile(suffix=".tar", delete=True) as tmp:
-            for chunk in bits:
-                tmp.write(chunk)
-            tmp.flush()
-            tmp.seek(0)
+                with tempfile.NamedTemporaryFile(suffix=".tar", delete=True) as tmp:
+                    for chunk in bits:
+                        tmp.write(chunk)
+                    tmp.flush()
+                    tmp.seek(0)
 
-            with tarfile.open(tmp.name, "r:") as src_tar:
-                with tarfile.open(str(archive_path), "w:gz") as dst_tar:
-                    for member in src_tar.getmembers():
-                        if member.name.startswith('..') or member.name.startswith('/'):
-                            raise ValueError(f'Unsafe tar member: {member.name}')
-                        f = src_tar.extractfile(member)
-                        if f is not None:
-                            dst_tar.addfile(member, f)
-                        else:
-                            dst_tar.addfile(member)
+                    with tarfile.open(tmp.name, "r:") as src_tar:
+                        with tarfile.open(str(archive_path), "w:gz") as dst_tar:
+                            for member in src_tar.getmembers():
+                                if member.name.startswith('..') or member.name.startswith('/'):
+                                    raise ValueError(f'Unsafe tar member: {member.name}')
+                                f = src_tar.extractfile(member)
+                                if f is not None:
+                                    dst_tar.addfile(member, f)
+                                else:
+                                    dst_tar.addfile(member)
 
-        meta_path = profile_dir / "metadata.txt"
-        meta_path.write_text(
-            f"profile_name={profile_name}\n"
-            f"user_id={user_id}\n"
-            f"sandbox_id={sandbox_id}\n"
-            f"saved_at={datetime.now(timezone.utc).isoformat()}\n"
-        )
+                # Verify the archive was actually written
+                if not archive_path.exists() or archive_path.stat().st_size == 0:
+                    raise RuntimeError("Archive file is empty after write")
 
-        logger.info("Saved profile '%s' for user %s from sandbox %s", profile_name, user_id, sandbox_id)
-        return profile_dir
+                meta_path = profile_dir / "metadata.txt"
+                meta_path.write_text(
+                    f"profile_name={profile_name}\n"
+                    f"user_id={user_id}\n"
+                    f"sandbox_id={sandbox_id}\n"
+                    f"saved_at={datetime.now(timezone.utc).isoformat()}\n"
+                )
+
+                logger.info("Saved profile '%s' for user %s from sandbox %s", profile_name, user_id, sandbox_id)
+                return profile_dir
+
+            except NotFound:
+                # Container gone — no point retrying
+                logger.warning("Profile save failed: container %s not found", container_name)
+                raise
+            except Exception as e:
+                last_err = e
+                logger.warning("Profile save attempt %d/%d failed: %s", attempt, retries, e)
+                if attempt < retries:
+                    time.sleep(0.5)
+
+        raise RuntimeError(f"Profile save failed after {retries} attempts: {last_err}")
 
     def restore_profile(self, user_id: str, profile_name: str, sandbox_id: str) -> bool:
         """Untar a saved profile into a running container's Chrome profile directory."""

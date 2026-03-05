@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useFlows } from "@/hooks/useFlows";
@@ -34,9 +34,9 @@ export default function App() {
   const run = useRun();
   const runs = useRuns(authed);
   const sessions = useSessions(authed);
-  const apiKeys = useApiKeys();
-  const webhooks = useWebhooks();
-  const profiles = useProfiles();
+  const apiKeys = useApiKeys(authed);
+  const webhooks = useWebhooks(authed);
+  const profiles = useProfiles(authed);
 
   const [authView, setAuthView] = useState<AuthView>("login");
   const [activeSection, setActiveSection] = useState<ActiveSection>("flows");
@@ -45,15 +45,18 @@ export default function App() {
   const [flowSubView, setFlowSubView] = useState<FlowSubView>("grid");
   const [submitting, setSubmitting] = useState(false);
 
-  // Auto-reconnect to active run on page load
+  // Auto-reconnect to active run on page load (once)
+  const autoReconnected = useRef(false);
   useEffect(() => {
+    if (autoReconnected.current) return;
     if (!auth.user || runs.loading || run.runId) return;
     const firstActive = runs.activeRuns[0];
     if (firstActive) {
+      autoReconnected.current = true;
       setActiveRunId(firstActive.id);
       run.reconnectToRun(firstActive.id);
     }
-  }, [auth.user, runs.loading, runs.activeRuns, run.runId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [auth.user, runs.loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Loading state
   if (auth.loading) {

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Awaitable, Callable
 
 import httpx
+import websockets
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -282,6 +283,12 @@ async def sandbox_stop(req: SandboxStopRequest, user: dict = Depends(auth.get_cu
             raise HTTPException(status_code=403, detail="Sandbox does not belong to you")
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    # Save browser profile before stopping
+    try:
+        profile_mgr.save_profile(req.sandbox_id, user_id, user_id)
+        logger.info("Auto-saved browser profile on sandbox stop (sandbox=%s)", req.sandbox_id)
+    except Exception as e:
+        logger.warning("Profile auto-save failed on sandbox stop: %s", e)
     try:
         sandbox_mgr.stop(req.sandbox_id)
         await platform_db.delete_sandbox(req.sandbox_id)
@@ -426,16 +433,20 @@ async def _start_auth_prestep(flow: Flow, user_id: str, profile_id: str = "") ->
             pass
         return
 
-    # Navigate using CDP Page.navigate
-    ws_path = "/" + "/".join(cdp_info["webSocketDebuggerUrl"].split("/")[3:])
-    ws_url = f"ws://{_cdp_h}:{_cdp_p}{ws_path}"
+    # Navigate to auth URL via raw CDP websocket (Page.navigate)
     try:
-        from cdp_use.client import CDPClient
-        cdp_client = CDPClient(ws_url)
-        await cdp_client.connect()
-        await cdp_client.send("Page.enable", {})
-        await cdp_client.send("Page.navigate", {"url": flow.auth_url})
-        await cdp_client.close()
+        async with httpx.AsyncClient(timeout=5) as _hc2:
+            _targets_resp = await _hc2.get(f"http://{_cdp_h}:{_cdp_p}/json/list", headers={"Host": "localhost"})
+            targets = _targets_resp.json()
+            page_target = next((t for t in targets if t["type"] == "page"), None)
+        if page_target:
+            page_ws = page_target["webSocketDebuggerUrl"]
+            page_ws = page_ws.replace("localhost", _cdp_h).replace("127.0.0.1", _cdp_h)
+            async with websockets.connect(page_ws) as ws:
+                await ws.send(json.dumps({"id": 1, "method": "Page.enable", "params": {}}))
+                await ws.recv()
+                await ws.send(json.dumps({"id": 2, "method": "Page.navigate", "params": {"url": flow.auth_url}}))
+                await ws.recv()
     except Exception as e:
         logger.warning("CDP navigate to auth_url failed: %s", e)
 
@@ -503,7 +514,7 @@ async def flow_auth_done(flow_id: str, user: dict = Depends(auth.get_current_use
         profile_mgr.save_profile(sandbox_id, auth_profile_id, auth_user_id)
         logger.info("Auto-saved browser profile after auth (flow=%s, profile=%s)", flow_id, auth_profile_id)
     except Exception as e:
-        logger.debug("Profile auto-save failed after auth: %s", e)
+        logger.warning("Profile auto-save failed after auth: %s", e)
 
     # Stop the auth sandbox
     try:
@@ -583,7 +594,7 @@ async def _run_exploration(flow: Flow, user_id: str, profile_id: str = "") -> No
                 profile_mgr.save_profile(sb_id, profile_id or user_id, user_id)
                 logger.info("Auto-saved browser profile for exploration (flow=%s, profile=%s)", flow.id, profile_id or user_id)
             except Exception as e:
-                logger.debug("Profile auto-save failed for exploration: %s", e)
+                logger.warning("Profile auto-save failed for exploration: %s", e)
             try:
                 sandbox_mgr.stop(sb_id)
                 await platform_db.delete_sandbox(sb_id)
@@ -602,9 +613,14 @@ async def flow_explore(flow_id: str, req: ExploreRequest | None = None, user: di
         raise HTTPException(status_code=404, detail="Flow not found")
     if not flow.entry_url:
         raise HTTPException(status_code=400, detail="Flow has no entry_url — nothing to explore")
-    # Cancel any existing exploration and kill its sandbox
+    # Save profile from existing sandbox, then cancel and kill it
     _exploration_agents.pop(flow_id, None)
     if flow.exploration_sandbox_id:
+        try:
+            profile_mgr.save_profile(flow.exploration_sandbox_id, user["id"], user["id"])
+            logger.info("Auto-saved browser profile on explore restart (flow=%s)", flow_id)
+        except Exception as e:
+            logger.warning("Profile auto-save failed on explore restart: %s", e)
         try:
             sandbox_mgr.stop(flow.exploration_sandbox_id)
             await platform_db.delete_sandbox(flow.exploration_sandbox_id)
@@ -635,9 +651,14 @@ async def flow_explore_cancel(flow_id: str, user: dict = Depends(auth.get_curren
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
 
-    # Tear down agent + sandbox
+    # Save profile + tear down agent + sandbox
     _exploration_agents.pop(flow_id, None)
     if flow.exploration_sandbox_id:
+        try:
+            profile_mgr.save_profile(flow.exploration_sandbox_id, user["id"], user["id"])
+            logger.info("Auto-saved browser profile on explore cancel (flow=%s)", flow_id)
+        except Exception as e:
+            logger.warning("Profile auto-save failed on explore cancel: %s", e)
         try:
             sandbox_mgr.stop(flow.exploration_sandbox_id)
             await platform_db.delete_sandbox(flow.exploration_sandbox_id)
@@ -1054,7 +1075,7 @@ async def _execute_run(
             profile_mgr.save_profile(sandbox_id, profile_id or user_id, user_id)
             logger.info("Auto-saved browser profile for run %s (profile=%s)", run_id, profile_id or user_id)
         except Exception as e:
-            logger.debug("Profile auto-save failed for run %s: %s", run_id, e)
+            logger.warning("Profile auto-save failed for run %s: %s", run_id, e)
         try:
             sandbox_mgr.stop(sandbox_id)
             await platform_db.delete_sandbox(sandbox_id)
@@ -1114,8 +1135,13 @@ async def run_cancel(run_id: str, user: dict = Depends(auth.get_current_user)) -
     if task and not task.done():
         task.cancel()
 
-    # Stop the sandbox container
+    # Save profile + stop the sandbox container
     if run.sandbox_id:
+        try:
+            profile_mgr.save_profile(run.sandbox_id, run.profile_id or user["id"], user["id"])
+            logger.info("Auto-saved browser profile on run cancel (run=%s)", run_id)
+        except Exception as e:
+            logger.warning("Profile auto-save failed on run cancel: %s", e)
         try:
             sandbox_mgr.stop(run.sandbox_id)
             await platform_db.delete_sandbox(run.sandbox_id)

@@ -2,13 +2,12 @@ import { useState, useEffect, useCallback } from "react";
 import type { ApiKey } from "@/lib/types";
 import { apiFetch } from "@/lib/api";
 
-export function useApiKeys() {
+export function useApiKeys(enabled = true) {
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchApiKeys = useCallback(async () => {
-    setLoading(true);
     setError(null);
     try {
       const data = await apiFetch<ApiKey[]>("/api/v1/api-keys");
@@ -22,8 +21,9 @@ export function useApiKeys() {
   }, []);
 
   useEffect(() => {
-    fetchApiKeys();
-  }, [fetchApiKeys]);
+    if (enabled) fetchApiKeys();
+    else setLoading(false);
+  }, [enabled, fetchApiKeys]);
 
   const createApiKey = useCallback(async (name: string): Promise<ApiKey> => {
     const data = await apiFetch<ApiKey>("/api/v1/api-keys", {

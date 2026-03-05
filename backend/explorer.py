@@ -24,7 +24,8 @@ from browser_use import Agent, Browser, ActionResult, Tools
 
 from . import db as _db
 from .models import Flow
-from .runner import _get_exploration_llm, _get_fast_llm, _REFLEX_JS_WRAPPER
+from .runner import _get_exploration_llm, _get_fast_llm
+from .trace import trace
 
 logger = logging.getLogger(__name__)
 
@@ -38,24 +39,48 @@ CONTEXT:
 - Stage: {stage_title}
 - Description: {description}
 
-AVAILABLE HELPERS (already in scope — do NOT declare them):
-  waitFor(sel, timeout)     — wait for CSS selector, returns element
-  sleep(ms)                 — async delay
-  typeInto(el, text, delay) — type char-by-char (triggers autocomplete)
-  fillInput(el, value)      — set value instantly
-  acceptSuggestion(sel, timeout) — click first suggestion match
-  typeAndSelect(el, text, opts?) — type + select from dropdown
+OUTPUT FORMAT:
+Your response must be a single async arrow function that page.evaluate() can call:
 
-VARIABLES IN SCOPE:
-  inputs — object with user-provided values (use inputs.field_name)
-  entryUrl — the flow's entry URL
+  async (inputs, entryUrl) => {{
+      // your code here
+  }}
+
+The function receives:
+- inputs: object with user-provided values (inputs.pickup_location, inputs.date, etc.)
+- entryUrl: the flow's entry URL string
+
+USEFUL PATTERNS (define inside the function if you need them):
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+const waitFor = (sel, timeout = 5000) => new Promise((resolve, reject) => {{
+    const el = document.querySelector(sel);
+    if (el) return resolve(el);
+    const obs = new MutationObserver(() => {{
+        const el = document.querySelector(sel);
+        if (el) {{ obs.disconnect(); resolve(el); }}
+    }});
+    obs.observe(document.body, {{childList: true, subtree: true}});
+    setTimeout(() => {{ obs.disconnect(); reject(new Error('timeout: ' + sel)); }}, timeout);
+}});
+
+const typeInto = async (el, text, delay = 30) => {{
+    el.focus(); el.value = '';
+    for (const ch of text) {{
+        el.value += ch;
+        el.dispatchEvent(new Event('input', {{bubbles: true}}));
+        await sleep(delay);
+    }}
+    el.dispatchEvent(new Event('change', {{bubbles: true}}));
+}};
 
 RULES:
-- Output ONLY the script body (no function wrapper, no markdown fences)
+- Output ONLY the arrow function. No markdown fences, no explanation.
 - Use inputs.field_name for user-specific values
-- Use snake_case for all field references
 - Keep it short and robust — prefer waitFor() over hardcoded delays
-- Do NOT use document.querySelector chains when waitFor() works
+- For autocomplete/suggestion fields: type into the field, wait for suggestion
+  elements to appear, then click the first matching suggestion
 """
 
 
@@ -304,6 +329,8 @@ async def explore_flow(
                     extracted_content=f"Reflex generation failed: {e}. Move on."
                 )
 
+            trace("explorer.generate_reflex", name=name, description=description, prompt=gen_prompt, script=script)
+
             pause_after = "auth" if pause_after_auth else None
             await _db.upsert_reflex(
                 domain=flow.domain,
@@ -379,16 +406,17 @@ async def explore_flow(
                 else:
                     test_inputs[iname] = iname
 
-            # Wrap and execute
-            wrapped = _REFLEX_JS_WRAPPER.replace("__REFLEX_SCRIPT__", script)
+            trace("explorer.test_reflex.call", name=name, script=script, test_inputs=test_inputs, entry_url=flow.entry_url)
             try:
                 page = await browser.must_get_current_page()
-                result = await page.evaluate(wrapped, test_inputs, flow.entry_url)
+                result = await page.evaluate(script, test_inputs, flow.entry_url)
+                trace("explorer.test_reflex.ok", name=name, result=str(result)[:200])
                 return ActionResult(
                     extracted_content=f"Reflex '{name}' PASSED with inputs {test_inputs}. Result: {str(result)[:200]}"
                 )
             except Exception as e:
                 error_msg = str(e)[:300]
+                trace("explorer.test_reflex.fail", name=name, error=error_msg)
                 return ActionResult(
                     extracted_content=f"Reflex '{name}' FAILED with inputs {test_inputs}: {error_msg}"
                 )

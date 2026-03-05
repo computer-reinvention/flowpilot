@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import type { Run, RunStep } from "@/lib/types";
 import { ACTIVE_RUN_STATUSES } from "@/lib/types";
 import { apiFetch } from "@/lib/api";
@@ -45,8 +45,10 @@ export function useRuns(enabled = true) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const initialLoadDone = useRef(false);
+
   const fetchRuns = useCallback(async () => {
-    setLoading(true);
+    if (!initialLoadDone.current) setLoading(true);
     setError(null);
     try {
       const data = await apiFetch<RawRun[]>("/api/runs");
@@ -55,6 +57,7 @@ export function useRuns(enabled = true) {
       setError(err instanceof Error ? err.message : "Failed to fetch runs");
     } finally {
       setLoading(false);
+      initialLoadDone.current = true;
     }
   }, []);
 

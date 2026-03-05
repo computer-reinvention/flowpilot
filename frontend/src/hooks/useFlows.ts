@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { Flow } from "@/lib/types";
 import { apiFetch } from "@/lib/api";
 
@@ -7,8 +7,10 @@ export function useFlows(enabled = true) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const initialLoadDone = useRef(false);
+
   const fetchFlows = useCallback(async () => {
-    setLoading(true);
+    if (!initialLoadDone.current) setLoading(true);
     setError(null);
     try {
       const data = await apiFetch<Flow[]>("/api/flows");
@@ -17,6 +19,7 @@ export function useFlows(enabled = true) {
       setError(err instanceof Error ? err.message : "Failed to fetch flows");
     } finally {
       setLoading(false);
+      initialLoadDone.current = true;
     }
   }, []);
 

@@ -14,6 +14,9 @@ from . import db as _db
 
 logger = logging.getLogger(__name__)
 
+# Store references to delivery tasks so the GC doesn't kill them mid-flight.
+_pending_tasks: set[asyncio.Task] = set()
+
 VALID_EVENTS = frozenset({
     "run.started",
     "run.paused",       # HITL — includes category + browser_cdp_url
@@ -58,7 +61,7 @@ async def fire_event(user_id: str, event: str, run_id: str | None, payload: dict
             event=event,
             payload=payload_str,
         )
-        asyncio.create_task(
+        task = asyncio.create_task(
             _deliver_with_retries(
                 delivery_id=delivery_id,
                 webhook_id=wh["id"],
@@ -68,6 +71,8 @@ async def fire_event(user_id: str, event: str, run_id: str | None, payload: dict
                 payload_str=payload_str,
             )
         )
+        _pending_tasks.add(task)
+        task.add_done_callback(_pending_tasks.discard)
 
 
 async def _deliver_with_retries(

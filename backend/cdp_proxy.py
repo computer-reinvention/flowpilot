@@ -14,9 +14,10 @@ Key design:
 """
 
 import asyncio
-import http.client
 import json
 import logging
+
+import httpx
 
 from cdp_use.client import CDPClient
 from fastapi import WebSocket, WebSocketDisconnect
@@ -60,7 +61,7 @@ async def handle(
     cdp_port = info.cdp_port  # 9223
 
     try:
-        browser_ws_url, target_id = _resolve_browser_and_target(cdp_host, cdp_port)
+        browser_ws_url, target_id = await _resolve_browser_and_target(cdp_host, cdp_port)
     except Exception as exc:
         logger.error("Cannot resolve CDP URL for sandbox %s: %s", sandbox_id, exc)
         await websocket.close(code=4503, reason="CDP not available")
@@ -363,22 +364,25 @@ async def handle(
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _resolve_browser_and_target(cdp_host: str, cdp_port: int) -> tuple[str, str]:
-    """Return (browser_ws_url, first_page_target_id)."""
-    # Browser-level WS URL
-    conn = http.client.HTTPConnection(cdp_host, cdp_port, timeout=5)
-    conn.request("GET", "/json/version", headers={"Host": "localhost"})
-    resp = conn.getresponse()
-    info = json.loads(resp.read())
-    raw_browser_ws = info["webSocketDebuggerUrl"]
-    path = "/" + "/".join(raw_browser_ws.split("/")[3:])
-    browser_ws_url = f"ws://{cdp_host}:{cdp_port}{path}"
+async def _resolve_browser_and_target(cdp_host: str, cdp_port: int) -> tuple[str, str]:
+    """Return (browser_ws_url, first_page_target_id). Fully async — no event loop blocking."""
+    base = f"http://{cdp_host}:{cdp_port}"
+    headers = {"Host": "localhost"}
 
-    # First top-level page target
-    conn2 = http.client.HTTPConnection(cdp_host, cdp_port, timeout=5)
-    conn2.request("GET", "/json", headers={"Host": "localhost"})
-    resp2 = conn2.getresponse()
-    targets = json.loads(resp2.read())
+    async with httpx.AsyncClient(timeout=5) as client:
+        # Browser-level WS URL
+        resp = await client.get(f"{base}/json/version", headers=headers)
+        resp.raise_for_status()
+        info = resp.json()
+        raw_browser_ws = info["webSocketDebuggerUrl"]
+        path = "/" + "/".join(raw_browser_ws.split("/")[3:])
+        browser_ws_url = f"ws://{cdp_host}:{cdp_port}{path}"
+
+        # First top-level page target
+        resp2 = await client.get(f"{base}/json", headers=headers)
+        resp2.raise_for_status()
+        targets = resp2.json()
+
     target_id = next(
         t["id"]
         for t in targets

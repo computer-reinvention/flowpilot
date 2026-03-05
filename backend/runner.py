@@ -27,6 +27,8 @@ from typing import Callable, Awaitable
 
 import httpx
 
+from .trace import trace
+
 from browser_use import Agent, Browser, ActionResult, Tools
 from browser_use.llm.google import ChatGoogle
 from browser_use.llm.anthropic.chat import ChatAnthropic
@@ -134,165 +136,6 @@ def _get_fast_llm() -> ChatGoogle | ChatAnthropic | ChatOpenAI:
         return _get_llm()
 
 
-# JavaScript wrapper that provides helpers to reflex scripts.
-# The user script is injected into {user_script} and runs as the body of an
-# async IIFE receiving (inputs, entryUrl).
-_REFLEX_JS_WRAPPER = """
-async (inputs, entryUrl) => {
-    // Wait for a selector to appear in the DOM
-    const waitFor = (sel, timeout = 5000) => new Promise((resolve, reject) => {
-        const existing = document.querySelector(sel);
-        if (existing) return resolve(existing);
-        const observer = new MutationObserver(() => {
-            const el = document.querySelector(sel);
-            if (el) { observer.disconnect(); resolve(el); }
-        });
-        observer.observe(document.body, {childList: true, subtree: true});
-        setTimeout(() => { observer.disconnect(); reject(new Error('waitFor timeout: ' + sel)); }, timeout);
-    });
-
-    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
-    // Type char-by-char to trigger autocomplete/React onChange
-    const typeInto = async (el, text, delay = 30) => {
-        el.focus();
-        el.value = '';
-        for (const ch of text) {
-            el.value += ch;
-            el.dispatchEvent(new Event('input', {bubbles: true, composed: true}));
-            el.dispatchEvent(new KeyboardEvent('keydown', {key: ch, bubbles: true, composed: true}));
-            el.dispatchEvent(new KeyboardEvent('keyup', {key: ch, bubbles: true, composed: true}));
-            await sleep(delay);
-        }
-        el.dispatchEvent(new Event('change', {bubbles: true, composed: true}));
-    };
-
-    // Set value instantly (for fields that don't need autocomplete)
-    const fillInput = (el, value) => {
-        el.focus();
-        el.value = value;
-        el.dispatchEvent(new Event('input', {bubbles: true, composed: true}));
-        el.dispatchEvent(new Event('change', {bubbles: true, composed: true}));
-    };
-
-    // Default selectors for suggestion/autocomplete dropdowns
-    const SUGGESTION_SELS = '[role="option"], [role="listbox"] li, [role="listbox"] [role="presentation"], .pac-item, [class*="suggestion"], [class*="Suggestion"], [class*="dropdown"] li, [class*="autocomplete"] li, [class*="Autocomplete"] li, ul[id*="listbox"] li';
-
-    // Wait for suggestion dropdown and click first match
-    const acceptSuggestion = async (sel, timeout = 3000) => {
-        const selector = sel || SUGGESTION_SELS;
-        const el = await waitFor(selector, timeout);
-        el.click();
-    };
-
-    // Type into a field and select from the suggestion dropdown.
-    // This is the go-to for location pickers, address fields, etc. where
-    // you MUST click a suggestion for the value to be accepted.
-    //
-    // Usage:
-    //   await typeAndSelect(el, 'JFK Airport');
-    //   await typeAndSelect(el, inputs.pickup, {match: 'Terminal 4'});
-    //   await typeAndSelect(el, inputs.dropoff, {suggestionSel: '.uber-suggestion'});
-    //
-    // Options:
-    //   match       — substring to match in suggestion text (picks best match instead of first)
-    //   suggestionSel — custom CSS selector for suggestion items
-    //   timeout     — how long to wait for suggestions (default 5000ms)
-    //   typeDelay   — delay between keystrokes (default 40ms)
-    //   retries     — retry typing + selecting if suggestions don't appear (default 2)
-    const typeAndSelect = async (el, text, opts = {}) => {
-        const {
-            match = null,
-            suggestionSel = null,
-            timeout = 5000,
-            typeDelay = 40,
-            retries = 2,
-        } = opts;
-        const selector = suggestionSel || SUGGESTION_SELS;
-
-        for (let attempt = 0; attempt <= retries; attempt++) {
-            // Clear and type
-            el.focus();
-            el.value = '';
-            el.dispatchEvent(new Event('input', {bubbles: true, composed: true}));
-            await sleep(100);
-
-            // Type char by char
-            for (const ch of text) {
-                el.value += ch;
-                el.dispatchEvent(new Event('input', {bubbles: true, composed: true}));
-                el.dispatchEvent(new KeyboardEvent('keydown', {key: ch, bubbles: true, composed: true}));
-                el.dispatchEvent(new KeyboardEvent('keyup', {key: ch, bubbles: true, composed: true}));
-                await sleep(typeDelay);
-            }
-            el.dispatchEvent(new Event('change', {bubbles: true, composed: true}));
-
-            // Wait for suggestions to appear
-            let suggestions;
-            const deadline = Date.now() + timeout;
-            while (Date.now() < deadline) {
-                suggestions = document.querySelectorAll(selector);
-                // Filter to only visible suggestions
-                suggestions = Array.from(suggestions).filter(s => {
-                    const r = s.getBoundingClientRect();
-                    return r.width > 0 && r.height > 0;
-                });
-                if (suggestions.length > 0) break;
-                await sleep(200);
-            }
-
-            if (!suggestions || suggestions.length === 0) {
-                if (attempt < retries) {
-                    // Retry: clear and retype (sometimes the first attempt doesn't trigger)
-                    el.value = '';
-                    el.dispatchEvent(new Event('input', {bubbles: true, composed: true}));
-                    await sleep(500);
-                    continue;
-                }
-                throw new Error('typeAndSelect: no suggestions appeared for "' + text + '" (selector: ' + selector + ')');
-            }
-
-            // Pick the best matching suggestion, or first if no match specified
-            let picked = suggestions[0];
-            if (match) {
-                const lower = match.toLowerCase();
-                const found = suggestions.find(s => (s.textContent || '').toLowerCase().includes(lower));
-                if (found) picked = found;
-            }
-
-            picked.click();
-            await sleep(300);
-
-            // Verify the selection stuck — the input should have changed from what we typed
-            // (autocomplete fields often replace the value after clicking a suggestion)
-            const newValue = el.value;
-            if (newValue && newValue !== text) {
-                // Selection was accepted — value was replaced by the autocomplete
-                return newValue;
-            }
-            // Even if value didn't change, the click might have set a hidden field.
-            // Check if suggestions dismissed (good sign).
-            await sleep(200);
-            const remaining = document.querySelectorAll(selector);
-            const visible = Array.from(remaining).filter(s => {
-                const r = s.getBoundingClientRect();
-                return r.width > 0 && r.height > 0;
-            });
-            if (visible.length === 0) {
-                // Dropdown closed — selection was accepted
-                return newValue || text;
-            }
-
-            // Suggestions still showing — try clicking again or retry
-            if (attempt < retries) continue;
-            return newValue || text;
-        }
-    };
-
-    // Run the user's reflex script
-    __REFLEX_SCRIPT__
-}
-"""
 
 
 # JS snippet that dumps interactive elements as a compact list.
@@ -352,17 +195,17 @@ async def _execute_reflex(
         except Exception:
             pass
 
-    # Inject the user script into our wrapper
-    wrapped = _REFLEX_JS_WRAPPER.replace("__REFLEX_SCRIPT__", script)
-
     pre_url = ""
     try:
         pre_url = await page.get_url()
     except Exception:
         pass
 
+    trace("execute_reflex.call", script=script, inputs=inputs, entry_url=entry_url, pre_url=pre_url)
+
     try:
-        await page.evaluate(wrapped, inputs, entry_url)
+        await page.evaluate(script, inputs, entry_url)
+        trace("execute_reflex.ok", script=script[:500], pre_url=pre_url)
         return True, "Reflex executed successfully"
     except Exception as e:
         # window.location.href / navigation scripts cause CDP to drop the
@@ -373,6 +216,7 @@ async def _execute_reflex(
             post_url = await page.get_url()
             if pre_url and post_url and post_url != pre_url and post_url not in ("about:blank", "chrome://newtab/"):
                 logger.debug("Reflex caused navigation %s → %s (evaluate threw but treated as success)", pre_url, post_url)
+                trace("execute_reflex.nav_ok", pre_url=pre_url, post_url=post_url)
                 return True, f"Reflex navigated to {post_url}"
         except Exception:
             pass
@@ -384,7 +228,10 @@ async def _execute_reflex(
             context = f"URL: {fail_url}\nElements on page:\n{elements}"
         except Exception:
             context = "Could not read page state"
-        return False, f"Script error: {e}\n{context}"
+        err_str = str(e)
+        result_msg = f"SCRIPT EXECUTION FAILED\nError: {err_str}\n{context}"
+        trace("execute_reflex.fail", error=err_str, context=context)
+        return False, result_msg
 
 
 async def _repair_reflex(
@@ -405,6 +252,8 @@ async def _repair_reflex(
     This runs as a "subagent" — a single LLM call that doesn't pollute
     the main agent's conversation context.
     """
+    trace("repair_reflex.call", broken_script=broken_script, error_msg=error_msg, inputs=inputs, entry_url=entry_url)
+
     for attempt in range(max_attempts):
         # Get fresh DOM state for the repair prompt
         try:
@@ -421,14 +270,14 @@ async def _repair_reflex(
             f"ERROR: {error_msg}\n\n"
             f"CURRENT PAGE: {current_url}\n"
             f"INTERACTIVE ELEMENTS ON PAGE:\n{elements}\n\n"
-            "The script runs as an async function body receiving (inputs, entryUrl) "
-            "and helpers: waitFor(sel, timeout), sleep(ms), typeInto(el, text, delay), "
-            "fillInput(el, value), acceptSuggestion(sel, timeout), "
-            "typeAndSelect(el, text, opts?) — for fields requiring suggestion selection.\n\n"
-            "IMPORTANT: For location/address/search fields where you MUST pick from a "
-            "suggestion dropdown, use typeAndSelect() instead of typeInto()+acceptSuggestion().\n\n"
-            "Reply with ONLY the fixed JavaScript code, no markdown fences, no explanation. "
-            "Update the CSS selectors to match the actual elements listed above."
+            "The script must be a single async arrow function for page.evaluate():\n"
+            "  async (inputs, entryUrl) => { ... }\n\n"
+            "It receives inputs (object with user values) and entryUrl (string).\n"
+            "Define any helpers you need (sleep, waitFor, etc.) inside the function.\n\n"
+            "IMPORTANT: For autocomplete/suggestion fields, type into the field, "
+            "wait for suggestion elements to appear, then click the matching one.\n\n"
+            "Reply with ONLY the arrow function. No markdown fences, no explanation. "
+            "Update CSS selectors to match the actual elements listed above."
         )
 
         try:
@@ -446,6 +295,8 @@ async def _repair_reflex(
             logger.warning("Repair LLM call failed: %s", e)
             return False, f"Repair LLM call failed: {e}", None
 
+        trace("repair_reflex.llm_response", attempt=attempt + 1, prompt=repair_prompt, fixed_script=fixed_script)
+
         # Try executing the fixed script
         success, msg = await _execute_reflex(
             script=fixed_script,
@@ -462,6 +313,7 @@ async def _repair_reflex(
         error_msg = msg
         logger.info("Repair attempt %d/%d failed: %s", attempt + 1, max_attempts, msg)
 
+    trace("repair_reflex.exhausted", max_attempts=max_attempts, last_error=error_msg[:500])
     return False, f"Repair failed after {max_attempts} attempts: {error_msg}", None
 
 
@@ -512,22 +364,16 @@ async def _generate_reflex(
         f"USER INPUTS: {input_desc}\n"
         f"CURRENT PAGE: {current_url}\n"
         f"INTERACTIVE ELEMENTS ON PAGE:\n{elements}\n\n"
-        "The script runs as an async function body receiving (inputs, entryUrl) "
-        "and helpers:\n"
-        "  waitFor(sel, timeout=5000) — wait for CSS selector to appear, returns element\n"
-        "  sleep(ms) — wait\n"
-        "  typeInto(el, text, delay=30) — type char-by-char (triggers autocomplete)\n"
-        "  fillInput(el, value) — set value instantly\n"
-        "  acceptSuggestion(sel?, timeout=3000) — wait for dropdown, click first match\n"
-        "  typeAndSelect(el, text, opts?) — TYPE AND PICK FROM SUGGESTIONS in one call.\n"
-        "    For ANY field that requires selecting from a dropdown (locations, addresses,\n"
-        "    search fields), you MUST use typeAndSelect. Typing alone won't work — the app\n"
-        "    requires clicking a suggestion. opts: {match, suggestionSel, timeout, typeDelay, retries}\n\n"
-        "Access user inputs via `inputs.key_name`. The page is already loaded at entryUrl.\n"
-        "Use the CSS selectors from the elements list above (id, name, class attributes).\n"
+        "Output a single async arrow function for page.evaluate():\n"
+        "  async (inputs, entryUrl) => { ... }\n\n"
+        "It receives inputs (object with user values) and entryUrl (string).\n"
+        "Define any helpers you need (sleep, waitFor, etc.) inside the function.\n\n"
+        "Use the CSS selectors from the elements list above.\n"
         "Add sleep() calls after actions that trigger navigation or XHR.\n"
+        "For autocomplete/suggestion fields: type into the field, wait for "
+        "suggestion elements to appear, then click the matching one.\n"
         "If the task requires login/auth, end with: throw new Error('NEEDS_AUTH');\n\n"
-        "Reply with ONLY the JavaScript code. No markdown fences, no explanation."
+        "Reply with ONLY the arrow function. No markdown fences, no explanation."
     )
 
     try:
@@ -546,6 +392,8 @@ async def _generate_reflex(
 
     if not script:
         return False, "LLM returned empty script", None
+
+    trace("generate_reflex.llm_response", prompt=generate_prompt, script=script, task=flow.task)
 
     # Execute the generated script
     success, msg = await _execute_reflex(
@@ -729,12 +577,26 @@ class FlowRunner:
             # If no reflex exists, try generating one from the DOM.
             # Only fall through to the full agent if both fail.
             # ----------------------------------------------------------
+            MAX_REFLEX_FAILURES = 3  # fall through to agent after this many
+            reflex_failures = 0
+
             if domain_reflexes:
-                # Try the first matching reflex
                 for reflex in domain_reflexes:
+                    if reflex_failures >= MAX_REFLEX_FAILURES:
+                        logger.info(
+                            "Hit %d reflex failures, skipping remaining reflexes and falling through to agent",
+                            reflex_failures,
+                        )
+                        await _update(
+                            RunStatus.RUNNING,
+                            f"Reflexes failed {reflex_failures} times, switching to manual agent...",
+                        )
+                        break
+
                     await _update(
                         RunStatus.RUNNING, f"Trying reflex '{reflex['name']}'..."
                     )
+                    trace("fast_path.try_reflex", name=reflex["name"], failures_so_far=reflex_failures, script=reflex["script"])
                     success, msg = await _execute_reflex(
                         script=reflex["script"],
                         inputs=inputs,
@@ -752,12 +614,22 @@ class FlowRunner:
                             "inputs": inputs,
                             "completed_at": datetime.now(timezone.utc).isoformat(),
                         }
+
+                    reflex_failures += 1
+                    logger.info(
+                        "Reflex '%s' failed (%d/%d): %s",
+                        reflex["name"], reflex_failures, MAX_REFLEX_FAILURES, msg[:200],
+                    )
+
+                    if reflex_failures >= MAX_REFLEX_FAILURES:
+                        continue  # will break at top of next iteration
+
                     # Try auto-repair
                     await _update(
                         RunStatus.RUNNING,
                         f"Reflex '{reflex['name']}' failed, repairing...",
                     )
-                    repaired, _, fixed_script = await _repair_reflex(
+                    repaired, repair_msg, fixed_script = await _repair_reflex(
                         broken_script=reflex["script"],
                         error_msg=msg,
                         inputs=inputs,
@@ -788,9 +660,12 @@ class FlowRunner:
                             "inputs": inputs,
                             "completed_at": datetime.now(timezone.utc).isoformat(),
                         }
+
+                    # Repair also failed — count it
+                    reflex_failures += 1
                     logger.info(
-                        "Reflex '%s' repair failed, trying next or falling through",
-                        reflex["name"],
+                        "Reflex '%s' repair also failed (%d/%d): %s",
+                        reflex["name"], reflex_failures, MAX_REFLEX_FAILURES, repair_msg[:200],
                     )
 
             elif flow.entry_url:
@@ -935,14 +810,11 @@ class FlowRunner:
             @tools.action(
                 description=(
                     "Save a JavaScript reflex script after completing a repeatable interaction. "
-                    "The script runs as an async function body receiving (inputs, entryUrl) "
-                    "plus helpers: waitFor(sel, timeout), sleep(ms), typeInto(el, text, delay), "
-                    "fillInput(el, value), acceptSuggestion(sel, timeout), "
-                    "typeAndSelect(el, text, opts?). "
-                    "For fields requiring suggestion selection (locations, addresses), "
-                    "ALWAYS use typeAndSelect — typing alone won't work. Example:\n"
-                    "  const el = await waitFor('input[name=\"pickup\"]');\n"
-                    "  await typeAndSelect(el, inputs.pickup);\n"
+                    "The script must be a complete async arrow function for page.evaluate(): "
+                    "async (inputs, entryUrl) => { ... }. "
+                    "It receives inputs (object with user values) and entryUrl (string). "
+                    "Define any helpers (sleep, waitFor, etc.) inside the function. "
+                    "For autocomplete fields: type into the field, wait for suggestions, click one. "
                     "Name: snake_case, e.g. 'fill_booking_form'."
                 )
             )

@@ -23,6 +23,9 @@ class Flow:
     exploration_confirmation_request: str | None = None  # summary string
     auth_url: str | None = None
     auth_before_explore: bool = False
+    auth_sandbox_id: str | None = None
+    auth_profile_id: str | None = None
+    exploration_sandbox_id: str | None = None
 
 
 @dataclass

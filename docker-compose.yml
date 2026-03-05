@@ -26,7 +26,9 @@ services:
       - "127.0.0.1:8080:8080"
     volumes:
       - ./profiles:/app/profiles
+      - ./traces:/tmp/flowpilot-traces
     environment:
+      - FLOWPILOT_TRACE=${FLOWPILOT_TRACE:-1}
       - DOCKER_HOST=tcp://docker-proxy:2375
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}

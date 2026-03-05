@@ -1,10 +1,11 @@
 """Docker container management for browser sandboxes."""
 
+import io
 import os
 import re
 import uuid
 import logging
-import subprocess
+import tarfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -97,17 +98,19 @@ class SandboxManager:
         cdp_host = f"flowpilot-{sandbox_id}"
         cdp_port = CDP_CONTAINER_PORT  # internal port, not published
 
-        # If a profile was provided, copy it into the container
+        # If a profile was provided, copy it into the container via Docker SDK
         if profile_path:
             try:
-                subprocess.run(
-                    ["docker", "cp", f"{profile_path}/.", f"{container.id}:/tmp/chrome-profile/"],
-                    check=True,
-                    capture_output=True,
-                )
+                buf = io.BytesIO()
+                with tarfile.open(fileobj=buf, mode="w") as tar:
+                    src = Path(profile_path)
+                    for item in src.iterdir():
+                        tar.add(str(item), arcname=item.name)
+                buf.seek(0)
+                container.put_archive("/tmp/chrome-profile", buf)
                 container.exec_run("chown -R sandboxuser:sandboxuser /tmp/chrome-profile")
                 logger.info("Restored profile from %s into sandbox %s", profile_path, sandbox_id)
-            except subprocess.CalledProcessError as e:
+            except Exception as e:
                 logger.warning("Failed to restore profile: %s", e)
 
         info = SandboxInfo(

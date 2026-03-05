@@ -47,7 +47,10 @@ async def init_db() -> None:
                 exploration_input_request TEXT,
                 exploration_confirmation_request TEXT,
                 auth_url TEXT,
-                auth_before_explore INTEGER NOT NULL DEFAULT 0
+                auth_before_explore INTEGER NOT NULL DEFAULT 0,
+                auth_sandbox_id TEXT,
+                auth_profile_id TEXT,
+                exploration_sandbox_id TEXT
             )
         """)
         await db.execute("""
@@ -172,6 +175,9 @@ async def init_db() -> None:
             "ALTER TABLE flows ADD COLUMN exploration_confirmation_request TEXT",
             "ALTER TABLE flows ADD COLUMN auth_url TEXT",
             "ALTER TABLE flows ADD COLUMN auth_before_explore INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE flows ADD COLUMN auth_sandbox_id TEXT",
+            "ALTER TABLE flows ADD COLUMN auth_profile_id TEXT",
+            "ALTER TABLE flows ADD COLUMN exploration_sandbox_id TEXT",
         ]:
             try:
                 await db.execute(migration)
@@ -201,7 +207,7 @@ async def create_flow(flow: Flow) -> Flow:
     return flow
 
 
-_FLOW_COLS = "id, name, domain, task, entry_url, inputs, icon, created_by, created_at, exploration_status, exploration_error, exploration_notes, exploration_tree, exploration_input_request, exploration_confirmation_request, auth_url, auth_before_explore"
+_FLOW_COLS = "id, name, domain, task, entry_url, inputs, icon, created_by, created_at, exploration_status, exploration_error, exploration_notes, exploration_tree, exploration_input_request, exploration_confirmation_request, auth_url, auth_before_explore, auth_sandbox_id, auth_profile_id, exploration_sandbox_id"
 
 
 async def get_flow(flow_id: str) -> Flow | None:
@@ -223,7 +229,7 @@ async def list_flows() -> list[dict]:
 
 
 async def update_flow(flow_id: str, updates: dict) -> Flow | None:
-    allowed = {"name", "domain", "task", "entry_url", "inputs", "icon", "exploration_status", "exploration_error", "exploration_notes", "exploration_tree", "exploration_input_request", "exploration_confirmation_request", "auth_url", "auth_before_explore"}
+    allowed = {"name", "domain", "task", "entry_url", "inputs", "icon", "exploration_status", "exploration_error", "exploration_notes", "exploration_tree", "exploration_input_request", "exploration_confirmation_request", "auth_url", "auth_before_explore", "auth_sandbox_id", "auth_profile_id", "exploration_sandbox_id"}
     filtered = {k: v for k, v in updates.items() if k in allowed}
     if not filtered:
         return await get_flow(flow_id)
@@ -641,8 +647,9 @@ async def create_sandbox(sandbox_id: str, container_id: str, user_id: str, cdp_u
 
 
 async def delete_sandbox(sandbox_id: str) -> None:
+    """Soft-delete: mark sandbox as stopped instead of removing the row."""
     async with aiosqlite.connect(str(DB_PATH)) as db:
-        await db.execute("DELETE FROM sandboxes WHERE id = ?", (sandbox_id,))
+        await db.execute("UPDATE sandboxes SET status = 'stopped' WHERE id = ?", (sandbox_id,))
         await db.commit()
 
 

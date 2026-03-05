@@ -401,6 +401,14 @@ export function ExplorationTree({
         </div>
       </div>
 
+      {/* Re-explore warning */}
+      {status === "ready" && (
+        <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-2 flex items-center gap-2">
+          <AlertTriangle className="size-3.5 shrink-0" />
+          Re-exploring a completed flow will overwrite the current stages and reflexes. This is usually not needed.
+        </p>
+      )}
+
       {/* Error message */}
       {status === "failed" && flow.exploration_error && (
         <p className="text-xs text-destructive bg-destructive/5 border border-destructive/20 rounded-md px-3 py-2">

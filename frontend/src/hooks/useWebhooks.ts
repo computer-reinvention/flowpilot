@@ -2,13 +2,12 @@ import { useState, useEffect, useCallback } from "react";
 import type { Webhook } from "@/lib/types";
 import { apiFetch } from "@/lib/api";
 
-export function useWebhooks() {
+export function useWebhooks(enabled = true) {
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchWebhooks = useCallback(async () => {
-    setLoading(true);
     setError(null);
     try {
       const data = await apiFetch<Webhook[]>("/api/v1/webhooks");
@@ -22,8 +21,9 @@ export function useWebhooks() {
   }, []);
 
   useEffect(() => {
-    fetchWebhooks();
-  }, [fetchWebhooks]);
+    if (enabled) fetchWebhooks();
+    else setLoading(false);
+  }, [enabled, fetchWebhooks]);
 
   const createWebhook = useCallback(async (url: string, events: string[]): Promise<Webhook> => {
     const data = await apiFetch<Webhook>("/api/v1/webhooks", {

@@ -9,13 +9,12 @@ export interface Profile {
   source: "tar" | "extension" | null;
 }
 
-export function useProfiles() {
+export function useProfiles(enabled = true) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchProfiles = useCallback(async () => {
-    setLoading(true);
     setError(null);
     try {
       const data = await apiFetch<Profile[]>("/api/profiles");
@@ -29,8 +28,9 @@ export function useProfiles() {
   }, []);
 
   useEffect(() => {
-    fetchProfiles();
-  }, [fetchProfiles]);
+    if (enabled) fetchProfiles();
+    else setLoading(false);
+  }, [enabled, fetchProfiles]);
 
   const deleteProfile = useCallback(async (name: string) => {
     await apiFetch(`/api/profiles/${encodeURIComponent(name)}`, { method: "DELETE" });
