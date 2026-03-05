@@ -16,6 +16,10 @@ import { CreateFlowForm } from "@/components/flows/CreateFlowForm";
 import { RunHistory } from "@/components/runs/RunHistory";
 import { SessionList } from "@/components/sessions/SessionList";
 import { SettingsPanel } from "@/components/settings/SettingsPanel";
+import { ApiKeySettings } from "@/components/settings/ApiKeySettings";
+import { WebhookSettings } from "@/components/settings/WebhookSettings";
+import { useApiKeys } from "@/hooks/useApiKeys";
+import { useWebhooks } from "@/hooks/useWebhooks";
 import type { Flow, Run } from "@/lib/types";
 
 type AuthView = "login" | "signup";
@@ -28,6 +32,8 @@ export default function App() {
   const run = useRun();
   const runs = useRuns(authed);
   const sessions = useSessions(authed);
+  const apiKeys = useApiKeys();
+  const webhooks = useWebhooks();
 
   const [authView, setAuthView] = useState<AuthView>("login");
   const [activeSection, setActiveSection] = useState<ActiveSection>("flows");
@@ -247,6 +253,31 @@ export default function App() {
               sessions={sessions.sessions}
               loading={sessions.loading}
               onDelete={sessions.deleteSession}
+            />
+          </div>
+        );
+
+      case "api-keys":
+        return (
+          <div className="p-6 max-w-2xl mx-auto">
+            <ApiKeySettings
+              apiKeys={apiKeys.apiKeys}
+              loading={apiKeys.loading}
+              onCreate={apiKeys.createApiKey}
+              onDelete={apiKeys.deleteApiKey}
+            />
+          </div>
+        );
+
+      case "webhooks":
+        return (
+          <div className="p-6 max-w-2xl mx-auto">
+            <WebhookSettings
+              webhooks={webhooks.webhooks}
+              loading={webhooks.loading}
+              onCreate={webhooks.createWebhook}
+              onDelete={webhooks.deleteWebhook}
+              onTest={webhooks.testWebhook}
             />
           </div>
         );

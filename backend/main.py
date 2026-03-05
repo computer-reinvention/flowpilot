@@ -920,11 +920,23 @@ async def _execute_run(
             await auth_event.wait()
             _run_auth_events.pop(run_id, None)
 
-            # Recapture cookies after auth
-            agent_info_for_auth = _run_agents.get(run_id)
-            if agent_info_for_auth:
-                _, browser_for_auth, _, _ = agent_info_for_auth
-                await capture_session(browser_for_auth, user_id, flow.domain, profile_id, context=f"run-auth:{run_id}")
+            # Recapture cookies after auth using a temporary browser connection.
+            # Note: _run_agents[run_id] is not populated yet (run_flow hasn't been called),
+            # so we create a short-lived Browser just to export the post-login storage state.
+            _tmp_browser = None
+            try:
+                from browser_use import Browser as _Browser
+                _tmp_browser = _Browser(cdp_url=cdp_url, headers={"Host": "localhost"})
+                await _tmp_browser.start()
+                await capture_session(_tmp_browser, user_id, flow.domain, profile_id, context=f"run-auth:{run_id}")
+            except Exception as _e:
+                logger.warning("Auth pre-step capture failed for run %s: %s", run_id, _e)
+            finally:
+                if _tmp_browser is not None:
+                    try:
+                        await _tmp_browser.stop()
+                    except Exception:
+                        pass
             # Rebuild storage_state from the newly saved session
             domain_session = await platform_db.get_session_for_domain(user_id, flow.domain, profile_name=profile_id)
             if domain_session:

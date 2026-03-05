@@ -4,6 +4,8 @@ import {
   Globe,
   LogOut,
   Settings,
+  KeyRound,
+  Webhook,
 } from "lucide-react";
 import {
   Sidebar,
@@ -20,7 +22,7 @@ import {
 } from "@/components/ui/sidebar";
 import type { Run, Flow } from "@/lib/types";
 
-export type ActiveSection = "flows" | "runs" | "sessions" | "settings";
+export type ActiveSection = "flows" | "runs" | "sessions" | "api-keys" | "webhooks" | "settings";
 
 interface AppSidebarProps {
   activeSection: ActiveSection;
@@ -36,6 +38,8 @@ const NAV_ITEMS: { key: ActiveSection; label: string; icon: typeof Workflow }[] 
   { key: "flows",    label: "Flows",    icon: Workflow },
   { key: "runs",     label: "Runs",     icon: History  },
   { key: "sessions", label: "Auth Sessions", icon: Globe    },
+  { key: "api-keys", label: "API Keys",      icon: KeyRound },
+  { key: "webhooks", label: "Webhooks",      icon: Webhook  },
 ];
 
 export function AppSidebar({

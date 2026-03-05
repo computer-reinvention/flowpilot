@@ -662,11 +662,21 @@ class FlowRunner:
         # Agent run
         # ------------------------------------------------------------------
         browser: Browser | None = None
+        _ss_tmp_path: str | None = None
         try:
             await _update(RunStatus.CONNECTING, "Connecting to sandbox browser via CDP")
+
+            # browser-use's StorageStateWatchdog only loads from file paths, not dicts.
+            # Write the storage_state dict to a temp file so cookies are actually injected.
+            ss_arg = None
+            if storage_state:
+                from .session_utils import storage_state_to_file
+                _ss_tmp_path = storage_state_to_file(storage_state)
+                ss_arg = _ss_tmp_path
+
             browser = Browser(
                 cdp_url=cdp_url,
-                storage_state=storage_state,
+                storage_state=ss_arg,
                 headers={"Host": "localhost"},
                 # Give autocomplete dropdowns time to appear after typing.
                 # Default 0.5s is too fast — most location/address pickers
@@ -1001,5 +1011,10 @@ class FlowRunner:
             if browser is not None:
                 try:
                     await browser.close()
+                except Exception:
+                    pass
+            if _ss_tmp_path and os.path.exists(_ss_tmp_path):
+                try:
+                    os.unlink(_ss_tmp_path)
                 except Exception:
                     pass

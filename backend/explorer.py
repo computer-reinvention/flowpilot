@@ -16,6 +16,7 @@ import asyncio
 import http.client
 import json
 import logging
+import os
 import re
 import uuid
 
@@ -150,6 +151,7 @@ async def explore_flow(
     cdp_url = f"ws://{_cdp_h}:{_cdp_p}{_ws_path}"
 
     browser: Browser | None = None
+    _ss_tmp_path: str | None = None
     notes: list[str] = []
     reflexes_saved = 0
 
@@ -184,9 +186,17 @@ async def explore_flow(
         await _update_and_notify({"exploration_tree": json.dumps(tree)})
 
     try:
+        # browser-use's StorageStateWatchdog only loads from file paths, not dicts.
+        # Write the storage_state dict to a temp file so cookies are actually injected.
+        ss_arg = None
+        if storage_state:
+            from .session_utils import storage_state_to_file
+            _ss_tmp_path = storage_state_to_file(storage_state)
+            ss_arg = _ss_tmp_path
+
         browser = Browser(
             cdp_url=cdp_url,
-            storage_state=storage_state,
+            storage_state=ss_arg,
             headers={"Host": "localhost"},
             wait_between_actions=0.5,
             wait_for_network_idle_page_load_time=1.0,
@@ -627,5 +637,10 @@ async def explore_flow(
                     logger.debug("Session capture callback failed: %s", e)
             try:
                 await browser.close()
+            except Exception:
+                pass
+        if _ss_tmp_path and os.path.exists(_ss_tmp_path):
+            try:
+                os.unlink(_ss_tmp_path)
             except Exception:
                 pass
