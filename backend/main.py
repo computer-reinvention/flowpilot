@@ -335,12 +335,10 @@ async def flow_list() -> list[dict]:
         eir = r.get("exploration_input_request")
         r["exploration_input_request"] = json.loads(eir) if eir else None
         r["exploration_confirmation_request"] = r.get("exploration_confirmation_request")
-        agent_info = _exploration_agents.get(r["id"])
-        r["exploration_sandbox_id"] = agent_info[3] if agent_info and r.get("exploration_status") in ("exploring", "paused_for_hitl") else None
+        r["exploration_sandbox_id"] = r.get("exploration_sandbox_id")
         r["auth_url"] = r.get("auth_url")
         r["auth_before_explore"] = bool(r.get("auth_before_explore", 0))
-        auth_info = _auth_sandboxes.get(r["id"])
-        r["auth_sandbox_id"] = auth_info["sandbox_id"] if auth_info and r.get("exploration_status") == "awaiting_auth" else None
+        r["auth_sandbox_id"] = r.get("auth_sandbox_id")
     return rows
 
 
@@ -373,9 +371,8 @@ async def flow_delete(flow_id: str, user: dict = Depends(auth.get_current_user))
     return {"status": "deleted"}
 
 
-_auth_sandboxes: dict[str, dict] = {}  # flow_id -> {sandbox_id, cdp_url, user_id, profile_id}
 _run_auth_events: dict[str, asyncio.Event] = {}  # run_id -> event set when auth done
-_exploration_agents: dict[str, tuple] = {}  # flow_id -> (agent, browser, paused_ref, sandbox_id, hitl_response_ref, profile_id)
+_exploration_agents: dict[str, tuple] = {}  # flow_id -> (agent, browser, paused_ref, hitl_response_ref)
 
 
 async def _start_auth_prestep(flow: Flow, user_id: str, profile_id: str = "") -> None:
@@ -406,22 +403,21 @@ async def _start_auth_prestep(flow: Flow, user_id: str, profile_id: str = "") ->
     await platform_db.create_sandbox(sandbox_id, sandbox_result["container_id"], user_id, cdp_url)
 
     # Navigate to auth URL via CDP
-    import http.client as _http_client
     _cdp_hp = cdp_url.split("//")[1].split("/")[0]
     _cdp_h, _cdp_p = _cdp_hp.rsplit(":", 1)
+    cdp_info = None
     for _attempt in range(20):
         try:
-            conn = _http_client.HTTPConnection(_cdp_h, int(_cdp_p), timeout=3)
-            conn.request("GET", "/json/version", headers={"Host": "localhost"})
-            resp = conn.getresponse()
-            if resp.status == 200:
-                cdp_info = json.loads(resp.read())
-                break
-        except (OSError, _http_client.HTTPException):
+            async with httpx.AsyncClient(timeout=3) as _hc:
+                _resp = await _hc.get(f"http://{_cdp_h}:{_cdp_p}/json/version", headers={"Host": "localhost"})
+                if _resp.status_code == 200:
+                    cdp_info = _resp.json()
+                    break
+        except (httpx.HTTPError, Exception):
             pass
         if _attempt < 19:
             await asyncio.sleep(2)
-    else:
+    if cdp_info is None:
         await platform_db.update_flow(flow.id, {"exploration_status": "failed", "exploration_error": "CDP not reachable for auth"})
         try:
             sandbox_mgr.stop(sandbox_id)
@@ -443,13 +439,11 @@ async def _start_auth_prestep(flow: Flow, user_id: str, profile_id: str = "") ->
     except Exception as e:
         logger.warning("CDP navigate to auth_url failed: %s", e)
 
-    _auth_sandboxes[flow.id] = {
-        "sandbox_id": sandbox_id,
-        "cdp_url": cdp_url,
-        "user_id": user_id,
-        "profile_id": profile_id,
-    }
-    await platform_db.update_flow(flow.id, {"exploration_status": "awaiting_auth"})
+    await platform_db.update_flow(flow.id, {
+        "exploration_status": "awaiting_auth",
+        "auth_sandbox_id": sandbox_id,
+        "auth_profile_id": profile_id,
+    })
     flow.exploration_status = "awaiting_auth"
     await _broadcast_flow_update(flow.id)
 
@@ -457,24 +451,29 @@ async def _start_auth_prestep(flow: Flow, user_id: str, profile_id: str = "") ->
 @app.post("/api/flows/{flow_id}/auth/done")
 async def flow_auth_done(flow_id: str, user: dict = Depends(auth.get_current_user)) -> dict:
     """User completed manual auth — capture cookies, stop sandbox, start exploration."""
-    auth_info = _auth_sandboxes.pop(flow_id, None)
-    if not auth_info:
+    flow = await platform_db.get_flow(flow_id)
+    if not flow or not flow.auth_sandbox_id:
         raise HTTPException(status_code=404, detail="No auth session for this flow")
 
-    sandbox_id = auth_info["sandbox_id"]
-    cdp_url = auth_info["cdp_url"]
-    auth_user_id = auth_info["user_id"]
-    auth_profile_id = auth_info["profile_id"]
+    sandbox_id = flow.auth_sandbox_id
+    auth_user_id = user["id"]
+    auth_profile_id = flow.auth_profile_id or user["id"]
+
+    # Get CDP URL from the sandbox record
+    sandbox_row = await platform_db.get_sandbox(sandbox_id)
+    cdp_url = sandbox_row["cdp_url"] if sandbox_row else f"ws://flowpilot-{sandbox_id}:9223"
+
+    # Clear auth sandbox from flow
+    await platform_db.update_flow(flow_id, {"auth_sandbox_id": None, "auth_profile_id": None})
 
     # Capture cookies via CDP
-    import http.client as _http_client
     _cdp_hp = cdp_url.split("//")[1].split("/")[0]
     _cdp_h, _cdp_p = _cdp_hp.rsplit(":", 1)
     try:
-        conn = _http_client.HTTPConnection(_cdp_h, int(_cdp_p), timeout=3)
-        conn.request("GET", "/json/version", headers={"Host": "localhost"})
-        resp = conn.getresponse()
-        cdp_info = json.loads(resp.read())
+        async with httpx.AsyncClient(timeout=3) as _hc:
+            _resp = await _hc.get(f"http://{_cdp_h}:{_cdp_p}/json/version", headers={"Host": "localhost"})
+            _resp.raise_for_status()
+            cdp_info = _resp.json()
         ws_path = "/" + "/".join(cdp_info["webSocketDebuggerUrl"].split("/")[3:])
         ws_url = f"ws://{_cdp_h}:{_cdp_p}{ws_path}"
 
@@ -498,6 +497,13 @@ async def flow_auth_done(flow_id: str, user: dict = Depends(auth.get_current_use
             logger.info("Auth pre-step captured %d cookies for flow %s", len(cookies), flow_id)
     except Exception as e:
         logger.warning("Failed to capture auth cookies for flow %s: %s", flow_id, e)
+
+    # Save browser profile before stopping the auth sandbox
+    try:
+        profile_mgr.save_profile(sandbox_id, auth_profile_id, auth_user_id)
+        logger.info("Auto-saved browser profile after auth (flow=%s, profile=%s)", flow_id, auth_profile_id)
+    except Exception as e:
+        logger.debug("Profile auto-save failed after auth: %s", e)
 
     # Stop the auth sandbox
     try:
@@ -533,6 +539,7 @@ async def _run_exploration(flow: Flow, user_id: str, profile_id: str = "") -> No
         await platform_db.create_sandbox(
             sandbox_id, sandbox_result["container_id"], user_id, cdp_url,
         )
+        await platform_db.update_flow(flow.id, {"exploration_sandbox_id": sandbox_id})
 
         # Load saved session cookies if available
         storage_state = None
@@ -549,7 +556,7 @@ async def _run_exploration(flow: Flow, user_id: str, profile_id: str = "") -> No
             logger.info("Exploration using %d saved cookies for %s (profile=%s)", len(cookies), flow.domain, profile_id)
 
         def on_agent_ready(agent, browser, paused_ref, sb_id, hitl_response_ref=None):
-            _exploration_agents[flow.id] = (agent, browser, paused_ref, sb_id, hitl_response_ref, profile_id)
+            _exploration_agents[flow.id] = (agent, browser, paused_ref, hitl_response_ref)
 
         async def on_session_capture(browser):
             await capture_session(browser, user_id, flow.domain, profile_id, context="exploration-end")
@@ -569,10 +576,17 @@ async def _run_exploration(flow: Flow, user_id: str, profile_id: str = "") -> No
         })
     finally:
         _exploration_agents.pop(flow.id, None)
+        await platform_db.update_flow(flow.id, {"exploration_sandbox_id": None})
         if sandbox_result:
+            sb_id = sandbox_result["sandbox_id"]
             try:
-                sandbox_mgr.stop(sandbox_result["sandbox_id"])
-                await platform_db.delete_sandbox(sandbox_result["sandbox_id"])
+                profile_mgr.save_profile(sb_id, profile_id or user_id, user_id)
+                logger.info("Auto-saved browser profile for exploration (flow=%s, profile=%s)", flow.id, profile_id or user_id)
+            except Exception as e:
+                logger.debug("Profile auto-save failed for exploration: %s", e)
+            try:
+                sandbox_mgr.stop(sb_id)
+                await platform_db.delete_sandbox(sb_id)
             except Exception as e:
                 logger.warning("Failed to stop exploration sandbox: %s", e)
 
@@ -589,12 +603,11 @@ async def flow_explore(flow_id: str, req: ExploreRequest | None = None, user: di
     if not flow.entry_url:
         raise HTTPException(status_code=400, detail="Flow has no entry_url — nothing to explore")
     # Cancel any existing exploration and kill its sandbox
-    old_agent_info = _exploration_agents.pop(flow_id, None)
-    if old_agent_info:
-        old_sandbox_id = old_agent_info[3]
+    _exploration_agents.pop(flow_id, None)
+    if flow.exploration_sandbox_id:
         try:
-            sandbox_mgr.stop(old_sandbox_id)
-            await platform_db.delete_sandbox(old_sandbox_id)
+            sandbox_mgr.stop(flow.exploration_sandbox_id)
+            await platform_db.delete_sandbox(flow.exploration_sandbox_id)
         except Exception:
             pass
     old_task = _exploration_tasks.pop(flow_id, None)
@@ -623,12 +636,11 @@ async def flow_explore_cancel(flow_id: str, user: dict = Depends(auth.get_curren
         raise HTTPException(status_code=404, detail="Flow not found")
 
     # Tear down agent + sandbox
-    agent_info = _exploration_agents.pop(flow_id, None)
-    if agent_info:
-        old_sandbox_id = agent_info[3]
+    _exploration_agents.pop(flow_id, None)
+    if flow.exploration_sandbox_id:
         try:
-            sandbox_mgr.stop(old_sandbox_id)
-            await platform_db.delete_sandbox(old_sandbox_id)
+            sandbox_mgr.stop(flow.exploration_sandbox_id)
+            await platform_db.delete_sandbox(flow.exploration_sandbox_id)
         except Exception:
             pass
 
@@ -656,7 +668,7 @@ async def flow_explore_resume(flow_id: str, body: ExploreResumeBody | None = Non
     agent_info = _exploration_agents.get(flow_id)
     if not agent_info:
         raise HTTPException(status_code=404, detail="No active exploration for this flow")
-    agent, browser, paused_ref, sandbox_id, hitl_response_ref, explore_profile = agent_info
+    agent, browser, paused_ref, hitl_response_ref = agent_info
 
     # Store user response on the shared ref so the paused tool can read it
     if hitl_response_ref is not None and body:
@@ -665,6 +677,7 @@ async def flow_explore_resume(flow_id: str, body: ExploreResumeBody | None = Non
     # Capture cookies from the browser for future runs
     resume_flow = await platform_db.get_flow(flow_id)
     if resume_flow:
+        explore_profile = resume_flow.auth_profile_id or user["id"]
         await capture_session(browser, user["id"], resume_flow.domain, explore_profile, context="exploration-resume")
 
     paused_ref[0] = False
@@ -679,19 +692,6 @@ async def flow_explore_resume(flow_id: str, body: ExploreResumeBody | None = Non
 
 
 def _flow_to_dict(flow: Flow) -> dict:
-    # Include sandbox_id if exploration is active
-    exploration_sandbox_id = None
-    agent_info = _exploration_agents.get(flow.id)
-    if agent_info and flow.exploration_status in ("exploring", "paused_for_hitl"):
-        exploration_sandbox_id = agent_info[3]  # sandbox_id
-
-    # Include auth sandbox_id if awaiting auth
-    auth_sandbox_id = None
-    if flow.exploration_status == "awaiting_auth":
-        auth_info = _auth_sandboxes.get(flow.id)
-        if auth_info:
-            auth_sandbox_id = auth_info["sandbox_id"]
-
     return {
         "id": flow.id,
         "name": flow.name,
@@ -706,12 +706,12 @@ def _flow_to_dict(flow: Flow) -> dict:
         "exploration_error": flow.exploration_error,
         "exploration_notes": flow.exploration_notes,
         "exploration_tree": json.loads(flow.exploration_tree),
-        "exploration_sandbox_id": exploration_sandbox_id,
+        "exploration_sandbox_id": flow.exploration_sandbox_id,
         "exploration_input_request": json.loads(flow.exploration_input_request) if flow.exploration_input_request else None,
         "exploration_confirmation_request": flow.exploration_confirmation_request,
         "auth_url": flow.auth_url,
         "auth_before_explore": bool(flow.auth_before_explore),
-        "auth_sandbox_id": auth_sandbox_id,
+        "auth_sandbox_id": flow.auth_sandbox_id,
     }
 
 
@@ -797,7 +797,7 @@ def _build_webhook_payload(
     if sandbox_id and event in ("run.started", "run.paused"):
         payload["browser_cdp_url"] = f"{BASE_URL}/ws/browser/{sandbox_id}"
     if event == "run.paused":
-        payload["resume_url"] = f"/api/v1/runs/{run_id}/resume"
+        payload["resume_url"] = f"{BASE_URL}/api/v1/runs/{run_id}/resume"
         normalized = category if category in webhook_svc.HITL_CATEGORIES else "other"
         payload["category"] = normalized
     return payload
@@ -832,6 +832,7 @@ async def _start_run_impl(
     try:
         sandbox_result = sandbox_mgr.start(profile_path=profile_path, user_id=user_id)
     except RuntimeError as e:
+        await platform_db.update_run(run_id, {"status": "failed", "error": f"Sandbox start failed: {e}"})
         raise HTTPException(status_code=500, detail=f"Failed to start sandbox: {e}")
 
     sandbox_id = sandbox_result["sandbox_id"]
@@ -1044,11 +1045,16 @@ async def _execute_run(
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
     finally:
-        # Capture cookies before tearing down the sandbox
+        # Capture cookies + save browser profile before tearing down the sandbox
         agent_info = _run_agents.pop(run_id, None)
         if agent_info:
             _, browser, _, _ = agent_info
             await capture_session(browser, user_id, flow.domain, profile_id, context=f"run-end:{run_id}")
+        try:
+            profile_mgr.save_profile(sandbox_id, profile_id or user_id, user_id)
+            logger.info("Auto-saved browser profile for run %s (profile=%s)", run_id, profile_id or user_id)
+        except Exception as e:
+            logger.debug("Profile auto-save failed for run %s: %s", run_id, e)
         try:
             sandbox_mgr.stop(sandbox_id)
             await platform_db.delete_sandbox(sandbox_id)

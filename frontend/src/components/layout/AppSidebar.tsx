@@ -1,7 +1,6 @@
 import {
   Workflow,
   History,
-  Globe,
   LogOut,
   Settings,
   KeyRound,
@@ -38,7 +37,6 @@ interface AppSidebarProps {
 const NAV_ITEMS: { key: ActiveSection; label: string; icon: typeof Workflow }[] = [
   { key: "flows",    label: "Flows",    icon: Workflow },
   { key: "runs",     label: "Runs",     icon: History  },
-  { key: "sessions", label: "Auth Sessions", icon: Globe       },
   { key: "profiles", label: "Profiles",      icon: UserCircle },
   { key: "api-keys", label: "API Keys",      icon: KeyRound   },
   { key: "webhooks", label: "Webhooks",      icon: Webhook    },
