@@ -222,8 +222,6 @@ async def explore_flow(
             cdp_url=cdp_url,
             storage_state=ss_arg,
             headers={"Host": "localhost"},
-            wait_between_actions=0.5,
-            wait_for_network_idle_page_load_time=1.0,
         )
 
         llm = _get_exploration_llm()

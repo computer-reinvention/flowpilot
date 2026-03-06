@@ -34,8 +34,16 @@ from browser_use.llm.google import ChatGoogle
 from browser_use.llm.anthropic.chat import ChatAnthropic
 from browser_use.llm.openai.chat import ChatOpenAI
 
-from . import db as _db
 from .models import Flow
+
+_db = None
+
+def _get_db():
+    global _db
+    if _db is None:
+        from . import db as _db_mod
+        _db = _db_mod
+    return _db
 
 logger = logging.getLogger(__name__)
 
@@ -201,10 +209,23 @@ async def _execute_reflex(
     except Exception:
         pass
 
+    # browser-use's page.evaluate() validates that scripts start with '('.
+    # LLMs generate 'async (inputs, ...) => { await ... }' which fails
+    # the check. We bypass page.evaluate()'s validation and send the
+    # expression directly to CDP Runtime.evaluate with awaitPromise=true.
     trace("execute_reflex.call", script=script, inputs=inputs, entry_url=entry_url, pre_url=pre_url)
 
     try:
-        await page.evaluate(script, inputs, entry_url)
+        import json as _json
+        arg_strs = [_json.dumps(inputs), _json.dumps(entry_url)]
+        expression = f'({script})({", ".join(arg_strs)})'
+        session_id = await page._ensure_session()
+        result = await page._client.send.Runtime.evaluate(
+            {'expression': expression, 'returnByValue': True, 'awaitPromise': True},
+            session_id=session_id,
+        )
+        if 'exceptionDetails' in result:
+            raise RuntimeError(f'JavaScript evaluation failed: {result["exceptionDetails"]}')
         trace("execute_reflex.ok", script=script[:500], pre_url=pre_url)
         return True, "Reflex executed successfully"
     except Exception as e:
@@ -270,7 +291,7 @@ async def _repair_reflex(
             f"ERROR: {error_msg}\n\n"
             f"CURRENT PAGE: {current_url}\n"
             f"INTERACTIVE ELEMENTS ON PAGE:\n{elements}\n\n"
-            "The script must be a single async arrow function for page.evaluate():\n"
+            "The script must be a single async arrow function:\n"
             "  async (inputs, entryUrl) => { ... }\n\n"
             "It receives inputs (object with user values) and entryUrl (string).\n"
             "Define any helpers you need (sleep, waitFor, etc.) inside the function.\n\n"
@@ -364,7 +385,7 @@ async def _generate_reflex(
         f"USER INPUTS: {input_desc}\n"
         f"CURRENT PAGE: {current_url}\n"
         f"INTERACTIVE ELEMENTS ON PAGE:\n{elements}\n\n"
-        "Output a single async arrow function for page.evaluate():\n"
+        "Output a single async arrow function:\n"
         "  async (inputs, entryUrl) => { ... }\n\n"
         "It receives inputs (object with user values) and entryUrl (string).\n"
         "Define any helpers you need (sleep, waitFor, etc.) inside the function.\n\n"
@@ -521,7 +542,7 @@ class FlowRunner:
         # Load domain reflexes — ordered by the exploration tree if available,
         # otherwise fall back to DB creation order.
         # ------------------------------------------------------------------
-        all_reflexes = await _db.list_reflexes_for_domain(flow.domain)
+        all_reflexes = await _get_db().list_reflexes_for_domain(flow.domain)
         tree = json.loads(flow.exploration_tree) if flow.exploration_tree else []
         if tree:
             tree_order = _tree_reflex_order(tree)
@@ -554,11 +575,6 @@ class FlowRunner:
                 cdp_url=cdp_url,
                 storage_state=ss_arg,
                 headers={"Host": "localhost"},
-                # Give autocomplete dropdowns time to appear after typing.
-                # Default 0.5s is too fast — most location/address pickers
-                # need a network round-trip before rendering suggestions.
-                wait_between_actions=2.0,
-                wait_for_network_idle_page_load_time=1.0,
             )
             await browser.start()
 
@@ -638,7 +654,7 @@ class FlowRunner:
                         llm=llm,
                     )
                     if repaired and fixed_script:
-                        await _db.upsert_reflex(
+                        await _get_db().upsert_reflex(
                             domain=flow.domain,
                             name=reflex["name"],
                             description=reflex["description"],
@@ -682,7 +698,7 @@ class FlowRunner:
                 )
                 if gen_ok and gen_script:
                     # Save it for next time
-                    await _db.upsert_reflex(
+                    await _get_db().upsert_reflex(
                         domain=flow.domain,
                         name="auto_generated",
                         description=f"Auto-generated for: {flow.task}",
@@ -745,7 +761,7 @@ class FlowRunner:
                 )
             )
             async def run_reflex(name: str) -> ActionResult:
-                reflex = await _db.get_reflex(flow.domain, name)
+                reflex = await _get_db().get_reflex(flow.domain, name)
                 if not reflex:
                     return ActionResult(
                         error=f"No reflex '{name}' for '{flow.domain}'."
@@ -781,7 +797,7 @@ class FlowRunner:
 
                 if repaired and fixed_script:
                     # Save the fixed script so it works next time
-                    await _db.upsert_reflex(
+                    await _get_db().upsert_reflex(
                         domain=flow.domain,
                         name=name,
                         description=reflex["description"],
@@ -810,7 +826,7 @@ class FlowRunner:
             @tools.action(
                 description=(
                     "Save a JavaScript reflex script after completing a repeatable interaction. "
-                    "The script must be a complete async arrow function for page.evaluate(): "
+                    "The script must be an async arrow function: "
                     "async (inputs, entryUrl) => { ... }. "
                     "It receives inputs (object with user values) and entryUrl (string). "
                     "Define any helpers (sleep, waitFor, etc.) inside the function. "
@@ -826,7 +842,7 @@ class FlowRunner:
                 pause_after_auth: bool = False,
             ) -> ActionResult:
                 pause_after = "auth" if pause_after_auth else None
-                await _db.upsert_reflex(
+                await _get_db().upsert_reflex(
                     domain=flow.domain,
                     name=name,
                     description=description,
@@ -865,11 +881,6 @@ class FlowRunner:
                 browser=browser,
                 register_new_step_callback=_on_step,
                 tools=tools,
-                max_history_items=8,
-                max_actions_per_step=4,
-                use_vision="auto",
-                vision_detail_level="low",
-                llm_screenshot_size=(1024, 768),
                 page_extraction_llm=_get_fast_llm(),
                 extend_system_message=_AGENT_RULES,
             )
@@ -911,7 +922,7 @@ class FlowRunner:
         finally:
             if browser is not None:
                 try:
-                    await browser.close()
+                    await browser.stop()
                 except Exception:
                     pass
             if _ss_tmp_path and os.path.exists(_ss_tmp_path):
