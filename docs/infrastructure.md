@@ -39,7 +39,7 @@ Multi-stage build:
 ```yaml
 services:
   docker-proxy:
-    image: tecnativa/docker-socket-proxy
+    image: tecnativa/docker-socket-proxy  # pinned by SHA256 digest
     volumes: [/var/run/docker.sock:/var/run/docker.sock]
     environment:
       CONTAINERS: 1
@@ -49,9 +49,12 @@ services:
   backend:
     build: . (Dockerfile.backend)
     ports: ["127.0.0.1:8080:8080"]
-    volumes: ["./profiles:/app/profiles"]
+    volumes:
+      - ./profiles:/app/profiles
+      - ./traces:/tmp/flowpilot-traces
     environment:
       DOCKER_HOST: tcp://docker-proxy:2375
+      FLOWPILOT_TRACE: ${FLOWPILOT_TRACE:-1}
       LLM_PROVIDER: gemini
       # ... other env vars
     depends_on: [docker-proxy]
@@ -91,16 +94,17 @@ services:
 1. `SandboxManager.start(profile_path, user_id)` called
 2. Random 12-char `sandbox_id` generated
 3. `docker run flowpilot-sandbox` as `flowpilot-{sandbox_id}` on `flowpilot_sandbox-net`
-4. If profile exists: `docker cp` Chrome profile into container at `/tmp/chrome-profile`
+4. If profile exists: restore via Docker SDK `container.put_archive()` at `/tmp/chrome-profile`
 5. Container record saved to DB
 6. Backend polls `{cdp_url}/json/version` until Chromium is ready (up to 40s)
 
 ### Stop
 
-1. `SandboxManager.stop(sandbox_id)` called
-2. Container stopped and removed
-3. In-memory tracking cleaned up
-4. DB record deleted
+1. Profile saved from container (retry with verification)
+2. `SandboxManager.stop(sandbox_id)` called
+3. Container stopped and removed
+4. In-memory tracking cleaned up
+5. DB record deleted
 
 ### Reconciliation (on backend startup)
 

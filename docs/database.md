@@ -91,7 +91,7 @@ CREATE TABLE reflexes (
     domain TEXT NOT NULL,
     name TEXT NOT NULL,
     description TEXT NOT NULL,
-    script TEXT NOT NULL,          -- Step-by-step text instructions (not code)
+    script TEXT NOT NULL,          -- JavaScript async arrow function
     pause_after TEXT,              -- NULL or "auth"
     tags TEXT DEFAULT '[]',        -- JSON array
     created_at TEXT NOT NULL,
@@ -100,7 +100,7 @@ CREATE TABLE reflexes (
 );
 ```
 
-Reflexes are domain-scoped cached step sequences. The `script` field contains human-readable step descriptions that the AI agent interprets and follows using browser-use tools.
+Reflexes are domain-scoped cached JavaScript scripts. The `script` field contains a complete `async (inputs, entryUrl) => { ... }` arrow function executed directly via CDP `Runtime.evaluate` — zero LLM calls on replay.
 
 ### api_keys
 

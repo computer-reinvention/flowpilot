@@ -25,11 +25,22 @@ All configuration is via environment variables. Set them in `docker-compose.yml`
 
 ## LLM Models
 
-| Variable | Default |
-|----------|---------|
-| `GEMINI_MODEL` | `gemini-3-flash-preview` |
-| `ANTHROPIC_MODEL` | `claude-sonnet-4-20250514` |
-| `OPENAI_MODEL` | `gpt-4o` |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GEMINI_MODEL` | `gemini-3-flash-preview` | Primary model for agent loop |
+| `GEMINI_EXPLORATION_MODEL` | `gemini-2.5-flash-preview-05-20` | Explorer page extraction |
+| `GEMINI_FAST_MODEL` | `gemini-2.5-flash-preview-05-20` | Reflex generation/repair |
+| `ANTHROPIC_MODEL` | `claude-sonnet-4-20250514` | Primary model (Claude) |
+| `ANTHROPIC_FAST_MODEL` | — | Fast model for reflex gen/repair (Claude) |
+| `OPENAI_MODEL` | `gpt-4o` | Primary model (OpenAI) |
+| `OPENAI_FAST_MODEL` | — | Fast model for reflex gen/repair (OpenAI) |
+
+## Debug / Tracing
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FLOWPILOT_TRACE` | `0` | Set to `1` to enable reflex execution tracing |
+| `FLOWPILOT_TRACES_DIR` | `/tmp/flowpilot-traces` | Directory for trace output files |
 
 ## File Paths
 
@@ -51,9 +62,12 @@ environment:
   - OPENAI_API_KEY=${OPENAI_API_KEY}
   - JWT_SECRET=${JWT_SECRET}
   - FLOWPILOT_BASE_URL=${FLOWPILOT_BASE_URL:-http://localhost:8080}
+  - FLOWPILOT_TRACE=${FLOWPILOT_TRACE:-1}
   - PROFILES_DIR=/app/profiles
   - PROFILES_HOST_DIR=${PROFILES_HOST_DIR:-./profiles}
   - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:8080,http://localhost:3000}
 ```
 
 The `docker-proxy` service restricts Docker socket access to only container and network operations (`CONTAINERS=1`, `POST=1`, `NETWORKS=1`).
+
+Volumes include `./traces:/tmp/flowpilot-traces` for trace output (when `FLOWPILOT_TRACE=1`).

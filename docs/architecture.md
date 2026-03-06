@@ -20,6 +20,9 @@ FlowPilot is a self-hosted browser automation platform. An AI agent (browser-use
 │  ┌──────┐  ┌────────┐  ┌───────────┐  ┌──────────┐  ┌───────┐ │
 │  │ Auth │  │ Runner │  │ CDP Proxy │  │ Webhooks │  │  DB   │ │
 │  └──────┘  └───┬────┘  └─────┬─────┘  └──────────┘  └───────┘ │
+│           ┌────┴────┐        │                                  │
+│           │Explorer │        │                                  │
+│           └────┬────┘        │                                  │
 │                │              │                                  │
 └────────────────┼──────────────┼──────────────────────────────────┘
                  │              │
@@ -42,13 +45,15 @@ FlowPilot is a self-hosted browser automation platform. An AI agent (browser-use
 | Module | Purpose |
 |--------|---------|
 | `main.py` | API routes, WebSocket handlers, app lifecycle |
-| `runner.py` | AI agent orchestration with browser-use |
+| `runner.py` | Three-tier execution: cached JS → auto-generate → agent loop |
+| `explorer.py` | Flow exploration: stage tree discovery + reflex generation |
 | `cdp_proxy.py` | WebSocket proxy for live browser streaming + input relay |
 | `sandbox.py` | Docker container lifecycle management |
 | `auth.py` | JWT + API key authentication |
 | `db.py` | SQLite CRUD layer (aiosqlite) |
 | `webhooks.py` | Event delivery engine with HMAC signing |
-| `profile.py` | Chrome profile save/restore from containers |
+| `profile.py` | Chrome profile save/restore (Docker SDK) |
+| `trace.py` | Optional reflex execution tracing |
 | `models.py` | Data classes (Flow, Run, Session) |
 | `config.py` | Environment-based configuration |
 
@@ -58,6 +63,7 @@ FlowPilot is a self-hosted browser automation platform. An AI agent (browser-use
 |------|---------|
 | `BrowserCanvas` | Canvas rendering of CDP screencast + mouse/keyboard relay |
 | `FlowRunner` | Split-pane run UI (browser left, steps right) |
+| `FlowDetail` | Flow detail view with persistent context-aware side panel |
 | `FlowGrid` / `FlowForm` | Flow browsing and execution |
 | `Settings` | API key and webhook management |
 | Hooks (`useRun`, `useFlows`, etc.) | State management via custom React hooks |
@@ -80,8 +86,9 @@ User clicks "Run" in UI
     → Backend creates Run record (status: pending)
     → Backend starts sandbox container
     → Backend waits for CDP readiness (polls /json/version)
-    → Backend creates browser-use Agent with custom tools
-    → Agent begins executing against entry_url
+    → Fast path: execute cached JS reflexes via CDP Runtime.evaluate
+    → If no reflexes: generate one from live page DOM via LLM
+    → If all else fails: create browser-use Agent with custom tools
     → Progress updates via WS /ws/runs/{run_id}
     → Browser frames via WS /ws/browser/{sandbox_id}
 ```
@@ -99,21 +106,37 @@ Agent encounters blocker (login wall, CAPTCHA, etc.)
     → Agent continues from current browser state
 ```
 
-### Reflex System
+### Flow Exploration
 
 ```
-Agent receives task
-    → Calls search_reflexes(use_case) to find cached steps
-    → If found: calls run_reflex(name) → follows step-by-step instructions
-    → If not found: executes task normally using browser-use tools
-    → After success: calls save_reflex() to cache steps for future runs
+User clicks "Explore" on a flow
+    → Backend starts sandbox, connects explorer agent
+    → Agent navigates entry_url, discovers stages
+    → At each stage: generates JS reflex via fast LLM
+    → Tests each reflex on the live page
+    → Builds stage tree + saves reflexes to DB
+    → Auto-extracts input declarations from scripts
+```
+
+### Reflex Execution (Fast Path)
+
+```
+Run starts → load domain reflexes from DB
+    → For each reflex (ordered by exploration tree):
+        Execute JS via CDP Runtime.evaluate
+        ↓ success → continue to next reflex
+        ↓ failure → repair via LLM (up to 2 attempts)
+        ↓ still failing → increment failure count
+        ↓ 3 cumulative failures → bail to full agent
 ```
 
 ## Design Principles
 
-1. **No Playwright layer** — browser-use's built-in tools are used directly. No separate executor.
-2. **Reflexes are text, not code** — Step descriptions that the agent interprets, not executable scripts.
-3. **CDP coexistence** — The CDP proxy attaches a flat session alongside browser-use's session. No conflicts.
-4. **Async throughout** — FastAPI, aiosqlite, asyncio. No blocking calls.
-5. **Container isolation** — No direct Docker socket access. docker-socket-proxy restricts API surface.
-6. **Profile scoping** — `profile_id` on runs allows multiple identities per user.
+1. **Three-tier execution** — Cached JS first, auto-generated JS second, full agent last. Warm runs use zero LLM calls.
+2. **Reflexes are JavaScript** — Complete async arrow functions executed via CDP `Runtime.evaluate`. Not text descriptions.
+3. **No Playwright layer** — browser-use's built-in tools are used directly. No separate executor.
+4. **CDP coexistence** — The CDP proxy attaches a flat session alongside browser-use's session. No conflicts.
+5. **Async throughout** — FastAPI, aiosqlite, asyncio. No blocking calls.
+6. **Container isolation** — No direct Docker socket access. docker-socket-proxy restricts API surface.
+7. **Profile scoping** — `profile_id` on runs allows multiple identities per user.
+8. **Browser-use defaults** — No custom wait times, vision settings, or history limits in the runner.

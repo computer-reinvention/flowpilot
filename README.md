@@ -25,7 +25,7 @@ If it gets stuck → you take over → it picks back up.
 - **Live browser view** — CDP screencast at native 1920×1080. No VNC lag, pixel-accurate, ~1-frame latency.
 - **Human-in-the-Loop (HITL)** — When the agent hits a login wall or CAPTCHA it can't solve, it pauses and hands control to you. You log in, click Resume, it continues.
 - **Session capture** — Chrome extension grabs cookies and localStorage from any site. Injected before each run so the agent starts authenticated.
-- **Reflexes** — Cached step sequences the agent builds as it works. Next run on the same site it fires the cached steps instead of re-learning — faster and more reliable.
+- **Reflexes** — Cached JavaScript scripts auto-generated during exploration. On repeat runs, reflexes execute as pure JS via CDP — zero LLM calls, ~10x faster than vanilla browser-use.
 - **Webhook events** — `run.started`, `run.paused`, `run.completed`, `run.failed`, `run.cancelled`. The `run.paused` event includes the live browser URL so external systems can take over.
 - **API keys** — `fp_live_` prefixed keys for programmatic access. Trigger runs from your own code.
 
@@ -115,17 +115,16 @@ Open [http://localhost:3000](http://localhost:3000).
 └─────────────┘  WS  │  - Auth (JWT + API    │      ┌──────────▼───────────┐
                       │    keys)              │      │  Sandbox Container   │
 ┌─────────────┐      │  - Flows CRUD         │      │  - Chromium 1920×1080│
-│  Chrome     │─────>│  - Runs engine        │      │  - CDP (port 9222)   │
-│  Extension  │ POST │  - Reflexes (SQLite)  │      │  - Xvfb + SwiftShader│
-└─────────────┘      │  - Sessions           │      │  - browser-use agent │
-                      │  - Webhooks           │◄─────│                      │
+│  Chrome     │─────>│  - Runner (3-tier)    │      │  - CDP (port 9222)   │
+│  Extension  │ POST │  - Explorer           │      │  - Xvfb + SwiftShader│
+└─────────────┘      │  - Webhooks           │◄─────│                      │
                       │  - CDP proxy (WS)     │  CDP └──────────────────────┘
                       └──────────────────────┘
 ```
 
 `*` Port 3000 in dev (Vite proxies `/api` and `/ws` to :8080), port 8080 in production.
 
-The CDP proxy at `/ws/browser/{sandbox_id}` connects to Chromium alongside browser-use's Playwright session — both coexist without conflict via a flat `Target.attachToTarget` session.
+**Three-tier execution**: Cached JS reflexes first (zero LLM calls) → auto-generate JS from DOM → full browser-use agent loop. The CDP proxy at `/ws/browser/{sandbox_id}` connects to Chromium alongside browser-use's session via a flat `Target.attachToTarget` — no conflicts.
 
 ---
 
@@ -255,6 +254,23 @@ sudo ./deploy logs      # follow logs (q to stop)
 **Not supported**: Vercel, Netlify, Lambda, Fly.io — no Docker socket or privileged container support.
 
 **Backup**: SQLite at `$PROFILES_DIR/platform.db` + the `profiles/` directory.
+
+---
+
+## Benchmarks
+
+A benchmark suite in `scripts/benchmark.py` compares vanilla browser-use against FlowPilot across 5 scenarios (form fills, login flows, validation, checkboxes, tables).
+
+```bash
+cd scripts && python benchmark.py
+```
+
+Results (5 scenarios, Gemini Flash):
+- **Vanilla browser-use**: ~274s total
+- **FlowPilot warm** (cached reflexes): ~27s total
+- **~10x speedup** on warm runs (zero LLM calls)
+
+See `scripts/BENCHMARK_RESULTS.md` and `scripts/BENCHMARK_ANALYSIS.md` for full details.
 
 ---
 

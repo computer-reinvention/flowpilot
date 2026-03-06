@@ -11,61 +11,71 @@ FlowPilot uses [browser-use](https://github.com/browser-use/browser-use) as its 
 - **Max steps**: 30 (hard limit per run)
 - **LLM**: Configurable via `LLM_PROVIDER` (Gemini, Claude, or OpenAI)
 - **System prompt**: Emphasizes reflexes-first strategy, efficiency, and minimal steps
+- All browser-use defaults are preserved (no custom wait times, vision settings, or history limits)
 
-### Execution Flow
+### Three-Tier Execution
+
+Runs follow a tiered strategy — cached scripts first, then auto-generation, then full agent:
 
 ```
-1. Wait for CDP readiness (poll /json/version, up to 40s)
-2. Load domain reflexes from DB
-3. Connect browser-use Browser to CDP URL
-4. Create Agent with custom tools + system prompt
-5. Agent runs autonomously (up to 30 steps)
-6. On completion: return result
+1. Fast Path  → Execute cached JS reflexes sequentially
+                 ↓ (on failure: auto-repair up to 2 attempts)
+                 ↓ (after 3 cumulative failures: bail)
+2. Generate   → Navigate to entry_url, dump DOM, ask LLM to write JS
+                 ↓ (one repair pass if initial script fails)
+3. Slow Path  → Full browser-use agent loop with custom tools (max 30 steps)
 ```
+
+The fast path executes reflexes ordered by the exploration tree (if one exists), then by DB insertion order.
 
 ## Custom Tools
 
-Four custom tools are registered on the agent alongside browser-use's built-in actions.
+### Runner Tools
 
-### search_reflexes(use_case: str)
+Four custom tools are registered on the agent in the slow path:
 
-Search for cached step sequences relevant to the current task.
-
-- Fetches all reflexes for the flow's domain from DB
-- Ranks by relevance using word overlap against `use_case`
-- Returns top matches with names, descriptions, and pause hints
-- Agent should call this first before attempting any task
-
-### run_reflex(name: str)
-
-Retrieve and follow a cached reflex.
-
+#### run_reflex(name: str)
+Retrieve and execute a cached JavaScript reflex.
 - Fetches the full reflex from DB by name
-- Returns the script (step-by-step text instructions)
-- Agent must follow the steps using browser-use's native tools (click, type, etc.)
-- Steps are descriptions, not executable code
+- Executes the JS via CDP `Runtime.evaluate`
 
-### save_reflex(name, description, steps, tags, pause_after_auth)
-
-Cache a successful task as a reflex for future runs.
-
+#### save_reflex(name, description, script, tags, pause_after_auth)
+Cache a successful task as a JavaScript reflex for future runs.
 - Domain-scoped by the flow's domain
 - Upserts (updates if name already exists for that domain)
-- `steps`: text descriptions of what to do
-- `pause_after_auth`: if true, the reflex will include a HITL pause hint
-- Agent calls this after successfully completing a task
+- `script`: complete `async (inputs, entryUrl) => { ... }` arrow function
+- Agent calls this after successfully completing a novel task
 
-### request_human_help(reason, category)
-
+#### request_human_help(reason, category)
 Pause the run and request human intervention.
-
 - Sets the run status to `paused_for_hitl`
 - Broadcasts status update via WebSocket
 - Fires `run.paused` webhook event
 - Agent blocks until the human resumes the run
 - Categories: `auth`, `captcha`, `consent`, `verification`, `form_fill`, `confirmation`, `other`
 
-**HITL flow**:
+#### search_reflexes(use_case: str)
+Search for cached reflexes relevant to the current task.
+- Fetches all reflexes for the flow's domain from DB
+- Ranks by relevance using word overlap against `use_case`
+- Returns top matches with names, descriptions, and pause hints
+
+### Explorer Tools
+
+The explorer agent (used during flow exploration) has a richer tool set:
+
+- `report_stage(title, url, type, note, is_child)` — Record a stage in the journey tree
+- `generate_and_save_reflex(name, description, tags, pause_after_auth)` — Generate JS reflex via fast LLM from current page DOM
+- `search_reflexes(query)` — Keyword search existing reflexes for the domain
+- `test_reflex(name)` — Execute a reflex on the current page, return pass/fail
+- `declare_inputs(inputs_json)` — Declare user-controlled inputs for the flow
+- `request_human_help(reason, category)` — HITL pause for auth/captcha/etc.
+- `request_input_values(fields_json)` — Ask user for real form values during exploration
+- `request_confirmation(summary)` — Confirm before final submit
+- `add_notes(note)` — Developer notes
+
+### HITL Flow
+
 ```
 Agent calls request_human_help("[auth] Login required", "auth")
     → paused_ref[0] = True
@@ -87,7 +97,7 @@ Human clicks "Resume" in UI
 
 ## Reflex System
 
-Reflexes are domain-scoped cached step sequences that dramatically reduce step count on repeat visits to the same domain.
+Reflexes are domain-scoped cached **JavaScript scripts** that execute common tasks without any LLM calls — pure JS replay.
 
 ### Anatomy of a Reflex
 
@@ -95,40 +105,63 @@ Reflexes are domain-scoped cached step sequences that dramatically reduce step c
 Domain:      uber.com
 Name:        book_ride
 Description: Book an Uber ride with pickup and dropoff
-Script:      1. Click the "Where to?" search bar
-             2. Type the pickup location and select from dropdown
-             3. Click "Choose destination"
-             4. Type the dropoff location and select from dropdown
-             5. Select "UberX" ride type
-             6. Click "Request UberX"
+Script:      async (inputs, entryUrl) => {
+               const pickup = inputs.pickup || "Home";
+               await typeInto('[data-testid="pickup"]', pickup);
+               ...
+             }
 Tags:        ["booking", "ride"]
 Pause After: auth (indicates HITL may be needed for login)
 ```
 
-### How Reflexes Work
+### Script Format
 
-1. **Discovery**: Agent calls `search_reflexes("book a ride")` at the start of a task
-2. **Matching**: System ranks reflexes by word overlap with the use case
-3. **Execution**: Agent calls `run_reflex("book_ride")` → receives step-by-step text
-4. **Following**: Agent interprets each step and executes using browser-use tools
-5. **Saving**: After completing a new task, agent calls `save_reflex()` to cache the steps
+Reflex scripts are **complete async arrow functions** stored and executed as-is:
+
+```javascript
+async (inputs, entryUrl) => {
+  // inputs: object with user-provided values
+  // entryUrl: the flow's entry URL
+
+  // Built-in helpers available:
+  // waitFor(selector, timeoutMs) — wait for element
+  // sleep(ms) — delay
+  // typeInto(selector, text) — clear + type
+  // fillInput(selector, text) — set value + dispatch events
+  // acceptSuggestion(selector) — click autocomplete suggestion
+
+  const name = inputs.name || "John Doe";
+  await waitFor('#full-name', 5000);
+  await typeInto('#full-name', name);
+  // ...
+}
+```
+
+### Execution via CDP
+
+Scripts are executed directly via Chrome DevTools Protocol `Runtime.evaluate` — **not** through browser-use's `page.evaluate()`. This bypasses browser-use's validation (which requires scripts starting with `(`) and gives direct access to the page context.
+
+Navigation-caused exceptions (e.g., form submit triggers page load) are detected as success if the URL changed.
+
+### Repair and Generation
+
+- **Repair**: When a cached reflex fails, the runner dumps the current DOM and asks the LLM to fix the script. Up to 2 repair attempts per reflex.
+- **Generation**: If no reflexes exist for a domain, the runner navigates to the entry URL, dumps the DOM, and asks the LLM to write a new script from scratch. Gets one repair pass if the initial attempt fails.
+- **3-strike fallthrough**: After 3 cumulative reflex failures (across all reflexes in the fast path), the runner abandons scripts and falls through to the full agent.
+
+### How Reflexes Are Created
+
+1. **During exploration**: The explorer agent calls `generate_and_save_reflex()` which uses a fast LLM to write JS from the current page DOM
+2. **During runs**: The agent in slow path can call `save_reflex()` to cache a working script
+3. **Auto-extraction**: After exploration, inputs are auto-extracted from reflex scripts via regex (`inputs.\w+`) if the agent forgot to `declare_inputs()`
 
 ### Key Properties
 
-- **Text, not code**: Steps are human-readable descriptions, not executable scripts
+- **JavaScript, not text**: Scripts are executable async arrow functions with helpers
 - **Domain-scoped**: Reflexes are specific to a domain (e.g., uber.com, amazon.com)
 - **Unique by name**: `UNIQUE(domain, name)` constraint in the database
 - **Updatable**: `save_reflex` upserts — existing reflexes get updated
-- **Agent-interpreted**: The agent decides how to translate step descriptions into browser actions
-
-### Agent Strategy
-
-The system prompt instructs the agent to:
-1. Always search for reflexes first
-2. Follow reflex steps if a match is found
-3. Use browser-use's native tools to execute each step
-4. Save new reflexes after successfully completing novel tasks
-5. Minimize total steps — accept autocomplete suggestions, don't overthink
+- **Zero LLM calls on warm runs**: Cached reflexes execute as pure JS — no agent involvement
 
 ## LLM Configuration
 
@@ -139,3 +172,15 @@ The system prompt instructs the agent to:
 | OpenAI | `OPENAI_API_KEY` | `gpt-4o` |
 
 Set `LLM_PROVIDER` to `gemini`, `claude`, or `openai`. The corresponding API key env var must be set.
+
+### Multi-Model Support
+
+The runner uses up to three LLM tiers:
+
+| Tier | Purpose | Gemini Default | Env Override |
+|------|---------|----------------|-------------|
+| Primary | Agent loop, exploration | `gemini-3-flash-preview` | `GEMINI_MODEL` |
+| Exploration | Explorer page extraction | `gemini-2.5-flash-preview-05-20` | `GEMINI_EXPLORATION_MODEL` |
+| Fast | Reflex generation/repair | `gemini-2.5-flash-preview-05-20` | `GEMINI_FAST_MODEL` |
+
+Anthropic and OpenAI support `*_FAST_MODEL` overrides similarly.

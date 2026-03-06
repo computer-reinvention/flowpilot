@@ -18,6 +18,7 @@ Manages top-level state and routing:
 - **Navigation**: `activeSection` switches between flows, runs, sessions, settings
 - **Run tracking**: `activeRunId` drives the FlowRunner view
 - **Auto-reconnect**: On load, reconnects to first active run if any exist
+- **Lazy hook gating**: Hooks like `useApiKeys`, `useWebhooks`, `useProfiles` receive `enabled={authed}` to prevent API calls before authentication
 
 **View logic**:
 - Not authenticated → `LoginForm` / `SignupForm`
@@ -100,6 +101,8 @@ Maintains a WebSocket connection to `/ws/runs/{run_id}` for real-time progress. 
 }
 ```
 
+Uses `useRef` flag to prevent infinite re-render loops from `activeRuns` producing new array references. Background refetches are silent (no loading flicker).
+
 ### `useFlows()` — Flow CRUD
 
 ```typescript
@@ -169,6 +172,17 @@ Split-pane run interface using `ResizablePanel` (60/40 split).
 - Resume (visible when paused_for_hitl)
 - Cancel (visible when not in terminal state)
 - Back/Hide
+
+### `FlowDetail`
+
+Flow detail view with a **persistent context-aware side panel** (280px) that adapts to context:
+- **Default state**: flow identity (icon, name, domain, task, entry URL), exploration status, inputs list, run stats, "Run flow" button
+- **During auth**: auth URL + instructions + "Done — I've logged in" button
+- **During exploration**: spinner/hand status, stage count, reflex names, cancel button
+
+### `ExplorationTree`
+
+Displays the stage tree discovered during exploration. Shows an amber warning banner when `status === "ready"`: "Re-exploring a completed flow will overwrite the current stages and reflexes."
 
 ### `FlowGrid`
 
