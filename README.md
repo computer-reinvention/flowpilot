@@ -2,6 +2,8 @@
 
 **Explore once. Replay forever. Take over when it gets stuck.**
 
+**274s with vanilla browser-use. 27s with FlowPilot. Zero LLM calls on warm runs.**
+
 FlowPilot turns any website into a repeatable automation. You point it at a URL, it explores the site with an AI agent, and writes JavaScript scripts that replay the interaction — no LLM needed on repeat runs. When it hits something it can't handle (logins, CAPTCHAs), it hands you the browser. You do the thing, click resume, it continues.
 
 Built on [browser-use](https://github.com/browser-use/browser-use). Self-hosted. Runs in Docker.
