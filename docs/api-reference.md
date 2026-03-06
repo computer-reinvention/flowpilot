@@ -66,6 +66,40 @@ Update a flow. Auth required.
 
 Delete a flow. Auth required.
 
+## Exploration
+
+### POST /api/flows/{flow_id}/explore
+
+Start or restart exploration for a flow. Spins up a sandbox, runs the explorer agent, discovers stages, and generates JS reflexes.
+
+**Auth**: Required
+**Body** (optional): `{ "profile_name": "..." }`
+**Response**: `{ "status": "exploring" }`
+
+If exploration is already complete, re-exploring overwrites existing stages and reflexes.
+
+### POST /api/flows/{flow_id}/explore/cancel
+
+Cancel an in-progress exploration. Saves the browser profile before teardown.
+
+**Auth**: Required
+
+### POST /api/flows/{flow_id}/explore/resume
+
+Resume exploration after a HITL pause (e.g., after completing manual auth).
+
+**Auth**: Required
+
+### POST /api/flows/{flow_id}/auth/done
+
+Signal that manual auth is complete. Captures cookies from the auth sandbox, tears it down, and starts exploration.
+
+**Auth**: Required
+
+### WS /ws/flows/{flow_id}
+
+Real-time exploration progress stream. Receives status updates, stage discoveries, HITL requests.
+
 ## Runs
 
 ### POST /api/runs
@@ -113,27 +147,11 @@ Manually pause a run (fallback mechanism).
 
 **Auth**: Required
 
-## Public API (v1)
-
-These endpoints accept API key authentication (`fp_live_` prefix).
-
-### POST /api/v1/runs
-
-Same as `POST /api/runs`. Supports API key auth.
-
-### GET /api/v1/runs/{id}
-
-Same as `GET /api/runs/{id}`. Supports API key auth.
-
-### POST /api/v1/runs/{id}/resume
-
-Same as `POST /api/runs/{id}/resume`. Supports API key auth.
-
 ## Sandbox
 
 ### POST /api/sandbox/start
 
-Start a sandbox container.
+Start a sandbox container (standalone, not tied to a run).
 
 **Auth**: Required
 **Body**: `{ "profile_name": "optional" }`
@@ -146,7 +164,7 @@ Stop a sandbox container.
 **Auth**: Required
 **Body**: `{ "sandbox_id": "..." }`
 
-## Sessions
+## Sessions & Profiles
 
 ### POST /api/sessions/capture
 
@@ -177,7 +195,17 @@ Delete a captured session.
 
 **Auth**: Required
 
-## Profiles
+### GET /api/profiles
+
+List saved Chrome profiles for the current user.
+
+**Auth**: Required
+
+### DELETE /api/profiles/{profile_name}
+
+Delete a saved Chrome profile.
+
+**Auth**: Required
 
 ### POST /api/profile/save
 
@@ -249,6 +277,53 @@ Send a test webhook delivery.
 
 **Auth**: Required
 
+## Trigger Hooks
+
+URL-based triggers that start a run without authentication. Useful for integrations (Slack slash commands, Zapier, cron jobs).
+
+### POST /api/v1/flows/{flow_id}/hooks
+
+Create a trigger hook for a flow. Returns a unique token URL.
+
+**Auth**: Required
+**Body**: `{ "name": "Slack trigger" }`
+**Response**: `{ "id", "name", "token", "url": "/api/v1/hooks/{token}", ... }`
+
+### GET /api/v1/flows/{flow_id}/hooks
+
+List trigger hooks for a flow.
+
+**Auth**: Required
+
+### DELETE /api/v1/flows/{flow_id}/hooks/{hook_id}
+
+Delete a trigger hook.
+
+**Auth**: Required
+
+### POST /api/v1/hooks/{token}
+
+Execute a trigger hook (starts a run). **No auth required** — the token is the credential.
+
+**Body**: `{ "inputs": { "key": "value" }, "profile_id": "optional" }`
+**Response**: `{ "run_id": "...", "sandbox_id": "..." }`
+
+## Public API (v1)
+
+These endpoints accept API key authentication (`fp_live_` prefix).
+
+### POST /api/v1/runs
+
+Same as `POST /api/runs`. Supports API key auth.
+
+### GET /api/v1/runs/{id}
+
+Same as `GET /api/runs/{id}`. Supports API key auth.
+
+### POST /api/v1/runs/{id}/resume
+
+Same as `POST /api/runs/{id}/resume`. Supports API key auth.
+
 ## WebSockets
 
 ### WS /ws/runs/{run_id}
@@ -282,3 +357,40 @@ CDP proxy for live browser streaming and input relay.
 { "type": "navigate", "action": "back" }
 { "type": "navigate", "action": "goto", "url": "https://example.com" }
 ```
+
+### WS /ws/flows/{flow_id}
+
+Real-time exploration and flow status stream.
+
+**Messages** (server → client):
+```json
+{ "type": "exploration_status", "status": "exploring", "stages": [...] }
+{ "type": "hitl_request", "reason": "Login required", "category": "auth" }
+{ "type": "exploration_complete", "stages": [...], "reflexes": [...] }
+```
+
+## Webhook Payloads
+
+### run.paused
+
+```json
+{
+  "event": "run.paused",
+  "run_id": "abc123",
+  "status": "paused_for_hitl",
+  "message": "[auth] Login required",
+  "profile_id": "user123",
+  "browser_cdp_url": "ws://localhost:8080/ws/browser/sandbox123",
+  "resume_url": "/api/v1/runs/abc123/resume",
+  "category": "auth",
+  "timestamp": "2026-03-06T10:20:30Z"
+}
+```
+
+HITL categories: `auth` · `captcha` · `consent` · `verification` · `form_fill` · `confirmation` · `other`
+
+### Other events
+
+`run.started`, `run.completed`, `run.failed`, `run.cancelled` — same structure minus `browser_cdp_url`, `resume_url`, `category`.
+
+Webhook requests are signed with `X-FlowPilot-Signature: sha256=<hmac>`. Retried at 2s, 10s, 60s on failure. See [webhooks.md](webhooks.md) for details.

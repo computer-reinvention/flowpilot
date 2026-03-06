@@ -1,42 +1,60 @@
 # FlowPilot
 
-**Give the AI a task. Watch it browse. Take over when it gets stuck.**
+**Explore once. Replay forever. Take over when it gets stuck.**
 
-FlowPilot is a self-hosted platform for AI browser automation. You define flows in plain English, the agent executes them in isolated Chromium containers, and you watch live — stepping in only when the bot hits something it can't handle (logins, CAPTCHAs).
+FlowPilot turns any website into a repeatable automation. You point it at a URL, it explores the site with an AI agent, and writes JavaScript scripts that replay the interaction — no LLM needed on repeat runs. When it hits something it can't handle (logins, CAPTCHAs), it hands you the browser. You do the thing, click resume, it continues.
 
-Uses [browser-use](https://github.com/browser-use/browser-use) for LLM-driven browsing and [cdp-use](https://github.com/browser-use/cdp-use) for the live browser stream.
-
----
-
-## What it does
-
-```
-You write: "Book a ride from my office to the airport for tomorrow 9am"
-          ↓
-FlowPilot: spins up a fresh browser → restores your Uber session →
-           navigates + fills the form → hits "request ride"
-          ↓
-You watch the whole thing happen in real time.
-If it gets stuck → you take over → it picks back up.
-```
-
-**Key capabilities:**
-
-- **Live browser view** — CDP screencast at native 1920×1080. No VNC lag, pixel-accurate, ~1-frame latency.
-- **Human-in-the-Loop (HITL)** — When the agent hits a login wall or CAPTCHA it can't solve, it pauses and hands control to you. You log in, click Resume, it continues.
-- **Session capture** — Chrome extension grabs cookies and localStorage from any site. Injected before each run so the agent starts authenticated.
-- **Reflexes** — Cached JavaScript scripts auto-generated during exploration. On repeat runs, reflexes execute as pure JS via CDP — zero LLM calls, ~10x faster than vanilla browser-use.
-- **Webhook events** — `run.started`, `run.paused`, `run.completed`, `run.failed`, `run.cancelled`. The `run.paused` event includes the live browser URL so external systems can take over.
-- **API keys** — `fp_live_` prefixed keys for programmatic access. Trigger runs from your own code.
+Built on [browser-use](https://github.com/browser-use/browser-use). Self-hosted. Runs in Docker.
 
 ---
 
-## How to run it
+## How it works
+
+```
+1. Create a flow     → give it a name, entry URL, and input fields
+2. Explore           → AI agent walks the site, generates JS reflexes at each stage
+3. Run               → reflexes replay as pure JavaScript via CDP (no LLM calls)
+4. When stuck        → agent pauses, you take over the live browser, click resume
+```
+
+Warm runs are ~10x faster than vanilla browser-use because they skip the LLM entirely. The agent only kicks in as a fallback when cached scripts break.
+
+### Three-tier execution
+
+Every run follows this strategy:
+
+1. **Fast path** — Execute cached JS reflexes in order. If one fails, try to repair it (LLM rewrites the script using the current DOM). Bail after 3 failures.
+2. **Generate** — If no reflexes exist, navigate to the entry URL, snapshot the DOM, ask the LLM to write a script from scratch.
+3. **Agent** — Full browser-use agent loop as last resort. Can save new reflexes for next time.
+
+### Reflexes
+
+A reflex is a JavaScript async arrow function stored per-domain:
+
+```javascript
+async (inputs, entryUrl) => {
+  await waitFor('#search-input', 5000);
+  await typeInto('#search-input', inputs.query);
+  document.querySelector('#search-btn').click();
+}
+```
+
+Executed directly via CDP `Runtime.evaluate`. Built-in helpers: `waitFor()`, `sleep()`, `typeInto()`, `fillInput()`, `acceptSuggestion()`.
+
+Created automatically during exploration, or saved by the agent after solving a new interaction.
+
+### Human-in-the-Loop
+
+When the agent encounters something it can't automate — login walls, CAPTCHAs, 2FA, consent screens — it pauses and hands you the live browser at 1920x1080 via CDP screencast. You interact directly (mouse + keyboard relayed through WebSocket), then click resume. The agent picks up where you left off.
+
+Categories: `auth` · `captcha` · `consent` · `verification` · `form_fill` · `confirmation` · `other`
+
+---
+
+## Quick start
 
 ### Prerequisites
 
-- Python 3.12+ with [uv](https://docs.astral.sh/uv/)
-- Node.js 20+ and npm
 - Docker and Docker Compose
 - An LLM API key (Gemini, Claude, or OpenAI)
 
@@ -44,241 +62,101 @@ If it gets stuck → you take over → it picks back up.
 
 ```bash
 cp .env.example .env
-```
-
-Edit `.env` — at minimum set your LLM provider and key:
-
-```bash
-LLM_PROVIDER=gemini           # gemini | claude | openai
-GOOGLE_API_KEY=your-key-here
-
-JWT_SECRET=some-random-secret  # tokens won't survive restarts without this
+# Edit .env — set LLM_PROVIDER and your API key
 ```
 
 ### 2. Start
 
 ```bash
 chmod +x dev
-./dev restart    # builds images, starts containers, follows logs
+./dev restart
 ```
 
 Open [http://localhost:8080](http://localhost:8080).
 
-That's it. The frontend, backend, and Docker socket proxy all start together.
+### 3. Chrome extension (optional)
 
-### 3. Install the Chrome extension (optional, for session capture)
+For pre-capturing sessions (cookies/localStorage) so the agent starts authenticated:
 
-1. Open `chrome://extensions/`
-2. Enable **Developer mode**
-3. **Load unpacked** → select the `extension/` directory
-4. Browse to any site, click the extension icon, capture your session
+1. `chrome://extensions/` → Developer mode → Load unpacked → select `extension/`
+2. Browse to any site → click extension icon → capture session
 
 ---
 
 ## Development
 
-Run backend and frontend separately for hot reload:
-
 ```bash
-# Backend
-uv sync
-uv run playwright install chromium && uv run playwright install-deps
-uv run uvicorn backend.main:app --reload --host 0.0.0.0 --port 8080
+# Backend (hot reload)
+uv sync && uv run uvicorn backend.main:app --reload --port 8080
 
-# Frontend (separate terminal)
+# Frontend (separate terminal, proxies to backend)
 cd frontend && npm install && npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
-
-### Dev commands
-
-```
-./dev stop       Stop all containers
-./dev build      Rebuild sandbox + backend images
-./dev build-fe   Rebuild frontend only
-./dev up         Start containers
-./dev restart    Full cycle: stop → build → up → logs
-./dev logs       Follow logs
-./dev url        Print the app URL
-```
+Dev helper: `./dev stop | build | build-fe | up | restart | logs | url`
 
 ---
 
-## Architecture
+## Deployment
 
-```
-┌─────────────┐      ┌──────────────────────┐      ┌──────────────────────┐
-│  React UI   │─────>│  FastAPI Backend      │─────>│  Docker Socket Proxy │
-│  (Vite)     │ REST │  (port 8080)          │      └──────────┬───────────┘
-│  port 3000* │<─────│                       │                 │
-└─────────────┘  WS  │  - Auth (JWT + API    │      ┌──────────▼───────────┐
-                      │    keys)              │      │  Sandbox Container   │
-┌─────────────┐      │  - Flows CRUD         │      │  - Chromium 1920×1080│
-│  Chrome     │─────>│  - Runner (3-tier)    │      │  - CDP (port 9222)   │
-│  Extension  │ POST │  - Explorer           │      │  - Xvfb + SwiftShader│
-└─────────────┘      │  - Webhooks           │◄─────│                      │
-                      │  - CDP proxy (WS)     │  CDP └──────────────────────┘
-                      └──────────────────────┘
+Requires Docker socket access. Can't run on serverless.
+
+```bash
+sudo ./deploy setup    # Docker + Caddy + HTTPS + build + start
+sudo ./deploy restart  # rebuild + restart
+sudo ./deploy logs     # follow logs
 ```
 
-`*` Port 3000 in dev (Vite proxies `/api` and `/ws` to :8080), port 8080 in production.
-
-**Three-tier execution**: Cached JS reflexes first (zero LLM calls) → auto-generate JS from DOM → full browser-use agent loop. The CDP proxy at `/ws/browser/{sandbox_id}` connects to Chromium alongside browser-use's session via a flat `Target.attachToTarget` — no conflicts.
+| Provider | Spec | ~Cost/mo |
+|----------|------|----------|
+| Hetzner CX32 | 4 vCPU, 8GB | $7 |
+| DigitalOcean | 4GB Droplet | $24 |
+| Oracle Cloud | Ampere A1 4-core | Free tier |
 
 ---
 
-## API Reference
-
-### Auth
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/auth/signup` | Create account |
-| `POST` | `/api/auth/login` | Login → JWT |
-| `GET` | `/api/auth/me` | Current user |
-
-### Flows
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/flows` | List flows |
-| `POST` | `/api/flows` | Create flow |
-| `PUT` | `/api/flows/{id}` | Update flow |
-| `DELETE` | `/api/flows/{id}` | Delete flow |
-
-### Runs
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/runs` | Start a run → `run_id`, `sandbox_id` |
-| `GET` | `/api/runs` | List runs |
-| `GET` | `/api/runs/{id}` | Run status, steps, result |
-| `POST` | `/api/runs/{id}/cancel` | Cancel |
-| `POST` | `/api/runs/{id}/resume` | Resume after HITL |
-
-### Sessions & Profiles
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/sessions/capture` | Capture session (from extension) |
-| `GET` | `/api/sessions` | List sessions |
-| `DELETE` | `/api/sessions/{id}` | Delete session |
-| `POST` | `/api/profile/save` | Save Chrome profile from sandbox |
-
-### API Keys & Webhooks
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/v1/api-keys` | List API keys |
-| `POST` | `/api/v1/api-keys` | Create key (`fp_live_…`) |
-| `DELETE` | `/api/v1/api-keys/{id}` | Revoke key |
-| `GET` | `/api/v1/webhooks` | List webhooks |
-| `POST` | `/api/v1/webhooks` | Register webhook |
-| `DELETE` | `/api/v1/webhooks/{id}` | Delete webhook |
-
-### WebSockets
-| Endpoint | Description |
-|----------|-------------|
-| `WS /ws/runs/{run_id}` | Real-time run progress (status, steps) |
-| `WS /ws/browser/{sandbox_id}?token=` | Live browser stream + mouse/keyboard input |
-
-### Webhook payload (run.paused)
-
-```json
-{
-  "event": "run.paused",
-  "run_id": "abc123",
-  "category": "auth",
-  "browser_cdp_url": "ws://...",
-  "resume_url": "http://localhost:8080/api/runs/abc123/resume"
-}
-```
-
-HITL categories: `auth` · `captcha` · `consent` · `verification` · `form_fill` · `confirmation` · `other`
-
-Webhook requests are signed with `X-FlowPilot-Signature: sha256=<hmac>`. Retried at 2s, 10s, 60s on failure.
-
----
-
-## Environment Variables
+## Configuration
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `LLM_PROVIDER` | `gemini` | `gemini`, `claude`, or `openai` |
-| `GOOGLE_API_KEY` | — | Required for Gemini |
-| `ANTHROPIC_API_KEY` | — | Required for Claude |
-| `OPENAI_API_KEY` | — | Required for OpenAI |
-| `GEMINI_MODEL` | `gemini-3-flash-preview` | |
-| `ANTHROPIC_MODEL` | `claude-sonnet-4-20250514` | |
-| `OPENAI_MODEL` | `gpt-4o` | |
-| `JWT_SECRET` | (generated) | Set this — tokens won't survive restarts otherwise |
-| `FLOWPILOT_BASE_URL` | `http://localhost:8080` | Used in webhook `resume_url` |
-| `PROFILES_DIR` | `/app/profiles` | SQLite DB + Chrome profiles location |
-| `ALLOWED_ORIGINS` | `http://localhost:8080,…` | CORS |
-| `DOCKER_HOST` | (auto) | Docker daemon URL |
-| `SANDBOX_NETWORK` | `flowpilot_sandbox-net` | Docker network for sandbox containers |
+| `GOOGLE_API_KEY` | — | Gemini |
+| `ANTHROPIC_API_KEY` | — | Claude |
+| `OPENAI_API_KEY` | — | OpenAI |
+| `JWT_SECRET` | (generated) | Must be stable in production |
+| `FLOWPILOT_BASE_URL` | `http://localhost:8080` | Public URL (used in webhooks) |
+| `FLOWPILOT_TRACE` | `0` | `1` to enable reflex execution tracing |
 
----
-
-## Security
-
-- **Sandbox isolation** — Each run: its own container, 1GB RAM, 100k CPU quota, 256 PIDs, 256MB shm
-- **No raw Docker socket** — Backend talks through docker-socket-proxy (containers + networks only)
-- **CDP not exposed** — Port 9222 is internal to the Docker network only
-- **CDP proxy auth** — `/ws/browser/{id}` requires a JWT via `?token=`
-- **Per-user limit** — Max 2 concurrent sandboxes per user
-- **API key hashing** — Keys are bcrypt-hashed at rest; raw value shown once on creation
-
----
-
-## Hosting
-
-Requires Docker socket access (can't run on serverless).
-
-| Provider | Spec | ~Cost/mo | Notes |
-|----------|------|----------|-------|
-| **Hetzner Cloud** | CX32 (4 vCPU, 8GB) | $7 | Best value |
-| **DigitalOcean** | Basic 4GB Droplet | $24 | Easy setup |
-| **Oracle Cloud** | Ampere A1 (4 core, 24GB) | Free tier | ARM, generous free allowance |
-
-The `./deploy` script handles first-time server setup end-to-end:
-
-```bash
-sudo ./deploy setup   # installs Docker + Caddy, creates .env, builds + starts everything
-```
-
-It prompts for your domain and LLM key, generates a JWT secret, configures Caddy for HTTPS, and starts the stack. After that:
-
-```
-sudo ./deploy restart   # rebuild + restart
-sudo ./deploy status    # container + Caddy status
-sudo ./deploy logs      # follow logs (q to stop)
-```
-
-**Not supported**: Vercel, Netlify, Lambda, Fly.io — no Docker socket or privileged container support.
-
-**Backup**: SQLite at `$PROFILES_DIR/platform.db` + the `profiles/` directory.
+See [docs/configuration.md](docs/configuration.md) for all options including model overrides and file paths.
 
 ---
 
 ## Benchmarks
 
-A benchmark suite in `scripts/benchmark.py` compares vanilla browser-use against FlowPilot across 5 scenarios (form fills, login flows, validation, checkboxes, tables).
+5 scenarios (form fills, login flows, validation, checkboxes, tables) on Gemini Flash:
 
-```bash
-cd scripts && python benchmark.py
-```
+| | Total time | LLM calls |
+|---|---|---|
+| Vanilla browser-use | ~274s | ~50 |
+| FlowPilot (warm) | ~27s | 0 |
 
-Results (5 scenarios, Gemini Flash):
-- **Vanilla browser-use**: ~274s total
-- **FlowPilot warm** (cached reflexes): ~27s total
-- **~10x speedup** on warm runs (zero LLM calls)
-
-See `scripts/BENCHMARK_RESULTS.md` and `scripts/BENCHMARK_ANALYSIS.md` for full details.
+~10x speedup. See `scripts/BENCHMARK_RESULTS.md` for details.
 
 ---
 
-## Tests
+## Docs
 
-```bash
-uv run pytest tests/ -v
-```
+| | |
+|---|---|
+| [Architecture](docs/architecture.md) | System design, data flow, design principles |
+| [Agent & Reflexes](docs/agent.md) | Three-tier execution, tools, reflex format, explorer |
+| [API Reference](docs/api-reference.md) | All HTTP + WebSocket endpoints |
+| [Backend](docs/backend.md) | Module reference |
+| [Frontend](docs/frontend.md) | Components, hooks, state |
+| [Database](docs/database.md) | Schema, tables, relationships |
+| [Infrastructure](docs/infrastructure.md) | Docker, networking, deployment |
+| [Webhooks](docs/webhooks.md) | Events, HMAC signing, retries |
+| [Configuration](docs/configuration.md) | All env vars |
 
 ---
 
