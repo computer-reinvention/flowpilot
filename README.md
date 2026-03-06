@@ -2,11 +2,22 @@
 
 **Explore once. Replay forever. Take over when it gets stuck.**
 
-**274s with vanilla browser-use. 27s with FlowPilot. Zero LLM calls on warm runs.**
-
 FlowPilot turns any website into a repeatable automation. You point it at a URL, it explores the site with an AI agent, and writes JavaScript scripts that replay the interaction — no LLM needed on repeat runs. When it hits something it can't handle (logins, CAPTCHAs), it hands you the browser. You do the thing, click resume, it continues.
 
 Built on [browser-use](https://github.com/browser-use/browser-use). Self-hosted. Runs in Docker.
+
+### Benchmarks (Gemini Flash, 5 scenarios)
+
+| Scenario | What it does | Baseline | Cold | Warm | Speedup |
+|---|---|---|---|---|---|
+| Simple form fill | 8 fields (text, radio, checkbox, autocomplete, textarea) + submit | 74.6s | 18.5s | **5.4s** | **13.7x** |
+| Login + add to cart | Login, add product to cart, navigate to cart, verify item | 36.5s | 59.0s | **5.0s** | **7.3x** |
+| Form with validation | 4 fields (name, email, 2 addresses) + submit, verify output | 35.7s | 17.1s | **3.8s** | **9.4x** |
+| Checkboxes + tree | Expand 3 tree nodes, check 2 specific checkboxes, verify result | 66.6s | 34.9s | **7.5s** | **8.8x** |
+| Modal + table + search | Open modal, fill 6-field form, submit, search table, verify row | 61.0s | 47.3s | **5.1s** | **11.9x** |
+| **TOTAL** | | **274.5s** | | **26.9s** | **10.2x** |
+
+Pass rate: 5/5 across all modes. Warm runs make zero LLM calls.
 
 ---
 
