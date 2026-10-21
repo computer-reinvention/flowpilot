@@ -56,3 +56,23 @@ Do not repair production code or weaken acceptance criteria. Report reproducible
 ## Completion rule
 
 Pre-deployment readiness requires all required local acceptance checks green and no unresolved security/data-integrity blockers. Explicitly distinguish future hosted TLS, cloud-runtime and real provider acceptance checks: they cannot be established by local evidence and remain manual post-deployment validation. This plan does not provision, deploy, post live messages or claim production readiness from local tests.
+
+## Lane006 independent evidence (partial harness; acceptance not complete)
+
+Foundation branch point: `0ccc06a005c3ff680110de6b66a6606a4e48d3d3`. Worktree: `flowpilot-worktrees/lane-006`, branch `implementation/lane-006`. Only lane006-owned files changed; no production repairs or other-branch integration.
+
+Verified milestones, committed incrementally:
+
+1. `1fdadf2` — independent frozen-wire assertions, strict actual-HTTP peers and standalone stdlib client; 37 tests passed.
+2. `bc4312d` — synthetic dual-origin website, durable SQLite effect counters and real Chromium fixture tests; 3 browser tests passed.
+3. `e79e923` — black-box service drivers, bounded retries, safe evidence and canary scanner; 54 dedicated tests passed.
+4. `8e6ce6e` — actual Uvicorn fail-closed baseline without lifecycle, owned browser SIGKILL, local resource fencing; 58 dedicated tests passed.
+5. `473861d` — read-only key-hash verification, retryable-capacity and viewer fixture coverage; **61 dedicated tests passed**. `scripts/verify_task_system.py --offline` exits 0, but records all unresolved real-service criteria as blocked and `readiness: not_established`.
+
+Actual baseline probe: a separately owned local Uvicorn process with lifespan disabled returned readiness **503 / starting**; complete acceptance exits **2**, not success. Lifecycle is deliberately disabled to avoid the pre-existing global Docker orphan sweep. This is fail-closed HTTP boundary proof, not assembled startup/recovery proof.
+
+Repository-wide check at `8e6ce6e`: **227 passed, 12 skipped, 1 failed**. Isolated rerun reproduces `tests/test_pi_agent.py::test_real_pi_host_rejects_unknown_model_without_provider_call`, expected `catalog does not contain`, actual `Pi exited without a result`. Pi/agent owner (002/007) must adjudicate; no root cause or repair claimed.
+
+Exact runnable offline/integrated/security commands, evidence index, limitations, and named remaining requirements are in `reports/task-acceptance/README.md`. Machine evidence pins source revision and frozen fixture hashes, includes no secret bodies/DOM/traces, and distinguishes consumer proof from integrated requirements. Security CLI self-tests correctly return 2 for incomplete clean coverage and 1 for a deliberately injected synthetic leak without leaking the canary in evidence.
+
+Still blocked/unverified: assembled real executor/control/assistance/observation peers; owned service-level commit/dispatch, interaction, stream/resume, profile-save, subprocess and restart fault hooks; real profile/script/history isolation; pause capacity and execution fencing; TLS viewer and packaged network topology; operations/backup/build/image IDs; 004's published example/UI; actual Pi guard behavior; full artifact coverage; provider-backed and hosted validation. Some have HTTP scenario drivers ready, while the remaining fault/topology drivers require parent continuation after assembly. No substitutes or fake service passes are claimed. **Plan006's completion rule remains unmet.**

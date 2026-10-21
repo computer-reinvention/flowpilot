@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "run_id": "task-acceptance-fe9c62e3083740be8d24b518c71686a7",
+  "kind": "security",
+  "created_at": "2026-10-21T15:04:19.707265+00:00",
+  "revision": "473861dbdf63d7e23d5e2b4cb95bc4d4f2f99f4e",
+  "working_tree_dirty": true,
+  "foundation_revision": "0ccc06a005c3ff680110de6b66a6606a4e48d3d3",
+  "fixture_sha256": {
+    "exchanges.json": "bd835f7da2a503f9f101c717469d2f2c2a66b9aca8bfbb06781dc7ff4c89d492",
+    "policy.json": "ca892edb4d3600a67b4725e3831b50d57b23c499136901ea814075e6b95f752d",
+    "viewer_commands.json": "44e94766fe88a30575b099636a902ca51bb2c91eefcf9bc87f03cc73a5b5d38c"
+  },
+  "checks": [
+    {
+      "name": "artifact_scan",
+      "outcome": "failed",
+      "detail": "bounded raw/URL/JSON/base64 canary scan; compressed artifacts require expansion",
+      "files_scanned": 1,
+      "bytes_scanned": 36,
+      "findings": [
+        {
+          "artifact_ref": "4db458251e54a7534779d68b8ddc807d897ad7497dcf06cb9e56cd9dbd1e9aa7",
+          "canary_sha256": "b03daf91e7fc80b6ae650a32a6ba1cc89e472ab3d761a06337ab77c2b6c3a37d"
+        }
+      ],
+      "gaps": []
+    }
+  ],
+  "requirements": {
+    "onboarding_http": {
+      "outcome": "blocked",
+      "owner_and_gap": "001/004: signup/login, ordinary API-key client and once-only disclosure"
+    },
+    "auth_ownership": {
+      "outcome": "blocked",
+      "owner_and_gap": "001: invalid/forged identity, foreign tasks/profiles and revoked keys"
+    },
+    "http_retry_followup": {
+      "outcome": "blocked",
+      "owner_and_gap": "001/002: concurrent admission, conflict, fresh-client reattach and website counters"
+    },
+    "profile_website_isolation": {
+      "outcome": "blocked",
+      "owner_and_gap": "002: two-account/two-profile cookie, storage, scripts and history isolation"
+    },
+    "questions_secrets": {
+      "outcome": "blocked",
+      "owner_and_gap": "001/002: transient secret delivery and duplicate/conflicting/stale response receipts"
+    },
+    "confirmation_decline": {
+      "outcome": "blocked",
+      "owner_and_gap": "001/002: approve/decline/expired/wrong-owner with actual effect counters"
+    },
+    "assistance_tls": {
+      "outcome": "blocked",
+      "owner_and_gap": "003/005: actual TLS pointer/keyboard/stream/fallback and capability expiry fencing"
+    },
+    "capacity_paused": {
+      "outcome": "blocked",
+      "owner_and_gap": "001/002: global/account/session/profile caps count paused/idle browser leases"
+    },
+    "cancel_fencing": {
+      "outcome": "blocked",
+      "owner_and_gap": "001/002/003: stop proof, terminal immutability and late callback/input fencing"
+    },
+    "crash_after_effect": {
+      "outcome": "blocked",
+      "owner_and_gap": "001/002: owned process kill after website effect, interrupted state and no replay"
+    },
+    "profile_save_failure": {
+      "outcome": "blocked",
+      "owner_and_gap": "002: failed save retains prior archive and bounded quarantine evidence"
+    },
+    "script_reuse_repair": {
+      "outcome": "blocked",
+      "owner_and_gap": "002/007: replay/repair with no repeated prerequisite, model proof separate"
+    },
+    "pi_readiness": {
+      "outcome": "blocked",
+      "owner_and_gap": "007: real browser same-URL freshness/readiness/no-progress guards"
+    },
+    "packaged_network": {
+      "outcome": "blocked",
+      "owner_and_gap": "005: real packaged-browser private/admin/metadata deny plus positive control"
+    },
+    "artifact_secret_scan": {
+      "outcome": "blocked",
+      "owner_and_gap": "001/002/003/005: DB/history/log/trace/result canaries absent"
+    },
+    "key_hash_at_rest": {
+      "outcome": "blocked",
+      "owner_and_gap": "001: real disposable database stores key hashes, never plaintext"
+    },
+    "operations": {
+      "outcome": "blocked",
+      "owner_and_gap": "005: image IDs, builds, restart, log/disk bounds, backup/restore"
+    },
+    "compatibility": {
+      "outcome": "blocked",
+      "owner_and_gap": "001-007: existing flow/run/UI/chat/Pi regressions and frontend onboarding"
+    },
+    "standalone_example": {
+      "outcome": "blocked",
+      "owner_and_gap": "004: execute published standalone client against real local service"
+    },
+    "provider_backed": {
+      "outcome": "blocked",
+      "owner_and_gap": "002/007: separately authorized bounded synthetic model-backed cases"
+    },
+    "hosted_postdeployment": {
+      "outcome": "blocked",
+      "owner_and_gap": "manual only: hosted TLS, cloud runtime and real provider validation"
+    }
+  },
+  "readiness": "not_established",
+  "limitations": [
+    "Fixture/consumer tests are not service acceptance.",
+    "No deployment or provider calls authorized by this harness.",
+    "No raw bodies, credentials, website state or traces included."
+  ]
+}
