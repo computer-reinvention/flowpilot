@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from backend.task_bootstrap import TaskHost
 from backend.task_contracts import (
-    AssistanceRequest, ErrorCode, Interaction, Principal, TaskFault, TaskState,
+    AssistanceRequest, BrowserMetadata, ErrorCode, Interaction, Principal, TaskFault, TaskState,
     TaskView, task_error,
 )
 from backend.task_ports import AssistanceBinding, Lease
@@ -35,7 +35,7 @@ def scenario():
     binding = AssistanceBinding(lease=lease, interaction_id="pause_a", generation=3, digest=hashlib.sha256(TOKEN.encode()).hexdigest(), expires_at=timestamp + timedelta(minutes=3))
     view = TaskView(task_id="task_a", session_id="session_a", profile_id="profile_a", state="waiting_for_browser", revision=2, interaction=interaction, created_at=timestamp, updated_at=timestamp)
     running = view.model_copy(update={"state": TaskState.RUNNING, "interaction": None, "revision": 3})
-    state = {"binding": binding, "view": view, "revoked": False}
+    state = {"binding": binding, "view": view, "lease": lease, "revoked": False, "saved": []}
 
     async def capability(digest, now):
         if digest != state["binding"].digest or state["revoked"] or state["binding"].expires_at <= now:
@@ -43,8 +43,27 @@ def scenario():
         return state["binding"]
 
     async def get(principal, task_id, poll):
-        assert principal == lease.principal and task_id == lease.task_id
+        if principal != lease.principal or task_id != lease.task_id:
+            raise TaskFault(task_error(ErrorCode.NOT_FOUND, "Task not found"))
         return state["view"]
+
+    async def assistance_lease(principal, task_id, request):
+        current = await get(principal, task_id, None)
+        interaction = current.interaction
+        if (current.state != TaskState.WAITING_FOR_BROWSER or not interaction or
+                request.interaction_id != interaction.interaction_id or request.generation != interaction.generation or
+                interaction.expires_at <= datetime.now(timezone.utc)):
+            raise TaskFault(task_error(ErrorCode.STALE_GENERATION, "Interaction is no longer active"))
+        return state["lease"]
+
+    async def save(binding):
+        current = await assistance_lease(binding.lease.principal, binding.lease.task_id,
+                                         AssistanceRequest(interaction_id=binding.interaction_id, generation=binding.generation))
+        if current != binding.lease or binding.expires_at <= datetime.now(timezone.utc):
+            raise TaskFault(task_error(ErrorCode.STALE_GENERATION, "Interaction is no longer active"))
+        state["binding"] = binding
+        state["saved"].append(binding)
+        state["revoked"] = False
 
     async def revoke(lease_arg):
         assert lease_arg == lease
@@ -62,8 +81,12 @@ def scenario():
         getattr(handle, name).return_value = None
     handle.screenshot.side_effect = None
     handle.screenshot.return_value = b"\x89PNG synthetic"
+    handle.metadata.side_effect = None
+    handle.metadata.return_value = BrowserMetadata(url="https://example.test/form", viewport_width=1280, viewport_height=720)
     bindings.control.capability.side_effect = capability
     bindings.control.get.side_effect = get
+    bindings.control.assistance_lease.side_effect = assistance_lease
+    bindings.control.save_capability.side_effect = save
     bindings.control.revoke_capabilities.side_effect = revoke
     bindings.control.respond.side_effect = respond
     bindings.control.cancel.side_effect = None
@@ -204,22 +227,31 @@ async def test_invalid_capabilities_fail_all_http_endpoints(condition):
 
 
 @pytest.mark.asyncio
-async def test_missing_foundation_seams_fail_closed():
+async def test_public_mint_and_state_use_real_execution_lease_and_metadata():
     host, bindings, handle, state = scenario()
     await host.startup()
     try:
-        with pytest.raises(TaskFault) as error:
-            await bindings.assistance.mint(state["binding"].lease.principal, "task_a", AssistanceRequest(interaction_id="pause_a", generation=3))
-        assert error.value.error.code == ErrorCode.UNAVAILABLE
-        bindings.control.save_capability.assert_not_awaited()
+        grant = await bindings.assistance.mint(state["lease"].principal, "task_a", AssistanceRequest(interaction_id="pause_a", generation=3))
+        token = grant.assistance_url.rsplit("/", 1)[1]
+        assert state["saved"][-1].lease.generation == 7
+        assert state["saved"][-1].generation == 3
+        assert grant.generation == 3
+        assert token not in state["saved"][-1].model_dump_json()
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=host.app), base_url="https://viewer.test") as client:
-            assert (await client.get(BASE + "/state")).status_code == 503
+            response = await client.get("/help/" + token + "/state")
+            assert response.status_code == 200
+            assert response.json() == {
+                "url": "https://example.test/form", "viewport_width": 1280, "viewport_height": 720,
+                "interaction": state["view"].interaction.model_dump(mode="json"),
+            }
+            assert response.headers["Cache-Control"] == "no-store"
+            assert "cdp" not in response.text.lower()
     finally:
         await host.shutdown()
 
 
 @pytest.mark.asyncio
-async def test_private_issuance_primitives_digest_only_rotation_and_bounded_expiry():
+async def test_public_issuance_digest_only_rotation_and_bounded_expiry():
     host, bindings, handle, state = scenario()
     await host.startup()
     saved = []
@@ -232,17 +264,14 @@ async def test_private_issuance_primitives_digest_only_rotation_and_bounded_expi
     bindings.control.save_capability.side_effect = save
     try:
         assistance = bindings.assistance
-        # Explicitly tests the private issuance primitive, NOT working public mint.
-        async with assistance._lock:
-            grant = await assistance._issue(state["binding"].lease, state["view"].interaction)
+        grant = await assistance.mint(state["lease"].principal, "task_a", AssistanceRequest(interaction_id="pause_a", generation=3))
         token = grant.assistance_url.rsplit("/", 1)[1]
         assert len(token) == 43
         assert saved[-1].digest == hashlib.sha256(token.encode()).hexdigest()
         assert token not in saved[-1].model_dump_json()
         assert grant.expires_at <= state["view"].interaction.expires_at
         await assistance.authorize(token)
-        async with assistance._lock:
-            newer = await assistance._issue(state["binding"].lease, state["view"].interaction)
+        newer = await assistance.mint(state["lease"].principal, "task_a", AssistanceRequest(interaction_id="pause_a", generation=3))
         assert newer.assistance_url != grant.assistance_url
         with pytest.raises(TaskFault):
             await assistance.authorize(token)

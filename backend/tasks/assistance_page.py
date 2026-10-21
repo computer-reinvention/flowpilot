@@ -54,7 +54,7 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)release()})
 document.getElementById('type').onclick=()=>{const field=document.getElementById('text');action({kind:'type',text:field.value});field.value=''};
 const socket=new WebSocket((location.protocol==='https:'?'wss:':'ws:')+'//'+location.host+base+'/stream');socket.binaryType='blob';
 socket.onmessage=e=>{streaming=true;show(e.data)};
-socket.onclose=()=>{streaming=false;status('Stream disconnected; using screenshot fallback.');refresh()};socket.onerror=()=>socket.close();
+socket.onclose=()=>{streaming=false;if(!stopped){status('Stream disconnected; using screenshot fallback.');refresh()}};socket.onerror=()=>socket.close();
 async function finish(confirmed){try{release();await queue;const interaction=state.interaction;const data={generation:interaction.generation,idempotency_key:crypto.randomUUID(),kind:interaction.kind};if(interaction.kind==='browser')data.browser_resolved=true;else if(interaction.kind==='confirmation')data.confirmed=confirmed;else{data.values={};document.querySelectorAll('[data-field]').forEach(e=>{data.values[e.dataset.field]=e.value;e.value=''})}await post('respond',data);stopped=true;socket.close();status('Decision accepted. You can close this page.')}catch(e){status(e.message)}}
 document.getElementById('resume').onclick=()=>finish(true);document.getElementById('decline').onclick=()=>finish(false);
 document.getElementById('cancel').onclick=async()=>{try{release();await queue;await post('cancel',{});stopped=true;socket.close();status('Cancellation requested.')}catch(e){status(e.message)}};

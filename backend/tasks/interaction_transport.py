@@ -4,7 +4,7 @@ import asyncio
 import base64
 from contextlib import suppress
 
-from ..task_contracts import BrowserInput
+from ..task_contracts import BrowserInput, BrowserMetadata
 
 
 async def release_controls(page, keys, buttons):
@@ -44,6 +44,12 @@ class BrowserViewport:
         async with self._lock:
             self._require_open()
             return await self.page.screenshot(type="png", full_page=False, scale="css")
+
+    async def metadata(self):
+        async with self._lock:
+            self._require_open()
+            viewport = await self.page.evaluate("({width: innerWidth, height: innerHeight})")
+            return BrowserMetadata(url=self.page.url, viewport_width=viewport["width"], viewport_height=viewport["height"])
 
     async def send_input(self, command: BrowserInput):
         async with self._lock:

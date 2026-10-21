@@ -12,7 +12,8 @@ import uvicorn
 from playwright.async_api import async_playwright, expect
 
 from backend.tasks.interaction_transport import BrowserViewport
-from tests.test_task_assistance_security import BASE, scenario
+from backend.task_contracts import AssistanceRequest
+from tests.test_task_assistance_security import scenario
 
 
 @pytest.mark.asyncio
@@ -86,10 +87,13 @@ async def test_tls_reverse_proxy_real_viewer_controls_and_screenshot_fallback(tm
             browser = await playwright.chromium.launch(headless=True)
             try:
                 target = await browser.new_page(viewport={"width": 640, "height": 480})
-                await target.set_content('<input id="secret" type="password" style="position:absolute;left:10px;top:10px;width:200px"><div style="height:2400px"></div>')
+                await target.route("https://lane003.test/**", lambda route: route.fulfill(content_type="text/html", body='<input id="secret" type="password" style="position:absolute;left:10px;top:10px;width:200px"><div style="height:2400px"></div>'))
+                await target.goto("https://lane003.test/form")
                 handle = BrowserViewport(target)
                 bindings.executor.browser.return_value = handle
                 await host.startup()
+                grant = await bindings.assistance.mint(state["lease"].principal, "task_a", AssistanceRequest(interaction_id="pause_a", generation=3))
+                base = "/help/" + grant.assistance_url.rsplit("/", 1)[1]
                 backend_task = asyncio.create_task(backend.serve(sockets=[backend_socket]))
                 while not backend.started:
                     if backend_task.done():
@@ -106,7 +110,7 @@ async def test_tls_reverse_proxy_real_viewer_controls_and_screenshot_fallback(tm
                     socket.on("framereceived", lambda frame: frames.append(frame))
 
                 viewer.on("websocket", record_socket)
-                await viewer.goto(origin + BASE)
+                await viewer.goto(origin + base)
                 image = viewer.locator("#screen")
                 await expect(image).to_have_js_property("naturalWidth", 640)
                 for _ in range(100):
@@ -114,7 +118,7 @@ async def test_tls_reverse_proxy_real_viewer_controls_and_screenshot_fallback(tm
                         break
                     await asyncio.sleep(.02)
                 assert frames and bytes(frames[0]).startswith(b"\xff\xd8")
-                assert sockets == [origin.replace("https:", "wss:") + BASE + "/stream"]
+                assert sockets == [origin.replace("https:", "wss:") + base + "/stream"]
                 box = await image.bounding_box()
                 await viewer.mouse.click(box["x"] + 20, box["y"] + 20)
                 await viewer.locator("#text").fill("lane003-secret-canary")
@@ -135,10 +139,10 @@ async def test_tls_reverse_proxy_real_viewer_controls_and_screenshot_fallback(tm
                 assert any(url.endswith("/screen") for url in requests)
                 assert all("lane003-secret-canary" not in message for message in messages)
                 assert state["view"].state.value == "waiting_for_browser"
-                # Missing metadata is explicitly surfaced, not fabricated.
-                assert await viewer.locator("#resume").is_disabled()
-                await viewer.locator("#cancel").click()
-                await expect(viewer.locator("#status")).to_contain_text("Cancellation requested")
+                await expect(viewer.locator("#resume")).to_be_enabled()
+                assert await viewer.locator("#site").text_content() == "https://lane003.test/form"
+                await viewer.locator("#resume").click()
+                await expect(viewer.locator("#status")).to_contain_text("Decision accepted")
                 assert state["revoked"]
                 await context.close()
             finally:

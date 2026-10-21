@@ -14,12 +14,16 @@ async def test_real_chromium_drag_type_scroll_release_and_frames():
         browser = await playwright.chromium.launch(headless=True)
         try:
             page = await browser.new_page(viewport={"width": 640, "height": 480}, device_scale_factor=2)
-            await page.set_content('''<input id="text" style="position:absolute;left:10px;top:10px">
+            await page.route("https://lane003.test/**", lambda route: route.fulfill(content_type="text/html", body='''<input id="text" style="position:absolute;left:10px;top:10px">
             <div style="height:2400px"></div><script>
             window.events=[]; for(const kind of ['pointerdown','pointermove','pointerup','keydown','keyup'])
             document.addEventListener(kind,e=>events.push([e.type,e.buttons,e.key]));
-            </script>''')
+            </script>'''))
+            await page.goto("https://lane003.test/form")
             handle = BrowserViewport(page)
+            assert (await handle.metadata()).model_dump(mode="json") == {
+                "url": "https://lane003.test/form", "viewport_width": 640, "viewport_height": 480,
+            }
             for data in [
                 dict(kind="down", x=20, y=20, button="left"),
                 dict(kind="move", x=100, y=20),

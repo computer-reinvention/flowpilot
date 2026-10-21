@@ -1,9 +1,4 @@
-"""Capability-scoped assistance mounted in the task API, never a public CDP proxy.
-
-The frozen v1 ports currently omit lease lookup for minting and browser metadata
-for state. Those operations fail closed rather than guessing execution generations
-or fabricating URLs. See plan/003_remote_human_assistance.md for amendment needs.
-"""
+"""Capability-scoped assistance mounted in the task API, never a public CDP proxy."""
 
 import asyncio
 import hashlib
@@ -20,7 +15,7 @@ from fastapi.routing import APIRoute
 from pydantic import ValidationError
 
 from ..task_contracts import (
-    AssistanceGrant, AssistanceRequest, BrowserInput, ERROR_POLICY, ErrorCode, ErrorEnvelope, InteractionResponse,
+    AssistanceGrant, AssistanceRequest, AssistanceState, BrowserInput, ERROR_POLICY, ErrorCode, ErrorEnvelope, InteractionResponse,
     MAX_INPUT_BYTES, PollRequest, TaskFault, TaskState, task_error,
 )
 from ..task_ports import AssistanceBinding
@@ -108,22 +103,23 @@ class Assistance:
 
     async def mint(self, principal, task_id, request: AssistanceRequest) -> AssistanceGrant:
         async with self._lock:
+            if not self._active:
+                raise fault(ErrorCode.UNAVAILABLE)
+            lease = await self.bindings.control.assistance_lease(principal, task_id, request)
             view = await self.bindings.control.get(principal, task_id, PollRequest())
             interaction = view.interaction
             if (view.state != TaskState.WAITING_FOR_BROWSER or not interaction or
+                    lease.principal != principal or lease.task_id != task_id or
+                    view.task_id != task_id or view.session_id != lease.session_id or view.profile_id != lease.profile_id or
                     interaction.interaction_id != request.interaction_id or
                     interaction.generation != request.generation or interaction.expires_at <= now()):
                 raise fault(ErrorCode.STALE_GENERATION)
-            # TaskView has no lease generation. Never substitute pause generation:
-            # it would bypass the executor's execution fence after a restart.
-            raise TaskFault(task_error(ErrorCode.UNAVAILABLE, "Assistance minting requires execution lease lookup"))
+            # save_capability rechecks this exact execution lease/current pause at
+            # commit, fencing a resolution or restart between lookup and save.
+            return await self._issue(lease, interaction)
 
     async def _issue(self, lease, interaction):
-        """Mint once a future foundation amendment supplies the verified lease.
-
-        Internal only: never infer the lease from a browser-supplied identifier.
-        Caller holds _lock and has checked the current account-owned pause.
-        """
+        """Caller holds _lock and supplies the atomically verified execution lease."""
         expiry = min(interaction.expires_at, now() + timedelta(seconds=self.settings.assistance_ttl_seconds))
         if expiry <= now():
             raise fault(ErrorCode.STALE_GENERATION)
@@ -150,6 +146,12 @@ class Assistance:
                 view.task_id != binding.lease.task_id or view.session_id != binding.lease.session_id or view.profile_id != binding.lease.profile_id or
                 interaction.interaction_id != binding.interaction_id or interaction.generation != binding.generation or
                 interaction.expires_at <= now()):
+            raise fault()
+        lease = await self.bindings.control.assistance_lease(
+            binding.lease.principal, binding.lease.task_id,
+            AssistanceRequest(interaction_id=binding.interaction_id, generation=binding.generation),
+        )
+        if lease != binding.lease:
             raise fault()
         return binding
 
@@ -243,8 +245,14 @@ def create_router(bindings):
     @router.get("/help/{token}/state")
     async def state(token: str, request: Request):
         check_origin(request, required=False)
-        await assistance.authorize(token)
-        raise TaskFault(task_error(ErrorCode.UNAVAILABLE, "Browser viewport metadata is unavailable"))
+        async with assistance._lock:
+            binding = await assistance.authorize(token)
+            handle = await assistance.browser(binding)
+            metadata = await handle.metadata()
+            view = await bindings.control.get(binding.lease.principal, binding.lease.task_id, PollRequest())
+            await assistance.authorize(token)
+            result = AssistanceState(**metadata.model_dump(), interaction=view.interaction)
+            return JSONResponse(result.model_dump(mode="json"), headers=security_headers())
 
     @router.get("/help/{token}/screen")
     async def screen(token: str, request: Request):
