@@ -1,7 +1,9 @@
 """Single-host task execution. Claimed executions are never replayed on restart."""
 import asyncio
 import fcntl
-from collections import OrderedDict
+import json
+import logging
+from collections import Counter, OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -9,12 +11,14 @@ from ..sandbox import SandboxManager
 from ..task_contracts import (
     ErrorCode, PollRequest, TaskFault, TaskMetrics, TaskResult, TaskState, TERMINAL_STATES, task_error,
 )
-from .memory import delete_memory
+from .memory import QuarantineLedger, delete_memory, storage_key
 from .browser_adapter import host_key
 from .runtime import create_runtime, stale
 
 
 DISPATCH_RECEIPT_LIMIT = 256
+MEASURE_SECONDS = 5
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -36,6 +40,9 @@ class Executor:
         # is the authority to dispatch. Active/preflight entries are pinned apart.
         self.seen = OrderedDict()
         self.ready = False
+        # Fail-closed recovery-artifact quota accounting (no I/O at construction).
+        self.ledger = QuarantineLedger(settings)
+        self.held = Counter()
 
     def bind(self, bindings):
         if self.bindings is not None:
@@ -95,7 +102,9 @@ class Executor:
 
     async def _execute_authorized(self, execution, active):
         lease = execution.lease
-        runtime = None
+        runtime = reservation = None
+        holding = False
+        key = storage_key(lease.principal, lease.profile_id)
         state, result, error = TaskState.FAILED, None, None
         saved, stopped = False, False
         try:
@@ -103,6 +112,25 @@ class Executor:
                 raise TaskFault(task_error(ErrorCode.INTERRUPTED, 'Executor stopped during dispatch preflight'))
             if active.cancelled:
                 raise asyncio.CancelledError
+            remaining = (execution.deadline - datetime.now(timezone.utc)).total_seconds()
+            if remaining <= 0:
+                raise TimeoutError
+            # Fail closed BEFORE any container exists: reserve a worst-case
+            # recovery-artifact slot or refuse this work with a typed error.
+            # Refusal never deletes or reuses existing recovery data.
+            # Pin the key first so concurrent recovery never drops a live slot.
+            self.held[key] += 1
+            holding = True
+            reserving = asyncio.create_task(asyncio.to_thread(self.ledger.reserve, lease, key))
+            try:
+                reservation = await asyncio.shield(reserving)
+            except asyncio.CancelledError:
+                # The thread may still commit; account for whatever it wrote.
+                try:
+                    reservation = await reserving
+                except Exception:
+                    pass
+                raise
             remaining = (execution.deadline - datetime.now(timezone.utc)).total_seconds()
             if remaining <= 0:
                 raise TimeoutError
@@ -174,6 +202,18 @@ class Executor:
                 error = task_error(ErrorCode.PROFILE_RECOVERY_REQUIRED, 'Profile save failed; retained state requires recovery')
             if not saved and hasattr(runtime, 'quarantine'):
                 runtime.quarantine()
+            if runtime is None and error is not None and error.code == ErrorCode.PROFILE_RECOVERY_REQUIRED:
+                saved = False  # refused before launch: the profile already holds a quarantine
+            try:
+                if reservation is not None:
+                    # Before settlement: the slot stays charged as a quarantine
+                    # unless the save was proven. Failures keep it reserved.
+                    await self._settle_reservation(reservation, lease, saved)
+            finally:
+                if holding:
+                    self.held[key] -= 1
+                    if self.held[key] <= 0:
+                        del self.held[key]
             view = await self.bindings.control.get(lease.principal, lease.task_id, PollRequest())
             if view.state not in TERMINAL_STATES:
                 if view.state == TaskState.CANCELLING and stopped and saved:
@@ -240,6 +280,11 @@ class Executor:
                     (directory / 'recovery-required').touch(mode=0o600)
                     container.stop(timeout=5)
         await asyncio.to_thread(reconcile)
+        # Account for every retained artifact before admission reopens: dead
+        # reservations become quarantines (marker present) or are dropped
+        # (nothing retained); unledgered markers are adopted. Never deletes.
+        attribution = {storage_key(lease.principal, lease.profile_id): lease.principal.account_id for lease in leases}
+        await asyncio.to_thread(self.ledger.reconcile, frozenset(self.held), attribution)
         for lease in leases:
             await self.bindings.control.release_browser(lease, profile_saved=False)
 
@@ -256,7 +301,44 @@ class Executor:
                         and container.labels.get('profile-key') == profile_key):
                     container.stop(timeout=5)
                     container.remove(force=True)
-        await asyncio.to_thread(delete_memory, self.settings, principal, profile_id, remove_artifacts)
+        # Explicit owner deletion is the only path that frees a quarantine slot,
+        # and only after its containers, archive and marker are really gone.
+        await asyncio.to_thread(delete_memory, self.settings, principal, profile_id, remove_artifacts,
+                                self.ledger.forget)
+
+    async def _settle_reservation(self, key, lease, saved):
+        """Release a proven-saved slot or convert it to a quarantine. Never raises."""
+        try:
+            if saved:
+                await asyncio.to_thread(self.ledger.release, key, lease)
+                return
+            measured = None
+            try:
+                measured = await asyncio.wait_for(asyncio.to_thread(self._measure, key), MEASURE_SECONDS)
+            except Exception:
+                pass  # unknown size keeps the full worst-case reservation
+            await asyncio.to_thread(self.ledger.quarantine, key, lease, measured)
+        except Exception:
+            # The slot stays reserved and charged; recovery reconciles it later.
+            logger.warning('Quarantine ledger update failed; reservation retained task_id=%s generation=%d',
+                           lease.task_id, lease.generation)
+
+    def _measure(self, key):
+        """Observed bytes of a retained artifact: preserved archive + writable layer."""
+        directory = self.settings.state_dir / key
+        total = sum(path.stat().st_size for path in directory.glob('sandbox-profile.tar*')
+                    if path.is_file() and not path.is_symlink())
+        try:
+            container_id = json.loads((directory / 'recovery-required').read_text()).get('container_id')
+        except (OSError, ValueError, AttributeError):
+            container_id = None
+        if container_id:
+            manager = self.manager_factory(str(self.settings.state_dir))
+            rows = manager.client.api.containers(all=True, filters={'id': container_id}, size=True)
+            if len(rows) != 1 or not isinstance(rows[0].get('SizeRw'), int):
+                return None
+            total += rows[0]['SizeRw']
+        return total
 
 
 def create_executor(settings):

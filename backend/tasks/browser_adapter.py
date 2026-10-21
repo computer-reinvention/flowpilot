@@ -21,7 +21,8 @@ def mark_recovery(directory, settings, lease, container_id=None):
     except FileExistsError:
         return
     with os.fdopen(fd, 'w') as output:
-        json.dump({'task_host': host_key(settings), 'task_id': lease.task_id,
+        json.dump({'task_host': host_key(settings), 'account_id': lease.principal.account_id,
+                   'task_id': lease.task_id,
                    'session_id': lease.session_id, 'lease_generation': lease.generation,
                    'container_id': container_id}, output)
 

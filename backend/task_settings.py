@@ -33,6 +33,15 @@ class TaskSettings(Contract):
     trace_retention_days: int = Field(default=7, ge=1, le=30)
     api_requests_per_minute: int = Field(default=120, ge=1, le=10_000)
     login_requests_per_minute: int = Field(default=10, ge=1, le=100)
+    # Fail-closed recovery-artifact quotas (lane002). Every in-flight browser
+    # reserves one worst-case slot of quarantine_reserve_bytes before creation;
+    # a failed save converts it into a retained quarantine instead of freeing it.
+    # Exhaustion refuses new work; it never deletes existing recovery data.
+    quarantine_max_count: int = Field(default=16, ge=1, le=10_000)
+    quarantine_max_account_count: int = Field(default=4, ge=1, le=10_000)
+    quarantine_max_bytes: int = Field(default=16 * 1024 ** 3, ge=256 * 1024 ** 2, le=16 * 1024 ** 4)
+    quarantine_max_account_bytes: int = Field(default=4 * 1024 ** 3, ge=256 * 1024 ** 2, le=16 * 1024 ** 4)
+    quarantine_reserve_bytes: int = Field(default=1024 ** 3, ge=256 * 1024 ** 2, le=64 * 1024 ** 3)
 
     @model_validator(mode="after")
     def coherent_limits(self):
@@ -44,6 +53,12 @@ class TaskSettings(Contract):
             raise ValueError("Shutdown budget must include cancellation")
         if self.readiness_window_seconds >= self.readiness_timeout_seconds:
             raise ValueError("Readiness window must fit within its deadline")
+        if self.quarantine_max_account_count > self.quarantine_max_count:
+            raise ValueError("Account quarantine count cannot exceed the global quota")
+        if self.quarantine_max_account_bytes > self.quarantine_max_bytes:
+            raise ValueError("Account quarantine bytes cannot exceed the global quota")
+        if self.quarantine_reserve_bytes > self.quarantine_max_account_bytes:
+            raise ValueError("One quarantine reservation must fit within the account byte quota")
         return self
 
     @classmethod
