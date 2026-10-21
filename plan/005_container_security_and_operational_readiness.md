@@ -304,3 +304,29 @@ emSign ECC Root CA G3 is absent and SSL context retains mandatory chain/hostname
 verification with >100 roots. Cryptography warns about a nonpositive serial in a
 remaining bundled certificate; no warning filter or trust relaxation added. This
 checkpoint does not claim real outgoing TLS exchange coverage yet.
+
+### Frontend checkpoint
+
+Exact npm shadcn 4.22.0 tarball SHA512 matches formerly locked integrity; extracted
+`package/LICENSE.md` is MIT, copyright (c) 2023 shadcn. Vendored that license unchanged
+beside byte-identical `dist/tailwind.css` (16340 bytes, recorded SHA256 unchanged).
+Reproduction helper `scripts/ops_vendor_shadcn.py` verifies archive and CSS hashes,
+extracts only the two named members, executes no CLI and preserves release bytes.
+Removed only the direct dev CLI and redirected the CSS import; no TSX changes.
+
+Clean Linux/amd64 Node22.22.0 npm ci + build PASS; npm audit **0**. Against actual
+merged-source baseline image, **all four dist files byte-identical** (index CSS
+`b5f0c360581832fc31989b7a1a7cbd82bee5d945a1e0c35bf6f6251d8fb7e08a`,
+JS `5ffec946afcf74716bbe564ef4bc419ace15866c6835c58560e1e76a57668313`).
+Runtime dependency map unchanged; **291 lock entries removed, zero surviving version
+changes**. npm also made six formerly bundled optional WASI dependency records
+explicit under unchanged Tailwind oxide 4.3.3 (`inBundle=true`); these were already
+listed in the old package's bundleDependencies, not six new upgrades. Dist identity
+and native Linux build are verified; a WASI platform build was not exercised.
+
+Frontend/client Node suite **6 passed**, including real cached Chromium DOM account/
+task/viewer flow on synthetic local HTTP fixtures. Agent suite **4 passed** after
+clean locked agent npm ci; initial run failed only because own-worktree agent
+node_modules was absent, not from a source regression. Two dedicated dependency
+regressions pass. License and CSS provenance gate is resolved; no CSS trimming or
+component-runtime dependency change. Prior 500kB Vite chunk warning remains.

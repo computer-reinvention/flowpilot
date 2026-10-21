@@ -303,6 +303,19 @@ promote this branch based on its documentation or an HTTP 200 alone.
 
 ## Read-only dependency and implementation triage — 2026-10-21
 
+**Coordinated implementation follow-up:** main `b55c32c` merged as `57372a2`.
+Certifi-only patch committed `42d202c`; 30 focused tests passed in own frozen venv.
+Frontend licensing gate is resolved from exact release tarball MIT LICENSE.md,
+verified against formerly locked SHA512. CSS/license are vendored unchanged; CLI
+removed. Clean Linux Node22 build/audit pass with **zero npm findings**, all four
+merged-source dist files byte-identical, runtime dependency map unchanged, six
+frontend/client checks (real Chromium DOM included) and four agent checks passed.
+291 obsolete lock entries removed; no surviving version changes; six already-bundled
+optional WASI metadata entries made explicit by npm (no WASI build claimed).
+Python overrides remain pending actual compatibility proof; historical proposals
+below are not proof those overrides have been accepted. Global readiness blockers
+remain unchanged. Full incremental evidence is in plan005 and machine report.
+
 Machine-readable actionable inventory: `scripts/ops_dependency_triage.json`.
 It includes **all 28 Python advisory IDs, aliases and individual reported fixed
 versions**, all seven frontend package/version findings, locked dependency paths,

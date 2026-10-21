@@ -1,4 +1,12 @@
 {
+  "implementation_checkpoints": {
+    "merged_main": "b55c32c",
+    "merge_commit": "57372a2",
+    "certifi": {"commit": "42d202c", "changed_packages_only": {"certifi": ["2026.7.22", "2026.10.19"]}, "frozen_sync": "own lane005 venv Python3.13.15", "tests": "30 passed: CA regression/control HTTP/retention"},
+    "frontend": {"license": "Exact npm 4.22.0 tarball LICENSE.md MIT, copyright 2023 shadcn; unmodified attribution preserved", "archive_integrity": "sha512-QKR3XUnatWlgo8IbZqGHrpsxjgdsfpPSAvJvLntQqAxPEf5U2sNsjDYLAS2xmFrOkC9lpj5UpZbrh/BuHrE2CQ==", "clean_node22_linux_build": "PASS", "npm_audit_findings": 0, "merged_source_dist_byte_identical": true, "runtime_dependency_map_unchanged": true, "removed_lock_entries": 291, "changed_surviving_versions": 0, "explicit_previously_bundled_optional_WASI_records": 6, "frontend_client_checks": "6 passed including real Chromium DOM", "agent_checks": "4 passed after own locked npm ci", "limits": "WASI build not exercised; initial agent test run lacked node_modules, resolved by locked install"},
+    "python_overrides": "Pending focused actual compatibility proof; not applied yet",
+    "security_clearance": "NONE: network/kernel and OS/Chromium inventory blockers unchanged"
+  },
   "schema_version": 1,
   "date": "2026-10-21",
   "scope": "Read-only triage; candidate manifest/lock/CSS experiments ran only in discarded container copies. No repository dependency or production application changes.",
