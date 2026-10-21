@@ -428,3 +428,39 @@ async def test_shutdown_closes_admission_before_executor_cleanup(system):
         await control.start(principal, TaskStart(task='x', idempotency_key='shutdown-001'))
     assert failure.value.error.code == 'shutdown'
     assert (await client.post(API_PREFIX, headers=headers, json={'task': 'x', 'idempotency_key': 'shutdown-002'})).status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_paired_session_profile_authorization_errors_are_identical_and_atomic(system):
+    client, control, bindings, starts, host = system
+    headers, _, _ = await key_for(client)
+    foreign_headers, _, _ = await key_for(client, 'pair-foreign@example.test')
+    owned = await client.post(API_PREFIX + '/profiles', headers=headers, json={'label': 'Owned alternate', 'idempotency_key': 'http-pair-owned-001'})
+    foreign = await client.post(API_PREFIX + '/profiles', headers=foreign_headers, json={'label': 'Foreign profile', 'idempotency_key': 'http-pair-foreign-001'})
+    assert owned.status_code == foreign.status_code == 201
+    first = await admit(client, headers)
+    await wait_started(starts)
+    lease = starts[0].lease
+    view = await control.get(lease.principal, lease.task_id, PollRequest())
+    await control.finish(lease, view.revision, TaskState.COMPLETED, result=TaskResult(answer='done'))
+    await control.release_browser(lease, profile_saved=True)
+    def snapshot():
+        with sqlite3.connect(control.repository.path) as database:
+            return tuple(database.iterdump()), dict(control.repository._requests)
+    before = snapshot()
+    errors = []
+    for profile_id, status in ((foreign.json()['profile_id'], 404), ('missing_profile', 404), (owned.json()['profile_id'], 409)):
+        response = await client.post(API_PREFIX, headers=headers, json={'task': 'followup', 'session_id': first['session_id'], 'profile_id': profile_id, 'idempotency_key': 'http-pair-retry-001'})
+        assert response.status_code == status, response.text
+        if status == 404:
+            assert response.json() == {'error': {'code': 'not_found', 'message': 'Not found', 'retryable': False, 'retry_after_seconds': None}}
+            errors.append(response.content)
+        assert snapshot() == before
+        assert bindings.executor.execute.await_count == 1
+    assert errors[0] == errors[1]
+    matching = await client.post(API_PREFIX, headers=headers, json={'task': 'followup', 'session_id': first['session_id'], 'profile_id': first['profile_id'], 'idempotency_key': 'http-pair-retry-001'})
+    assert matching.status_code == 202, matching.text
+    assert matching.json()['session_id'] == first['session_id']
+    assert matching.json()['profile_id'] == first['profile_id']
+    await wait_started(starts, 2)
+    assert bindings.executor.execute.await_count == 2

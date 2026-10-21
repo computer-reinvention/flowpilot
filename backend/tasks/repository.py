@@ -112,6 +112,11 @@ class Repository:
                     return receipt
                 profile_id = request.profile_id
                 session_id = request.session_id
+                if profile_id:
+                    # Resolve explicit identity before comparing two objects.
+                    # Foreign and missing profiles must have the same envelope,
+                    # even when an owned (possibly busy) session is supplied.
+                    self._profile(db, principal, profile_id)
                 if session_id:
                     session = db.execute('SELECT * FROM bt_sessions WHERE id=? AND owner=?', (session_id, principal.account_id)).fetchone()
                     if session is None:

@@ -3,7 +3,7 @@ import sqlite3
 
 import pytest
 
-from backend.task_contracts import Principal, TaskStart, TaskFault, TaskState, TaskResult
+from backend.task_contracts import Principal, ProfileCreate, TaskStart, TaskFault, TaskState, TaskResult
 from backend.task_settings import TaskSettings
 
 
@@ -106,3 +106,43 @@ async def test_recover_can_attest_saved_profile_through_release_port(tmp_path, m
     await control.startup()
     assert (await control.list_profiles(owner)).items[0].state == 'available'
     await control.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('active', [True, False])
+async def test_explicit_profile_ownership_precedes_session_compatibility_without_writes(tmp_path, active):
+    from backend.tasks.repository import Repository
+    repository = Repository(TaskSettings(state_dir=tmp_path), b'x' * 32)
+    await repository.initialize()
+    owner = Principal(account_id='owner')
+    foreign = Principal(account_id='foreign')
+    first = await repository.admit(owner, TaskStart(task='first', idempotency_key='pair-first-001'))
+    execution = await repository.claim(owner, first.task_id)
+    other_owned = await repository.create_profile(owner, ProfileCreate(label='Other owned', idempotency_key='pair-owned-001'))
+    foreign_profile = await repository.create_profile(foreign, ProfileCreate(label='Foreign', idempotency_key='pair-foreign-001'))
+    if not active:
+        await repository.transition(execution.lease, execution.revision, TaskState.COMPLETED, result=TaskResult(answer='done'))
+        await repository.release_browser(execution.lease, profile_saved=True)
+    def snapshot():
+        with sqlite3.connect(repository.path) as database:
+            return tuple(database.iterdump()), dict(repository._requests)
+    before = snapshot()
+    missing_errors = []
+    for profile_id, expected in ((foreign_profile.profile_id, 'not_found'), ('missing_profile', 'not_found'), (other_owned.profile_id, 'conflict')):
+        with pytest.raises(TaskFault) as failure:
+            await repository.admit(owner, TaskStart(task='followup', session_id=first.session_id, profile_id=profile_id, idempotency_key='pair-retry-001'))
+        assert failure.value.error.code == expected
+        if expected == 'not_found':
+            missing_errors.append(failure.value.error.model_dump())
+        assert snapshot() == before  # all capacity/lease/session/idempotency state
+    assert missing_errors[0] == missing_errors[1]
+    if active:
+        await repository.transition(execution.lease, execution.revision, TaskState.COMPLETED, result=TaskResult(answer='done'))
+        await repository.release_browser(execution.lease, profile_saved=True)
+    # Reuse the rejected key: it must not be bound by any failed admission.
+    matching = await repository.admit(owner, TaskStart(task='followup', session_id=first.session_id, profile_id=first.profile_id, idempotency_key='pair-retry-001'))
+    assert matching.session_id == first.session_id and matching.profile_id == first.profile_id
+    with sqlite3.connect(repository.path) as database:
+        assert database.execute('SELECT count(*) FROM bt_sessions').fetchone()[0] == 1
+        assert database.execute('SELECT sum(reserved) FROM bt_tasks').fetchone()[0] == 1
+        assert database.execute('SELECT generation FROM bt_profiles WHERE id=?', (first.profile_id,)).fetchone()[0] == execution.lease.generation + 1
