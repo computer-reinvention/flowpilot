@@ -304,3 +304,74 @@ async def test_failed_stop_never_claims_cancelled_or_releases_saved_profile(tmp_
     await executor.execute(request)
     assert bindings.control.finish.call_args.args[2] == TaskState.INTERRUPTED
     assert bindings.control.release_browser.call_args.kwargs == {'profile_saved': False}
+
+
+@pytest.mark.asyncio
+async def test_release_human_without_viewer_is_idempotent_and_lease_bound(tmp_path):
+    from backend.task_contracts import Interaction, TaskFault
+    from backend.tasks.executor import Active
+    request = execution()
+    bindings = bindings_double()
+    runtime = ConversationRuntime(TaskSettings(state_dir=tmp_path), request, bindings)
+    runtime.pause = Interaction(interaction_id='pause', generation=1, kind='browser', message='Help',
+                                expires_at=datetime.now(timezone.utc) + timedelta(seconds=30))
+    executor = Executor(TaskSettings(state_dir=tmp_path))
+    executor.active[executor._key(request.lease)] = Active(request, runtime)
+    await executor.release_human(request.lease, 'pause', 1)
+    await executor.release_human(request.lease, 'pause', 1)
+    assert runtime.human_fenced
+    bindings.control.get.assert_not_awaited()  # No writer acquired merely to drain.
+    with pytest.raises(TaskFault):
+        await executor.browser(request.lease, 'pause', 1)
+    with pytest.raises(TaskFault):
+        await executor.release_human(request.lease.model_copy(update={'generation': 2}), 'pause', 1)
+    with pytest.raises(TaskFault):
+        await executor.release_human(request.lease, 'pause', 2)
+
+
+@pytest.mark.asyncio
+async def test_release_human_drains_inflight_input_before_api_resume(tmp_path):
+    from backend.task_contracts import BrowserInput, Interaction, TaskFault
+    runtime = ConversationRuntime(TaskSettings(state_dir=tmp_path), execution(), bindings_double())
+    interaction = Interaction(interaction_id='pause', generation=1, kind='browser', message='Help',
+                              expires_at=datetime.now(timezone.utc) + timedelta(seconds=30))
+    runtime.pause = interaction
+    runtime.control.get.side_effect = None
+    runtime.control.get.return_value = SimpleNamespace(state=TaskState.WAITING_FOR_BROWSER, interaction=interaction)
+    entered, proceed = asyncio.Event(), asyncio.Event()
+    async def down(key):
+        entered.set()
+        await proceed.wait()
+    page = SimpleNamespace(keyboard=SimpleNamespace(down=AsyncMock(side_effect=down), up=AsyncMock()))
+    runtime.page = lambda: page
+    handle = await runtime.browser('pause', 1)
+    writing = asyncio.create_task(handle.send_input(BrowserInput(kind='keydown', key='Shift')))
+    await entered.wait()
+    draining = asyncio.create_task(runtime.release_human('pause', 1))
+    await asyncio.sleep(0)
+    assert not draining.done()
+    with pytest.raises(TaskFault):
+        await runtime.browser('pause', 1)
+    proceed.set()
+    await asyncio.gather(writing, draining)
+    assert runtime.pause == interaction and not runtime.keys
+    page.keyboard.up.assert_awaited_once_with('Shift')
+    await handle.release()
+    await runtime.release_human('pause', 1)
+    page.keyboard.up.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_release_failure_cannot_authorize_resume(tmp_path):
+    from backend.task_contracts import Interaction, TaskFault
+    runtime = ConversationRuntime(TaskSettings(state_dir=tmp_path), execution(), bindings_double())
+    runtime.pause = Interaction(interaction_id='pause', generation=1, kind='browser', message='Help',
+                                expires_at=datetime.now(timezone.utc) + timedelta(seconds=30))
+    page = SimpleNamespace(keyboard=SimpleNamespace(up=AsyncMock(side_effect=RuntimeError('Transport failed'))))
+    runtime.page = lambda: page
+    runtime.keys.add('Shift')
+    with pytest.raises(RuntimeError, match='Transport failed'):
+        await runtime.release_human('pause', 1)
+    assert runtime.human_fenced and runtime.pause and runtime.keys == {'Shift'}
+    with pytest.raises(TaskFault):
+        await runtime.browser('pause', 1)

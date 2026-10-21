@@ -183,6 +183,12 @@ class Executor:
             raise stale()
         return await active.runtime.browser(interaction_id, generation)
 
+    async def release_human(self, lease, interaction_id, generation):
+        active = self.active.get(self._key(lease))
+        if active is None or active.execution.lease != lease:
+            raise stale()
+        await active.runtime.release_human(interaction_id, generation)
+
     async def recover(self, leases):
         # Never restore an agent stack or launch a model. Stop only task-labelled
         # resources. Preserve archives and quarantine uncertain live profiles.

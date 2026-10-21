@@ -8,7 +8,7 @@ from ..task_contracts import (
     BrowserMetadata, ErrorCode, InputField, Interaction, InteractionKind, PollRequest, TaskFault,
     TaskState, task_error,
 )
-from .browser_adapter import create_browser
+from .browser_adapter import create_browser, mark_recovery
 from .memory import ProfileStore
 
 
@@ -23,9 +23,11 @@ class HumanBrowser:
 
     async def _check(self):
         r = self.runtime
-        if self.released or r.fenced or r.pause != self.interaction:
+        if self.released or r.fenced or r.human_fenced or r.pause != self.interaction:
             raise stale()
         view = await r.control.get(r.lease.principal, r.lease.task_id, PollRequest())
+        if self.released or r.fenced or r.human_fenced or r.pause != self.interaction:
+            raise stale()
         if view.state != TaskState.WAITING_FOR_BROWSER or view.interaction != self.interaction:
             raise stale()
         if self.interaction.expires_at <= datetime.now(timezone.utc):
@@ -114,6 +116,7 @@ class ConversationRuntime:
         self.directory = None
         self.pause = None
         self.pause_generation = 0
+        self.human_fenced = False
         self.writer = asyncio.Lock()
         self.stop_lock = asyncio.Lock()
         self.writers_stopped = False
@@ -191,6 +194,7 @@ class ConversationRuntime:
         if kind == InteractionKind.BROWSER:
             await self._select_page()
         self.pause = interaction
+        self.human_fenced = False
         try:
             remaining = max(0, (interaction.expires_at - now).total_seconds())
             response = await asyncio.wait_for(self.control.wait_for_interaction(self.lease, interaction), remaining)
@@ -229,8 +233,25 @@ class ConversationRuntime:
             self.buttons.discard(button)
 
     async def resume(self):
+        self.human_fenced = True
         async with self.writer:
             self.pause = None
+            await self._release_inputs()
+            for handle in self.handles:
+                handle.released = True
+            self.handles.clear()
+
+    async def release_human(self, interaction_id, generation):
+        interaction = self.pause
+        if self.fenced or not interaction or (interaction.interaction_id, interaction.generation) != (interaction_id, generation):
+            raise stale()
+        # Fence before the first await: no existing/future handle can start a
+        # write while we wait for the current writer. Preserve pause identity so
+        # repeated valid drains (including no-viewer cases) remain idempotent.
+        self.human_fenced = True
+        async with self.writer:
+            if self.fenced or self.pause != interaction:
+                raise stale()
             await self._release_inputs()
             for handle in self.handles:
                 handle.released = True
@@ -294,7 +315,10 @@ class ConversationRuntime:
 
     def quarantine(self):
         if self.directory:
-            (self.directory / 'recovery-required').touch(mode=0o600)
+            container_id = None
+            if self.session and self.session.sandbox and self.session.sandbox.info:
+                container_id = self.session.sandbox.info['container_id']
+            mark_recovery(self.directory, self.settings, self.lease, container_id)
 
 
 def create_runtime(settings, execution, bindings):

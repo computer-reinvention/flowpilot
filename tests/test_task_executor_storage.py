@@ -49,6 +49,8 @@ def test_task_transport_has_no_host_publication(tmp_path):
     assert kwargs['mem_limit'] == '768m'
     assert kwargs['labels']['flowpilot-task'] == '1'
     assert kwargs['environment']['CHROME_AUTORESTART'] == 'false'
+    assert kwargs['log_config']['Type'] == 'json-file'
+    assert kwargs['log_config']['Config'] == {'max-size': '1m', 'max-file': '2'}
 
 
 def test_save_failure_preserves_archive_and_quarantines(tmp_path):
@@ -65,6 +67,10 @@ def test_save_failure_preserves_archive_and_quarantines(tmp_path):
         sandbox._close()
     assert sandbox.archive.read_bytes() == b'previous-good-archive'
     assert (tmp_path / 'recovery-required').exists()
+    import json
+    marker = json.loads((tmp_path / 'recovery-required').read_text())
+    assert marker['task_id'] == 't' and marker['lease_generation'] == 1
+    assert marker['container_id'] == 'container'
     container.stop.assert_called()
     container.remove.assert_not_called()
 

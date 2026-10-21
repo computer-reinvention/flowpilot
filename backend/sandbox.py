@@ -83,6 +83,8 @@ class SandboxManager:
                     "user-id": user_id,
                     **(task_labels or {}),
                 },
+                **({'log_config': docker.types.LogConfig(type='json-file',
+                        config={'max-size': '1m', 'max-file': '2'})} if task_labels else {}),
                 # Resource limits
                 mem_limit=f"{settings.sandbox_memory_mb}m" if settings else "1g",
                 cpu_quota=int(settings.sandbox_cpu_cores * 100000) if settings else 100000,

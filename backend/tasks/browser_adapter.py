@@ -2,6 +2,8 @@
 import asyncio
 import hashlib
 import ipaddress
+import json
+import os
 import tarfile
 
 from ..repl_sandbox import ChatSandbox
@@ -10,6 +12,18 @@ from ..sandbox import CDP_CONTAINER_PORT, SANDBOX_NETWORK
 
 def host_key(settings):
     return hashlib.sha256((str(settings.state_dir.resolve()) + '\0' + SANDBOX_NETWORK).encode()).hexdigest()
+
+
+def mark_recovery(directory, settings, lease, container_id=None):
+    marker = directory / 'recovery-required'
+    try:
+        fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        return
+    with os.fdopen(fd, 'w') as output:
+        json.dump({'task_host': host_key(settings), 'task_id': lease.task_id,
+                   'session_id': lease.session_id, 'lease_generation': lease.generation,
+                   'container_id': container_id}, output)
 
 
 class TaskSandbox(ChatSandbox):
@@ -65,7 +79,8 @@ class TaskSandbox(ChatSandbox):
         try:
             super()._close()
         except Exception:
-            (self.directory / 'recovery-required').touch(mode=0o600)
+            mark_recovery(self.directory, self.settings, self.lease,
+                          self.info['container_id'] if self.info else None)
             raise
 
     async def close(self):

@@ -14,7 +14,7 @@ import sys
 import os
 import signal
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from backend.task_contracts import Principal
 from backend.task_ports import Lease
@@ -46,6 +46,8 @@ async def conversation_smoke(settings):
                 await dispatch('save_reflex', {'name': 'increment', 'description': 'Synthetic mutation', 'script': script})
                 await dispatch('human_help', {'reason': 'Synthetic viewport metadata check'})
                 await dispatch('observe', {})
+                await dispatch('human_help', {'reason': 'Synthetic next-pause drain check'})
+                await dispatch('observe', {})
             else:
                 answer = await dispatch('run_reflex', {'name': 'increment'})
                 assert not answer.get('error')
@@ -59,8 +61,9 @@ async def conversation_smoke(settings):
                               idempotency_key=f'conversation-{turn}'), admitted_at=now,
                               deadline=now + timedelta(seconds=120))
         runtime = ConversationRuntime(settings, execution, bindings)
+        prior_handles = []
         async def assist(lease, interaction):
-            from backend.task_contracts import InteractionResponse, TaskState
+            from backend.task_contracts import BrowserInput, InteractionResponse, TaskFault, TaskState
             bindings.control.get.side_effect = None
             bindings.control.get.return_value = SimpleNamespace(state=TaskState.WAITING_FOR_BROWSER,
                                                                  interaction=interaction)
@@ -74,7 +77,42 @@ async def conversation_smoke(settings):
             frame = await anext(frames)
             assert frame.startswith(b'\xff\xd8')
             await frames.aclose()
+            page = runtime._human_page
+            await page.evaluate('window.syntheticKeyUps=[]; document.addEventListener("keyup", e => syntheticKeyUps.push(e.key))')
+            if not prior_handles:
+                entered, proceed = asyncio.Event(), asyncio.Event()
+                original_down = page.keyboard.down
+                async def delayed_down(key):
+                    entered.set()
+                    await proceed.wait()
+                    await original_down(key)
+                with patch.object(page.keyboard, 'down', AsyncMock(side_effect=delayed_down)):
+                    writing = asyncio.create_task(handle.send_input(BrowserInput(kind='keydown', key='Shift')))
+                    await entered.wait()
+                    draining = asyncio.create_task(runtime.release_human(interaction.interaction_id, interaction.generation))
+                    await asyncio.sleep(0)
+                    assert not draining.done()
+                    try:
+                        await runtime.browser(interaction.interaction_id, interaction.generation)
+                    except TaskFault:
+                        pass
+                    else:
+                        raise AssertionError('API drain allowed a future human handle')
+                    proceed.set()
+                    await asyncio.gather(writing, draining)
+            else:
+                await handle.send_input(BrowserInput(kind='keydown', key='Shift'))
+                await prior_handles[-1].release()
+                assert runtime.keys == {'Shift'}  # Old task/pause cannot release this writer.
+                await handle.release()  # Viewer's own release before direct API response.
+            await runtime.release_human(interaction.interaction_id, interaction.generation)
+            await runtime.release_human(interaction.interaction_id, interaction.generation)
+            await handle.release()
+            assert not runtime.keys
+            assert 'Shift' in await page.evaluate('window.syntheticKeyUps')
+            prior_handles.append(handle)
             print('LANE002_METADATA_EVIDENCE=' + metadata.model_dump_json(), flush=True)
+            print(f'LANE002_HUMAN_DRAIN_EVIDENCE=pause-{interaction.generation},fenced,inflight-drained,Shift-released,idempotent', flush=True)
             return InteractionResponse(kind='browser', generation=interaction.generation,
                                        idempotency_key='synthetic-help1', browser_resolved=True)
         bindings.control.wait_for_interaction.side_effect = assist
@@ -314,6 +352,8 @@ async def main():
                     container.reload()
                     assert not container.attrs['HostConfig']['PortBindings']
                     assert container.attrs['HostConfig']['PidsLimit'] == 256
+                    assert container.attrs['HostConfig']['LogConfig'] == {
+                        'Type': 'json-file', 'Config': {'max-size': '1m', 'max-file': '2'}}
                     browser = await playwright.chromium.connect_over_cdp(websocket)
                     context = browser.contexts[0]
                     page = await context.new_page()
