@@ -175,3 +175,91 @@ async def test_generation_exception_canaries_do_not_escape_callback_or_logs(monk
     assert outputs[0].get('error')
     assert CANARY not in json.dumps([env.events, outputs, env.db.update_flow.await_args_list], default=str) + caplog.text
     env.db.upsert_reflex.assert_not_awaited()
+
+
+@pytest.mark.parametrize('failure', ['save', 'lookup', 'input_schema'])
+async def test_entire_reflex_callback_redacts_database_and_schema_failures(monkeypatch, fixture_browser, failure, caplog):
+    env = setup_explorer(monkeypatch, fixture_browser)
+    monkeypatch.setattr(explorer, 'generate_program', AsyncMock(return_value='async()=>true'))
+    if failure == 'save':
+        env.db.upsert_reflex.side_effect = RuntimeError(CANARY)
+    elif failure == 'lookup':
+        env.db.get_reflex.side_effect = RuntimeError(CANARY)
+    else:
+        env.flow.inputs = json.dumps([{'name': CANARY, 'type': CANARY, 'placeholder': CANARY}, None])
+    outputs = []
+    async def agent(task, system, tools, dispatch, **kwargs):
+        await dispatch('observe', {})
+        if failure == 'save':
+            outputs.append(await dispatch('generate_and_save_reflex', dict(name=CANARY, description=CANARY)))
+        else:
+            outputs.append(await dispatch('test_reflex', {'name': CANARY}))
+        await dispatch('finish_exploration', {})
+    await env.run(agent)
+    assert outputs[0].get('error')
+    assert CANARY not in json.dumps([env.events, outputs, env.db.update_flow.await_args_list], default=str) + caplog.text
+    assert env.final_state == [0, 0]
+
+
+async def test_native_browser_use_registry_callbacks_retain_local_compatibility(monkeypatch, fixture_browser):
+    env = setup_explorer(monkeypatch, fixture_browser, inputs=json.dumps([
+        dict(name='secret', type='text', placeholder=CANARY)]), script='async(inputs)=>inputs.secret')
+    monkeypatch.setenv('AGENT_DRIVER', 'browser-use')
+    generated = []
+    async def generate(llm, context):
+        assert action_observation.get() is None
+        assert 'Total $5' in context['elements'] and 'fixture-secret' not in context['elements']
+        generated.append(context)
+        return 'async()=>true'
+    monkeypatch.setattr(explorer, 'generate_program', generate)
+    outputs = []
+    class Agent:
+        def __init__(self, **kwargs):
+            self.tools = kwargs['tools']
+
+        async def run(self, **_):
+            # Actual browser-use normalized action wrappers/parameter models,
+            # not the unwrapped Pi callback path.
+            outputs.append(await self.tools.registry.execute_action(
+                'generate_and_save_reflex', {'name': 'stage', 'description': CANARY}, browser_session=env.browser))
+            outputs.append(await self.tools.registry.execute_action(
+                'test_reflex', {'name': 'stage'}, browser_session=env.browser))
+    monkeypatch.setattr(explorer, 'Agent', Agent)
+    await env.run(AsyncMock())
+    assert len(generated) == 1
+    assert all(not result.error for result in outputs)
+    assert CANARY not in json.dumps([env.events, [r.model_dump() for r in outputs]], default=str)
+    env.db.upsert_reflex.assert_awaited_once()
+
+
+async def test_outer_exploration_error_persistence_does_not_echo_canary(monkeypatch, fixture_browser):
+    env = setup_explorer(monkeypatch, fixture_browser)
+    async def agent(*_a, **_k):
+        raise RuntimeError(CANARY)
+    with pytest.raises(RuntimeError) as exc:
+        await env.run(agent)
+    assert CANARY not in str(exc.value)
+    assert CANARY not in json.dumps(env.db.update_flow.await_args_list, default=str)
+    assert any(call.args[1].get('exploration_error') == 'Exploration failed; details withheld'
+               for call in env.db.update_flow.await_args_list)
+
+
+async def test_successful_generation_trace_and_summary_omit_entire_prompt_and_script(monkeypatch, fixture_browser):
+    env = setup_explorer(monkeypatch, fixture_browser,
+                         inputs=json.dumps([dict(name='secret', type='text', placeholder=CANARY)]))
+    script = 'async()=>"' + CANARY + '"'
+    async def generate(llm, context):
+        assert CANARY in json.dumps(context)
+        return script
+    monkeypatch.setattr(explorer, 'generate_program', generate)
+    outputs = []
+    async def agent(task, system, tools, dispatch, **kwargs):
+        await dispatch('observe', {})
+        outputs.append(await dispatch('generate_and_save_reflex',
+                                      dict(name=CANARY, description=CANARY, tags=[CANARY])))
+        await dispatch('finish_exploration', {})
+    await env.run(agent)
+    assert not outputs[0].get('error')
+    assert CANARY not in json.dumps([env.events, outputs])
+    # Script memory is the explicitly requested output, unlike safe telemetry.
+    assert env.db.upsert_reflex.await_args.kwargs['script'] == script
