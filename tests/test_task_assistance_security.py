@@ -303,12 +303,20 @@ async def test_shared_response_conflict_is_not_a_second_viewer_resolution():
         await host.shutdown()
 
 
-def test_stream_binary_jpeg_and_expiry_while_already_connected():
+@pytest.mark.parametrize("condition", ["revoked", "expired", "generation", "running"])
+def test_stream_binary_jpeg_and_expiry_while_already_connected(condition):
     host, bindings, handle, state = scenario()
 
     async def frames():
         yield b"\xff\xd8synthetic-jpeg"
-        state["revoked"] = True
+        if condition == "revoked":
+            state["revoked"] = True
+        elif condition == "expired":
+            state["binding"] = state["binding"].model_copy(update={"expires_at": datetime.now(timezone.utc) - timedelta(seconds=1)})
+        elif condition == "generation":
+            state["view"] = state["view"].model_copy(update={"interaction": state["view"].interaction.model_copy(update={"generation": 4})})
+        else:
+            state["view"] = state["view"].model_copy(update={"state": TaskState.RUNNING, "interaction": None})
         await asyncio.sleep(10)
 
     handle.frames.side_effect = frames

@@ -168,10 +168,11 @@ class Assistance:
     async def _retire(self, binding):
         # Fence locally before I/O; failed revocation must never reopen this writer.
         self._revoked.add(binding.digest)
-        entry = self._handles.get(binding.digest)
-        if entry:
-            await entry[1].release()
-            self._handles.pop(binding.digest, None)
+        entries = [(other, handle) for other, handle in self._handles.values() if other.lease == binding.lease]
+        self._revoked.update(other.digest for other, _ in entries)
+        for other, handle in entries:
+            await handle.release()
+            self._handles.pop(other.digest, None)
         await self.bindings.control.revoke_capabilities(binding.lease)
 
     async def _watch(self):
