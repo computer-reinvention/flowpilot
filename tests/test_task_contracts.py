@@ -186,6 +186,24 @@ async def test_port_doubles_are_independent_and_strict():
     assert observation_fixture().readiness == "ready"
 
 
+async def test_assistance_ports_keep_execution_generation_out_of_wire_views():
+    principal = wire.Principal(account_id="account_demo")
+    request = wire.AssistanceRequest(interaction_id="browser_demo", generation=9)
+    lease = Lease(principal=principal, task_id="task_demo", session_id="session_demo", profile_id="profile_demo", generation=3)
+    bindings = bindings_double()
+    bindings.control.assistance_lease.side_effect = None
+    bindings.control.assistance_lease.return_value = lease
+    assert (await bindings.control.assistance_lease(principal, "task_demo", request)).generation == 3
+    assert "generation" not in wire.TaskView.model_fields
+    browser = browser_double()
+    browser.metadata.side_effect = None
+    browser.metadata.return_value = wire.BrowserMetadata(url="https://example.test/form", viewport_width=1280, viewport_height=720)
+    metadata = await browser.metadata()
+    assert metadata.viewport_width == 1280
+    with pytest.raises(ValidationError):
+        wire.BrowserMetadata(url="https://example.test/form", viewport_width=0, viewport_height=720)
+
+
 def stub_router(bindings):
     router = APIRouter()
 

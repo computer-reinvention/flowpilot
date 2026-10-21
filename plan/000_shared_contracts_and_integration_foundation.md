@@ -90,6 +90,15 @@ All follow-on files own their dedicated tests. No two streams edit the same exis
 
 Commit incrementally at logical, verified checkpoints, not only at the end of a lane. Each parallel implementation agent must commit its work frequently in its own branch/worktree, stage only its intended files, and include verification evidence and outstanding limitations in its handoff. Never commit credentials, profiles, traces or unrelated changes. Coordinate shared-contract changes with the integrator before editing them; do not silently fork the protocol.
 
+### Approved additive port amendment — assistance integration
+
+Lane003 identified two missing internal seams. The integrator owns this additive amendment; public v1 task/assistance JSON is unchanged:
+
+- `TaskRepository.assistance_lease(principal, task_id, request: AssistanceRequest) -> Lease` atomically authorizes the current owned browser pause and returns its execution lease. Task state, interaction ID/generation/expiry and execution generation must be checked together. `TaskControl.assistance_lease` delegates this authority. Capability persistence rechecks the same binding at commit to fence cancel/resolve races. Execution generation remains absent from ordinary `TaskView`; it must never be guessed from pause generation.
+- `BrowserHandle.metadata() -> BrowserMetadata` supplies the current page URL and viewport dimensions. `AssistanceState` reuses these exact fields plus the current interaction; no made-up URL or cached cross-task viewport is acceptable.
+
+Affected owners: 001 implements authorized lookup/persistence checks, 002 supplies browser metadata, 003 wires public mint/state, and 006 verifies real-service expiry/race/ownership behavior. Peer doubles inherit these methods through autospec. Apply the integrator's amendment commit before continuing those lanes; do not independently edit the shared contracts.
+
 ## Foundation completion gate
 
 - [x] Wire schemas, transitions, errors, settings and all port signatures are executable and versioned.
