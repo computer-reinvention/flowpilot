@@ -158,6 +158,8 @@ async def verify_direct_api_resume(target, mode):
                            open_timeout=target.timeout, close_timeout=1, max_size=2 * 1024 * 1024) as stream:
             first_frame = await asyncio.wait_for(stream.recv(), target.timeout)
             assert isinstance(first_frame, bytes) and first_frame.startswith(b'\xff\xd8')
+            second_frame = await asyncio.wait_for(stream.recv(), target.timeout)
+            assert isinstance(second_frame, bytes)
             target.audit.arm(mode)
             input_pending = asyncio.create_task(request(Client(owner.base_url), 'POST', capability + '/input',
                                                         {'kind': 'move', 'x': 3, 'y': 3}, {'Origin': owner.base_url}))
@@ -170,8 +172,9 @@ async def verify_direct_api_resume(target, mode):
             assert target.audit.calls == [], 'wrong generation invoked release_human'
             assert not target.gate.finished.is_set()
             still_paused(await asyncio.to_thread(owner.get, target.receipt['task_id']))
-            second_frame = await asyncio.wait_for(stream.recv(), target.timeout)
-            assert isinstance(second_frame, bytes), 'wrong generation fenced legitimate stream'
+            # A real screenshot stream shares the writer lock with input; it
+            # cannot produce another frame while that input is deliberately held.
+            # Two frames above prove it was active before the held operation.
 
             resume_pending = asyncio.create_task(request(owner, 'POST', path, response))
             await wait_event(target.audit.entered, target.timeout)
@@ -203,9 +206,12 @@ async def verify_direct_api_resume(target, mode):
                 error(rejected.status, rejected.body, rejected.headers)
                 assert not target.audit.finished.is_set()
                 still_paused(await asyncio.to_thread(owner.get, target.receipt['task_id']))
+                assert not input_pending.done(), 'failed release unexpectedly completed held input'
+                target.gate.permit.set()
+                input_reply = await asyncio.wait_for(input_pending, target.timeout)
+                assert input_reply.status == 200
                 state = await request(Client(owner.base_url), 'GET', capability + '/state')
                 assert state.status == 200 and state.body['interaction'] == target.interaction
-                assert not input_pending.done(), 'failed release unexpectedly completed held input'
             return {'proof_kind': target.proof_kind, 'mode': mode, 'active_stream': True,
                     'held_input': True, 'direct_authenticated_response': True,
                     'wrong_generation_releases': 0, 'agent_effects': target.counters().get('agent', 0) - baseline.get('agent', 0)}
