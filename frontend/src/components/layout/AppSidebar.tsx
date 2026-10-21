@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/sidebar";
 import type { Run, Flow } from "@/lib/types";
 
-export type ActiveSection = "flows" | "runs" | "sessions" | "profiles" | "api-keys" | "webhooks" | "settings";
+export type ActiveSection = "browser-tasks" | "flows" | "runs" | "sessions" | "profiles" | "api-keys" | "webhooks" | "settings";
 
 interface AppSidebarProps {
   activeSection: ActiveSection;
@@ -35,6 +35,7 @@ interface AppSidebarProps {
 }
 
 const NAV_ITEMS: { key: ActiveSection; label: string; icon: typeof Workflow }[] = [
+  { key: "browser-tasks", label: "Browser tasks", icon: Workflow },
   { key: "flows",    label: "Flows",    icon: Workflow },
   { key: "runs",     label: "Runs",     icon: History  },
   { key: "profiles", label: "Profiles",      icon: UserCircle },

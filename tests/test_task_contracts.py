@@ -155,6 +155,8 @@ def test_polling_error_policy_and_profile_paths():
 
 def test_settings_are_typed_bounded_and_disabled_by_default():
     assert TaskSettings.from_env({}).enabled is False
+    assert TaskSettings.from_env({}).sandbox_pids == 1024
+    assert TaskSettings.from_env({"FLOWPILOT_TASKS_SANDBOX_PIDS": "192"}).sandbox_pids == 192
     assert TaskSettings.from_env({"PROFILES_DIR": "/synthetic/profiles"}).state_dir == Path("/synthetic/profiles/browser-tasks")
     assert TaskSettings.from_env({"FLOWPILOT_TASKS_ENABLED": "true", "FLOWPILOT_TASKS_MAX_ACTIVE_BROWSERS": "4"}).max_active_browsers == 4
     for overrides in ({"max_active_browsers": 0}, {"max_account_browsers": 4}, {"shutdown_seconds": 1}, {"assistance_ttl_seconds": 601}, {"readiness_window_seconds": 20}):
@@ -186,6 +188,28 @@ async def test_port_doubles_are_independent_and_strict():
     assert observation_fixture().readiness == "ready"
 
 
+async def test_assistance_ports_keep_execution_generation_out_of_wire_views():
+    principal = wire.Principal(account_id="account_demo")
+    request = wire.AssistanceRequest(interaction_id="browser_demo", generation=9)
+    lease = Lease(principal=principal, task_id="task_demo", session_id="session_demo", profile_id="profile_demo", generation=3)
+    bindings = bindings_double()
+    bindings.control.assistance_lease.side_effect = None
+    bindings.control.assistance_lease.return_value = lease
+    assert (await bindings.control.assistance_lease(principal, "task_demo", request)).generation == 3
+    with pytest.raises(NotImplementedError):
+        await bindings.executor.release_human(lease, "browser_demo", 9)
+    with pytest.raises(TypeError):
+        await bindings.executor.release_human(lease)
+    assert "generation" not in wire.TaskView.model_fields
+    browser = browser_double()
+    browser.metadata.side_effect = None
+    browser.metadata.return_value = wire.BrowserMetadata(url="https://example.test/form", viewport_width=1280, viewport_height=720)
+    metadata = await browser.metadata()
+    assert metadata.viewport_width == 1280
+    with pytest.raises(ValidationError):
+        wire.BrowserMetadata(url="https://example.test/form", viewport_width=0, viewport_height=720)
+
+
 def stub_router(bindings):
     router = APIRouter()
 
@@ -215,7 +239,15 @@ async def test_disabled_surface_is_not_legacy_flow_or_frontend():
         install_task_api(app)
 
 
-async def test_enabled_missing_components_fail_readiness_and_admission():
+async def test_enabled_missing_components_fail_readiness_and_admission(monkeypatch):
+    real_import = importlib.import_module
+
+    def missing_executor(module):
+        if module == "backend.tasks.executor":
+            raise ModuleNotFoundError(name=module)
+        return real_import(module)
+
+    monkeypatch.setattr("backend.task_bootstrap.importlib.import_module", missing_executor)
     app = FastAPI()
     host = install_task_api(app, TaskSettings(enabled=True))
     await host.startup()

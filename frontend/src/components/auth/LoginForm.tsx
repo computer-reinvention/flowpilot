@@ -30,6 +30,7 @@ export function LoginForm({ onLogin, onSwitchToSignup, error }: LoginFormProps) 
     } catch {
       // error handled by parent
     } finally {
+      setPassword("");
       setSubmitting(false);
     }
   }

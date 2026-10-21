@@ -24,7 +24,7 @@ class TaskSettings(Contract):
     assistance_ttl_seconds: int = Field(default=300, ge=1, le=600)
     sandbox_memory_mb: int = Field(default=1_024, ge=256, le=16_384)
     sandbox_cpu_cores: float = Field(default=1, gt=0, le=32, allow_inf_nan=False)
-    sandbox_pids: int = Field(default=256, ge=128, le=4_096)
+    sandbox_pids: int = Field(default=1_024, ge=128, le=4_096)
     sandbox_shm_mb: int = Field(default=256, ge=64, le=2_048)
     readiness_timeout_seconds: float = Field(default=10, gt=0, le=60, allow_inf_nan=False)
     readiness_window_seconds: float = Field(default=0.5, gt=0, le=5, allow_inf_nan=False)

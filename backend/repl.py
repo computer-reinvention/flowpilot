@@ -69,9 +69,14 @@ class BrowserSession:
     """
     def __init__(self, user, state_dir=Path('.repl-state'), headless=True, human_help=None, verbose=True,
                  on_handoff=None, on_question=None, browser_mode='sandbox', *,
-                 handoff_factory=None, sandbox_factory=None, browser_factory=None, observation_policy=None):
+                 handoff_factory=None, sandbox_factory=None, browser_factory=None, observation_policy=None,
+                 store=None, hosted=False):
         self.user = user
-        self.store = UserStore(Path(state_dir), user)
+        self.store = store if store is not None else UserStore(Path(state_dir), user)
+        self.hosted = hosted
+        if hosted and (handoff_factory is None or on_question is None or observation_policy is None):
+            self.store.close()
+            raise ValueError('Hosted sessions require interaction and observation ports')
         self.headless = headless
         self.human_callback = human_help
         self.verbose = verbose
@@ -160,13 +165,14 @@ class BrowserSession:
             raise RuntimeError('Use async with BrowserSession(...) before ask()')
         if self._asking:
             raise RuntimeError('This session already has an active request')
-        inputs = inputs or {}
+        inputs = {} if inputs is None else inputs
         stored_inputs = json.dumps(inputs)
         started = time.monotonic()
         metrics = {'model_turns': 0, 'tool_calls': 0, 'reused': 0, 'saved': 0,
                    'replay_failures': 0, 'human_seconds': 0.0}
         ask_task = asyncio.current_task()
         human_cancelled = False
+        private_inputs = False
 
         async def handoff(*args, **kwargs):
             from .handoff import HandoffCancelled
@@ -190,7 +196,13 @@ class BrowserSession:
 
         async def domain():
             page = await self.browser.must_get_current_page()
-            return urlparse(await page.get_url()).netloc.lower()
+            parsed = urlparse(await page.get_url())
+            if self.hosted:
+                host = (parsed.hostname or '').lower()
+                if ':' in host:
+                    host = '[' + host + ']'
+                return host + (f':{parsed.port}' if parsed.port else '')
+            return parsed.netloc.lower()
 
         async def save(name, description, script, tags=None, pause_after_auth=False):
             site = await domain()
@@ -198,11 +210,25 @@ class BrowserSession:
                 return ActionResult(error='Navigate to the website before saving its script')
             if len(script) > 60000 or not script.lstrip().startswith('async'):
                 return ActionResult(error='Expected a bounded async arrow function')
+            if self.hosted:
+                from .tasks.memory import input_atoms
+                if private_inputs:
+                    return ActionResult(error='Save parameterized scripts before collecting private transient inputs')
+                # Known task/interaction inputs must remain parameterized, not
+                # become credentials embedded in durable personal scripts.
+                metadata = json.dumps([name, description, script, tags])
+                if any(v in metadata for v in input_atoms(inputs)):
+                    return ActionResult(error='Parameterize input values before saving scripts')
+                if len(name) > 128 or len(description) > 2000 or len(tags or []) > 32 or len(json.dumps(tags)) > 4000:
+                    return ActionResult(error='Script metadata exceeds persistence bounds')
             self.store.db.execute('''INSERT INTO reflexes(domain,name,description,script,pause_after,tags) VALUES(?,?,?,?,?,?)
                 ON CONFLICT(domain,name) DO UPDATE SET description=excluded.description,script=excluded.script,
                 pause_after=excluded.pause_after,tags=excluded.tags''',
                 (site, name, description, script, 'auth' if pause_after_auth else None, json.dumps(tags or [])))
             self.store.db.commit()
+            if self.hosted:
+                self.store.db.execute('DELETE FROM reflexes WHERE rowid NOT IN (SELECT rowid FROM reflexes ORDER BY rowid DESC LIMIT 100)')
+                self.store.db.commit()
             metrics['saved'] += 1
             return ActionResult(extracted_content=f'Saved {site}/{name}')
 
@@ -217,6 +243,10 @@ class BrowserSession:
             self.store.db.execute(f'UPDATE reflexes SET {column}={column}+1 WHERE domain=? AND name=?', (site, name))
             self.store.db.commit()
             metrics['reused' if ok else 'replay_failures'] += 1
+            if self.hosted and not ok and 'NEEDS_HUMAN' not in detail and 'NEEDS_AUTH' not in detail:
+                # A failed script may already have submitted or mutated state.
+                # Automatic full-script repair/retry is not safe in a hosted task.
+                return ActionResult(error=detail + '\nEffects may be partial. Observe current state; repair only remaining work and save the corrected script for a future explicit task. Do not replay this stage automatically.')
             if not ok and 'NEEDS_HUMAN' not in detail and 'NEEDS_AUTH' not in detail:
                 from .runner import _repair_reflex
                 from .llm import get_llm
@@ -226,6 +256,12 @@ class BrowserSession:
                     entry_url='', browser_session=self.browser, llm=get_llm('fast'),
                     **({'observation_policy': self.observation_policy} if self.observation_policy is not None else {}))
                 if ok and fixed:
+                    if self.hosted:
+                        from .tasks.memory import input_atoms
+                        if private_inputs or any(v in fixed for v in input_atoms(inputs)):
+                            # The repaired script already ran, but it is not safe
+                            # to persist credential-bearing generated source.
+                            return ActionResult(extracted_content=detail)
                     # Keep scope captured before execution: submission may have
                     # navigated to another site. Preserve tags/pause metadata.
                     self.store.db.execute('UPDATE reflexes SET script=?,successes=successes+1 WHERE domain=? AND name=?',
@@ -255,6 +291,8 @@ class BrowserSession:
                 question = {'kind': kind, 'message': reason, 'fields': fields or []}
                 if self.on_question:
                     return await self.on_question(question)
+                if self.hosted:
+                    raise RuntimeError('Hosted execution cannot read stdin')
                 print(f'\nagent> {reason}', flush=True)
                 if kind == 'confirmation':
                     while True:
@@ -278,6 +316,7 @@ class BrowserSession:
                 metrics['human_seconds'] += time.monotonic() - pause
 
         async def request_input_values(fields_json: str):
+            nonlocal private_inputs
             try:
                 fields = json.loads(fields_json)
                 if not isinstance(fields, list) or not fields or any(
@@ -291,6 +330,7 @@ class BrowserSession:
                 return ActionResult(extracted_content='User handled this in the browser. Inspect current state and continue without repeating completed actions.')
             if not isinstance(response.get('values'), dict) or any(f['name'] not in response['values'] for f in fields):
                 return ActionResult(error='Response must contain values for all requested fields')
+            private_inputs = True
             inputs.update(response['values'])
             return ActionResult(extracted_content=json.dumps(response['values']))
 
@@ -331,9 +371,12 @@ class BrowserSession:
             metrics['wall_seconds'] = round(time.monotonic() - started, 2)
             metrics['agent_seconds'] = round(metrics['wall_seconds'] - metrics['human_seconds'], 2)
             metrics['human_seconds'] = round(metrics['human_seconds'], 2)
-            self.store.db.execute('INSERT INTO turns(task,inputs,result,metrics) VALUES(?,?,?,?)',
-                                 (request, stored_inputs, result or error, json.dumps(metrics)))
-            self.store.db.commit()
+            if hasattr(self.store, 'record_turn'):
+                self.store.record_turn(request, inputs, result or error, metrics, private_inputs=private_inputs)
+            else:
+                self.store.db.execute('INSERT INTO turns(task,inputs,result,metrics) VALUES(?,?,?,?)',
+                                     (request, stored_inputs, result or error, json.dumps(metrics)))
+                self.store.db.commit()
         return return_value
 
 

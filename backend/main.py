@@ -13,10 +13,10 @@ from typing import Awaitable, Callable
 
 import httpx
 import websockets
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Query
+from fastapi import FastAPI, APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from .sandbox import SandboxManager
 from .profile import ProfileManager
@@ -133,14 +133,28 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 
 class SignupRequest(BaseModel):
-    email: str
-    password: str
-    name: str
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=1, max_length=72, repr=False)
+    name: str = Field(min_length=1, max_length=200)
+
+    @field_validator('password')
+    @classmethod
+    def password_bytes(cls, value):
+        if len(value.encode()) > 72:
+            raise ValueError('Password exceeds byte limit')
+        return value
+
+    @field_validator('email', 'name')
+    @classmethod
+    def nonblank(cls, value):
+        if not value.strip():
+            raise ValueError('Field must not be blank')
+        return value
 
 
 class LoginRequest(BaseModel):
-    email: str
-    password: str
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=1, max_length=72, repr=False)
 
 
 class SandboxStartRequest(BaseModel):
@@ -185,7 +199,7 @@ class RunStartRequest(BaseModel):
 
 
 class ApiKeyCreateRequest(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=200)
 
 
 class WebhookCreateRequest(BaseModel):
@@ -224,7 +238,10 @@ async def health() -> dict:
 # Auth endpoints (no auth required)
 # ---------------------------------------------------------------------------
 
-@app.post("/api/auth/signup")
+account_router = APIRouter(route_class=auth.SensitiveRoute)
+
+
+@account_router.post("/api/auth/signup")
 async def signup(req: SignupRequest) -> dict:
     if not req.email or not req.password or not req.name:
         raise HTTPException(status_code=400, detail="email, password, and name are required")
@@ -232,13 +249,13 @@ async def signup(req: SignupRequest) -> dict:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     try:
         user = await auth.create_user(req.email, req.password, req.name)
-    except ValueError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=409, detail='Unable to create account') from None
     token = auth.create_token(user["id"])
     return {"token": token, "user": user}
 
 
-@app.post("/api/auth/login")
+@account_router.post("/api/auth/login")
 async def login(req: LoginRequest) -> dict:
     user = await auth.authenticate(req.email, req.password)
     if not user:
@@ -247,7 +264,7 @@ async def login(req: LoginRequest) -> dict:
     return {"token": token, "user": user}
 
 
-@app.get("/api/auth/me")
+@account_router.get("/api/auth/me")
 async def auth_me(user: dict = Depends(auth.get_current_user)) -> dict:
     return {"user": user}
 
@@ -1406,29 +1423,34 @@ async def profile_status(profile_name: str = "default", user: dict = Depends(aut
 # API Keys (v1)
 # ---------------------------------------------------------------------------
 
-@app.post("/api/v1/api-keys")
+@account_router.post("/api/v1/api-keys")
 async def api_key_create(req: ApiKeyCreateRequest, user: dict = Depends(auth.get_current_user)) -> dict:
+    from .task_settings import TaskSettings
+    auth.rate_limit('keys:' + user['id'], TaskSettings.from_env().login_requests_per_minute)
     if not req.name.strip():
         raise HTTPException(status_code=400, detail="Key name is required")
     plaintext = auth.generate_api_key()
-    key_hash = auth.hash_api_key(plaintext)
+    key_hash = await asyncio.to_thread(auth.hash_api_key, plaintext)
     key_prefix = plaintext[:12]  # "fp_live_XXXX" (12 chars)
     key_data = await platform_db.create_api_key(user["id"], req.name.strip(), key_hash, key_prefix)
     key_data["key"] = plaintext  # returned only once
     return key_data
 
 
-@app.get("/api/v1/api-keys")
+@account_router.get("/api/v1/api-keys")
 async def api_key_list(user: dict = Depends(auth.get_current_user)) -> list[dict]:
     return await platform_db.list_api_keys(user["id"])
 
 
-@app.delete("/api/v1/api-keys/{key_id}")
+@account_router.delete("/api/v1/api-keys/{key_id}")
 async def api_key_delete(key_id: str, user: dict = Depends(auth.get_current_user)) -> dict:
     deleted = await platform_db.delete_api_key(key_id, user["id"])
     if not deleted:
         raise HTTPException(status_code=404, detail="API key not found")
     return {"status": "deleted"}
+
+
+app.include_router(account_router)
 
 
 # ---------------------------------------------------------------------------

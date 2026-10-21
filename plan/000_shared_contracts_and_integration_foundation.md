@@ -90,6 +90,23 @@ All follow-on files own their dedicated tests. No two streams edit the same exis
 
 Commit incrementally at logical, verified checkpoints, not only at the end of a lane. Each parallel implementation agent must commit its work frequently in its own branch/worktree, stage only its intended files, and include verification evidence and outstanding limitations in its handoff. Never commit credentials, profiles, traces or unrelated changes. Coordinate shared-contract changes with the integrator before editing them; do not silently fork the protocol.
 
+### Approved additive port amendment — assistance integration
+
+Lane003 identified two missing internal seams. The integrator owns this additive amendment; public v1 task/assistance JSON is unchanged:
+
+- `TaskRepository.assistance_lease(principal, task_id, request: AssistanceRequest) -> Lease` atomically authorizes the current owned browser pause and returns its execution lease. Task state, interaction ID/generation/expiry and execution generation must be checked together. `TaskControl.assistance_lease` delegates this authority. Capability persistence rechecks the same binding at commit to fence cancel/resolve races. Execution generation remains absent from ordinary `TaskView`; it must never be guessed from pause generation.
+- `BrowserHandle.metadata() -> BrowserMetadata` supplies the current page URL and viewport dimensions. `AssistanceState` reuses these exact fields plus the current interaction; no made-up URL or cached cross-task viewport is acceptable.
+
+Affected owners: 001 implements authorized lookup/persistence checks, 002 supplies browser metadata, 003 wires public mint/state, and 006 verifies real-service expiry/race/ownership behavior. Peer doubles inherit these methods through autospec. Apply the integrator's amendment commit before continuing those lanes; do not independently edit the shared contracts.
+
+### Approved additive port amendment — direct API human-writer drain
+
+Cross-lane review found that the viewer drains its own inputs, but direct API responses need the same fence before waking agent execution. `TaskExecutor.release_human(lease, interaction_id, generation)` drains/fences every handle for that exact pause, releases held controls and rejects stale execution/pause generations. It never acquires a new writer merely to release it. Repeated release for the same valid pause, including a pause where no viewer was opened, is idempotent. Future writer acquisition/input for that pause remains fenced. Control validates the live response, waits for this method within its cancellation budget, then resolves/revokes and wakes the agent; timeout/failure does not approve or wake execution. Owners: 001 orchestration, 002 writer lifecycle, 006 real race verification. No public JSON changes.
+
+### Integration default correction — hosted browser PID budget
+
+Lane002's real Docker benchmark reproduced exhaustion at the former 256-PID browser limit after four synthetic tabs (`pids.events max=53`). The 1024-PID run opened 24 tabs with 530 current PIDs and no max events. The integrator therefore sets the hosted browser default to 1024 consistently in typed settings, Compose and the example environment. Overrides remain validated and bounded; this is workload evidence, not a universal browser capacity guarantee. The backend process and legacy/non-hosted sandbox defaults are separate and unchanged. Existing installations must remove an old explicit 256 override or deliberately size it themselves.
+
 ## Foundation completion gate
 
 - [x] Wire schemas, transitions, errors, settings and all port signatures are executable and versioned.
