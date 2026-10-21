@@ -194,6 +194,10 @@ async def test_assistance_ports_keep_execution_generation_out_of_wire_views():
     bindings.control.assistance_lease.side_effect = None
     bindings.control.assistance_lease.return_value = lease
     assert (await bindings.control.assistance_lease(principal, "task_demo", request)).generation == 3
+    with pytest.raises(NotImplementedError):
+        await bindings.executor.release_human(lease, "browser_demo", 9)
+    with pytest.raises(TypeError):
+        await bindings.executor.release_human(lease)
     assert "generation" not in wire.TaskView.model_fields
     browser = browser_double()
     browser.metadata.side_effect = None
@@ -233,7 +237,15 @@ async def test_disabled_surface_is_not_legacy_flow_or_frontend():
         install_task_api(app)
 
 
-async def test_enabled_missing_components_fail_readiness_and_admission():
+async def test_enabled_missing_components_fail_readiness_and_admission(monkeypatch):
+    real_import = importlib.import_module
+
+    def missing_executor(module):
+        if module == "backend.tasks.executor":
+            raise ModuleNotFoundError(name=module)
+        return real_import(module)
+
+    monkeypatch.setattr("backend.task_bootstrap.importlib.import_module", missing_executor)
     app = FastAPI()
     host = install_task_api(app, TaskSettings(enabled=True))
     await host.startup()

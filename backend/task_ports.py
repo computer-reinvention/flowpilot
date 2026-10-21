@@ -199,6 +199,18 @@ class TaskExecutor(Lifecycle, Protocol):
     async def cancel(self, lease: Lease) -> None: ...
     async def recover(self, leases: tuple[Lease, ...]) -> None: ...
     async def browser(self, lease: Lease, interaction_id: str, generation: int) -> BrowserHandle: ...
+    async def release_human(self, lease: Lease, interaction_id: str, generation: int) -> None:
+        """Fence/drain all human handles for the verified pause before API resume.
+
+        Never acquire a new writer merely to release it. This is idempotent for
+        the same valid pause even if no viewer was opened. Fence future handle
+        acquisition/input for that pause, await in-flight input and release held
+        controls before returning. Other task/lease/pause generations are rejected.
+        Control validates a live response, awaits this within its cancellation
+        budget, then commits resolution/revocation and wakes the executor. Failure
+        or timeout must not resolve the interaction or wake agent writes.
+        """
+        ...
     async def delete_profile(self, principal: Principal, profile_id: str) -> None: ...
 
 
