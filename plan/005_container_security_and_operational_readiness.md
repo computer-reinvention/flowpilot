@@ -242,3 +242,65 @@ No candidates were committed to shared manifests/locks. Network bridge conntrack
 **Protocol error remains a readiness blocker**; OS/Chromium inventories remain
 **unverified**, outside the zero-findings candidate package audit. No release or
 hosted-isolation clearance is granted by this triage checkpoint.
+
+## Coordinated dependency implementation — approved after b55c32c
+
+Integrated main `b55c32c` with merge checkpoint `57372a2`. Integrator now exclusively
+assigns this lane the shared dependency/CSS files and dedicated compatibility tests.
+No other application modules, contracts, root venv, credentials or infrastructure
+are mutation targets. Preserve the integrated PID1024 and retention/drain changes.
+
+### Bounded blast-radius / verification contract
+
+- Primary paths: public FastAPI/HTTPX/AnyIO TLS and cancellation; browser-use local
+  browser discovery through aiohttp; browser-use screenshot/highlight/GIF/video and
+  PDF reader; MCP schemas imported by browser-use but no MCP listener; Pi observation,
+  replay/repair/completion; assistance JPEG/input/drain over actual Chromium.
+- Transforming seams: exact browser-use/browser-harness dependency pins, uv overrides
+  replacing metadata, mcp-types coupling; Tailwind importing shadcn package CSS while
+  CLI code is unused. Static CSS has the same user-visible animation/style behavior.
+- State/concurrency: no task/profile schema, identity, lease or filesystem semantics
+  change is intended. AnyIO/HTTP clients must preserve cancellation, timeouts and
+  TLS hostname checking. Parser exhaustion and failed-save behavior must not worsen.
+- Siblings: browser-use and Pi drivers; legacy replay/repair and hosted tasks; direct
+  screenshot and streamed JPEG; PDF read success and oversized/malformed read paths.
+- Environments: independent worktree venv, clean Node22 Linux image builds, target
+  Python3.12 backend and existing local Python3.13. Never sync the root venv. Synthetic
+  local-only browser/model fixtures; no provider or hosted account calls.
+- Existing proof: merged 001/002/003/006/007 suites exercise lifecycle/assistance/Pi;
+  existing ops checks cover packaging/proxy. Their doubles do not prove codec/API
+  compatibility; add focused actual dependency regressions. Prior disposable resolver
+  and audit success is explicitly NOT compatibility proof.
+- Known failure probes: ordinary exact-pin patch fails resolution; CLI removal without
+  CSS fails build; wrong TLS hostname must fail; cancelled tasks must settle; excessive
+  PDF input must stay bounded by actual browser-use read contract; stale/no-progress
+  browser actions and completion must remain fenced.
+- Unknowns to test before acceptance: Pillow13 actual screenshot/image/GIF/video APIs,
+  pypdf6.19 extraction/limits, MCP2.2 schema imports and AnyIO4.14 cancellation/TLS,
+  aiohttp3.14.4 discovery behavior. Do not infer unexercised codec/format coverage.
+
+### Ordered checkpoints
+
+1. Certifi only: prove one-package graph delta, frozen own-venv sync, CA bundle/TLS and
+   relevant offline checks, then commit independently.
+2. Frontend: verify exact 4.22.0 release CSS/license provenance; stop if unresolved.
+   Preserve exact CSS, remove unused CLI, clean npm ci/build, runtime graph/component
+   and complete dist hash equivalence; run frontend/client/agent tests; commit.
+3. Python: exact five overrides plus mcp-types coupling only. Prove exactly documented
+   package deltas; focused actual API/browser compatibility, complete offline suites,
+   advisory audits and rebuilt backend/ASGI. Commit only if all required compatibility
+   passes; otherwise report failure and keep the failing slice out of the accepted
+   branch without weakening tests.
+4. Record immutable evidence and remaining kernel/network + OS/Chromium gates. Zero
+   package advisories is not global security or deployment clearance.
+
+### Certifi checkpoint
+
+Own lane005 `.venv` frozen sync completed (Python 3.13.15; root interpreter used
+read-only, root environment never synced). Exact lock graph delta verified: only
+certifi 2026.7.22 -> 2026.10.19, no additions/removals. Dedicated CA regression plus
+control HTTP and retention suites: **30 passed**. CA regression verifies revoked
+emSign ECC Root CA G3 is absent and SSL context retains mandatory chain/hostname
+verification with >100 roots. Cryptography warns about a nonpositive serial in a
+remaining bundled certificate; no warning filter or trust relaxation added. This
+checkpoint does not claim real outgoing TLS exchange coverage yet.
