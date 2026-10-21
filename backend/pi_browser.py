@@ -16,11 +16,18 @@ def tool(name, description, properties, required=(), human=False):
 
 async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                         run_reflex, save_reflex, exploration_tools=None, on_event=None,
-                        interaction_tools=None, observation_policy=None):
+                        interaction_tools=None, observation_policy=None, bind_reflex_inputs=None):
+    """bind_reflex_inputs(name, call_inputs) -> effective inputs, raising
+    ReflexInputError for missing/invalid values before any guard or effect.
+    Defaults to an optional `run_reflex.bind_inputs` attribute so callers keep
+    the historical positional driver signature."""
     from .runner import _DUMP_ELEMENTS_JS, _execute_reflex
     from .observation import ObservationPolicy, ProgressGuard, action_observation, create_observation
     from .task_contracts import ErrorCode, TaskFault, task_error
     from .task_settings import TaskSettings
+    from .reflex_inputs import CALL_SCHEMA, FIELDS_SCHEMA, ReflexInputError
+    if bind_reflex_inputs is None:
+        bind_reflex_inputs = getattr(run_reflex, 'bind_inputs', None)
     # Preserve the historical duck-typed test/client seam; real local Browser
     # sessions get the same policy as hosted callers, without REPL changes.
     if observation_policy is None:
@@ -37,9 +44,13 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
         tool("observe", "Read the current URL and visible interactive elements.", {}),
         tool("navigate", "Navigate to an HTTP(S) URL required by the task.", {"url": string}, ["url"]),
         tool("execute", "Execute async (inputs, entryUrl) => {...} in the browser. Return concise observations. Bounded to 30 seconds.", {"script": string}, ["script"]),
-        tool("run_reflex", "Run a stored stage by name; may pause for human help.", {"name": string}, ["name"], human=True),
-        tool("save_reflex", "Save a reusable action stage, not just the final observation. Document required inputs, starting state, outputs and next stage in description. Follow the reusable workflow contract; label extraction-only helpers explicitly.",
-             {"name": string, "description": string, "script": string,
+        tool("run_reflex", "Run a stored stage by name with the input values you resolved from the user's request; may pause for human help. "
+             "Pass inputs keyed by the stage's declared input names (listed with each saved script). "
+             "A result with error_code invalid_input means the script did NOT run and nothing was repaired: supply the "
+             "missing/invalid values and call again. Calling the same stage again with different inputs is a new action.",
+             {"name": string, "inputs": CALL_SCHEMA}, ["name"], human=True),
+        tool("save_reflex", "Save a reusable action stage, not just the final observation. Declare every input the script reads in inputs and document starting state, outputs and next stage in description. Follow the reusable workflow contract; label extraction-only helpers explicitly.",
+             {"name": string, "description": string, "script": string, "inputs": FIELDS_SCHEMA,
               "tags": {"type": "array", "items": string}, "pause_after_auth": {"type": "boolean"}}, ["name", "description", "script"]),
         tool("human_help", "Request direct browser intervention for CAPTCHA, passkey/device approval, a sign-in the user wants to handle, or an interaction you cannot perform. When request_input_values is available, ask there for missing text such as an OTP instead.",
              {"reason": string, "category": string}, ["reason"], human=True),
@@ -153,7 +164,11 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
             await human_call(request, {'reason': args['reason'], 'category': args.get('category', 'other')})
             return {"resumed": True}
         if name == "run_reflex":
-            return (await run_reflex(args["name"])).model_dump()
+            # Keyword call: browser-use action wrappers reject positional args.
+            # Callbacks predating inputs are still called with name only.
+            if args.get("inputs") is None:
+                return (await run_reflex(name=args["name"])).model_dump()
+            return (await run_reflex(name=args["name"], inputs=args["inputs"])).model_dump()
         if name == "save_reflex":
             return (await save_reflex(**args)).model_dump()
         if name == "complete":
@@ -179,6 +194,21 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
             if fatal_fault is not None:
                 raise fatal_fault
             await control.checkpoint()
+            action_args = args
+            if name == 'run_reflex':
+                # Input binding precedes freshness/no-progress guards: a rejected
+                # call never entered the script, so it consumes no attempt and
+                # must never be treated as a broken script needing repair.
+                if bind_reflex_inputs is not None:
+                    try:
+                        bound = await bind_reflex_inputs(args['name'], args.get('inputs'))
+                    except ReflexInputError as exc:
+                        return exc.payload()
+                else:
+                    bound = args.get('inputs') or {}
+                # Same stage + same effective inputs is the same action; a
+                # different input set is a distinct action.
+                action_args = {'name': args['name'], 'inputs': bound}
             guarded = name in ('execute', 'run_reflex') or (
                 exploration_tools and name in exploration_tools and
                 (name.startswith('test_') or name == 'generate_and_save_reflex'))
@@ -192,7 +222,7 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                 if observation is None:
                     raise RuntimeError('Call observe before browser actions')
                 await observation_policy.require_fresh(browser, observation)
-                signature = hashlib.sha256(json.dumps([name, args, inputs], sort_keys=True).encode()).hexdigest()
+                signature = hashlib.sha256(json.dumps([name, action_args, inputs], sort_keys=True, default=str).encode()).hexdigest()
                 if signature in consumed_actions:
                     from .trace import trace
                     trace('observation.no_progress', recovery='inspect_partial_effects')
@@ -256,7 +286,8 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                      "passkeys/device approval, or a user preference to sign in personally. Never include codes or passwords in summaries or saved scripts. "
                      if interaction_tools else "Request human help for authentication/CAPTCHA. ")
                   +
-                  "Save parameterized stage scripts with meaningful outcome checks for future replay. "
+                  "Save parameterized stage scripts with declared inputs and meaningful outcome checks for future replay. "
+                  "When reusing a saved stage, pass the values resolved from the request as run_reflex inputs. "
                   + REPLAY_CONTRACT + rules,
                       definitions, dispatch, role="exploration" if exploration_tools else "agent",
                       checkpoint=control.checkpoint, **({"on_event": on_event} if on_event else {}))
