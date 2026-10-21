@@ -218,6 +218,91 @@ async def test_missing_foundation_seams_fail_closed():
         await host.shutdown()
 
 
+@pytest.mark.asyncio
+async def test_private_issuance_primitives_digest_only_rotation_and_bounded_expiry():
+    host, bindings, handle, state = scenario()
+    await host.startup()
+    saved = []
+
+    async def save(binding):
+        saved.append(binding)
+        state["binding"] = binding
+        state["revoked"] = False
+
+    bindings.control.save_capability.side_effect = save
+    try:
+        assistance = bindings.assistance
+        # Explicitly tests the private issuance primitive, NOT working public mint.
+        async with assistance._lock:
+            grant = await assistance._issue(state["binding"].lease, state["view"].interaction)
+        token = grant.assistance_url.rsplit("/", 1)[1]
+        assert len(token) == 43
+        assert saved[-1].digest == hashlib.sha256(token.encode()).hexdigest()
+        assert token not in saved[-1].model_dump_json()
+        assert grant.expires_at <= state["view"].interaction.expires_at
+        await assistance.authorize(token)
+        async with assistance._lock:
+            newer = await assistance._issue(state["binding"].lease, state["view"].interaction)
+        assert newer.assistance_url != grant.assistance_url
+        with pytest.raises(TaskFault):
+            await assistance.authorize(token)
+    finally:
+        await host.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_browser_exception_secrets_never_reach_response_or_server_logs(caplog):
+    host, bindings, handle, state = scenario()
+    await host.startup()
+    handle.send_input.side_effect = RuntimeError("provider included private-otp-canary " + TOKEN)
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=host.app), base_url="https://viewer.test") as client:
+            response = await client.post(BASE + "/input", headers=ORIGIN, json={"kind": "type", "text": "private-otp-canary"})
+            assert response.status_code == 503
+            assert "private-otp-canary" not in response.text
+            assert "private-otp-canary" not in caplog.text
+            assert response.headers["Referrer-Policy"] == "no-referrer"
+    finally:
+        await host.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_expiry_watcher_fences_held_writer_without_resuming():
+    host, bindings, handle, state = scenario()
+    await host.startup()
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=host.app), base_url="https://viewer.test") as client:
+            assert (await client.post(BASE + "/input", headers=ORIGIN, json={"kind": "keydown", "key": "Shift"})).status_code == 200
+            state["revoked"] = True
+            for _ in range(100):
+                if handle.release.await_count:
+                    break
+                await asyncio.sleep(.01)
+            handle.release.assert_awaited_once()
+            bindings.control.respond.assert_not_awaited()
+            bindings.control.cancel.assert_not_awaited()
+    finally:
+        await host.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_shared_response_conflict_is_not_a_second_viewer_resolution():
+    host, bindings, handle, state = scenario()
+    await host.startup()
+    bindings.control.respond.side_effect = TaskFault(task_error(ErrorCode.CONFLICT, "Decision already resolved"))
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=host.app), base_url="https://viewer.test") as client:
+            assert (await client.get(BASE + "/screen")).status_code == 200
+            response = await client.post(BASE + "/respond", headers=ORIGIN,
+                                         json={"generation": 3, "idempotency_key": "race-response-001", "kind": "browser", "browser_resolved": True})
+            assert response.status_code == 409
+            handle.release.assert_awaited_once()
+            bindings.control.respond.assert_awaited_once()
+            assert (await client.post(BASE + "/input", headers=ORIGIN, json={"kind": "release"})).status_code == 410
+    finally:
+        await host.shutdown()
+
+
 def test_stream_binary_jpeg_and_expiry_while_already_connected():
     host, bindings, handle, state = scenario()
 

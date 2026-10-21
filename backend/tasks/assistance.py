@@ -9,16 +9,18 @@ import asyncio
 import hashlib
 import hmac
 import re
+import secrets
 from contextlib import suppress
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.routing import APIRoute
 from pydantic import ValidationError
 
 from ..task_contracts import (
-    AssistanceGrant, AssistanceRequest, BrowserInput, ErrorCode, InteractionResponse,
+    AssistanceGrant, AssistanceRequest, BrowserInput, ERROR_POLICY, ErrorCode, ErrorEnvelope, InteractionResponse,
     MAX_INPUT_BYTES, PollRequest, TaskFault, TaskState, task_error,
 )
 from ..task_ports import AssistanceBinding
@@ -116,6 +118,26 @@ class Assistance:
             # it would bypass the executor's execution fence after a restart.
             raise TaskFault(task_error(ErrorCode.UNAVAILABLE, "Assistance minting requires execution lease lookup"))
 
+    async def _issue(self, lease, interaction):
+        """Mint once a future foundation amendment supplies the verified lease.
+
+        Internal only: never infer the lease from a browser-supplied identifier.
+        Caller holds _lock and has checked the current account-owned pause.
+        """
+        expiry = min(interaction.expires_at, now() + timedelta(seconds=self.settings.assistance_ttl_seconds))
+        if expiry <= now():
+            raise fault(ErrorCode.STALE_GENERATION)
+        token = secrets.token_urlsafe(32)
+        binding = AssistanceBinding(lease=lease, interaction_id=interaction.interaction_id,
+                                    generation=interaction.generation, digest=digest_token(token), expires_at=expiry)
+        for old, _ in tuple(self._handles.values()):
+            if old.lease == lease:
+                await self._retire(old)
+        await self.bindings.control.revoke_capabilities(lease)
+        await self.bindings.control.save_capability(binding)
+        return AssistanceGrant(assistance_url=f"/api/v1/browser-tasks/help/{token}", expires_at=expiry,
+                               interaction_id=binding.interaction_id, generation=binding.generation)
+
     async def _validate(self, digest):
         if not self._active or digest in self._revoked:
             raise fault()
@@ -125,7 +147,7 @@ class Assistance:
         view = await self.bindings.control.get(binding.lease.principal, binding.lease.task_id, PollRequest())
         interaction = view.interaction
         if (view.state != TaskState.WAITING_FOR_BROWSER or not interaction or
-                view.session_id != binding.lease.session_id or view.profile_id != binding.lease.profile_id or
+                view.task_id != binding.lease.task_id or view.session_id != binding.lease.session_id or view.profile_id != binding.lease.profile_id or
                 interaction.interaction_id != binding.interaction_id or interaction.generation != binding.generation or
                 interaction.expires_at <= now()):
             raise fault()
@@ -185,8 +207,29 @@ def create_assistance(settings):
     return Assistance(settings)
 
 
+class AssistanceRoute(APIRoute):
+    """Prevent ASGI servers from logging raw browser exceptions and secret input."""
+
+    def get_route_handler(self):
+        handler = super().get_route_handler()
+
+        async def sanitized(request):
+            try:
+                return await handler(request)
+            except TaskFault as exc:
+                error = exc.error
+            except Exception:
+                error = task_error(ErrorCode.UNAVAILABLE, "Assistance is unavailable")
+            headers = security_headers()
+            if error.retry_after_seconds:
+                headers["Retry-After"] = str(error.retry_after_seconds)
+            return JSONResponse(ErrorEnvelope(error=error).model_dump(mode="json"),
+                                status_code=ERROR_POLICY[error.code][0], headers=headers)
+        return sanitized
+
+
 def create_router(bindings):
-    router = APIRouter()
+    router = APIRouter(route_class=AssistanceRoute)
     assistance = bindings.assistance
 
     @router.get("/help/{token}")

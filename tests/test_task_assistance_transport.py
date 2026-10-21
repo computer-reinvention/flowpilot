@@ -1,4 +1,5 @@
 import asyncio
+import struct
 
 import pytest
 from playwright.async_api import async_playwright
@@ -12,7 +13,7 @@ async def test_real_chromium_drag_type_scroll_release_and_frames():
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=True)
         try:
-            page = await browser.new_page(viewport={"width": 640, "height": 480})
+            page = await browser.new_page(viewport={"width": 640, "height": 480}, device_scale_factor=2)
             await page.set_content('''<input id="text" style="position:absolute;left:10px;top:10px">
             <div style="height:2400px"></div><script>
             window.events=[]; for(const kind of ['pointerdown','pointermove','pointerup','keydown','keyup'])
@@ -34,7 +35,9 @@ async def test_real_chromium_drag_type_scroll_release_and_frames():
             events = await page.evaluate("events")
             assert any(e[0] == "pointermove" and e[1] == 1 for e in events)
             assert any(e[0] == "keyup" and e[2] == "Shift" for e in events)
-            assert (await handle.screenshot()).startswith(b"\x89PNG")
+            screenshot = await handle.screenshot()
+            assert screenshot.startswith(b"\x89PNG")
+            assert struct.unpack(">II", screenshot[16:24]) == (640, 480)
             frames = handle.frames()
             assert (await asyncio.wait_for(anext(frames), 5)).startswith(b"\xff\xd8")
             await frames.aclose()

@@ -43,7 +43,7 @@ class BrowserViewport:
     async def screenshot(self):
         async with self._lock:
             self._require_open()
-            return await self.page.screenshot(type="png", full_page=False)
+            return await self.page.screenshot(type="png", full_page=False, scale="css")
 
     async def send_input(self, command: BrowserInput):
         async with self._lock:
@@ -92,7 +92,9 @@ class BrowserViewport:
 
         client.on("Page.screencastFrame", frame)
         try:
-            await client.send("Page.startScreencast", {"format": "jpeg", "quality": 75, "everyNthFrame": 1})
+            viewport = await self.page.evaluate("({width: innerWidth, height: innerHeight})")
+            await client.send("Page.startScreencast", {"format": "jpeg", "quality": 75, "everyNthFrame": 1,
+                                                     "maxWidth": viewport["width"], "maxHeight": viewport["height"]})
             while not self._closed:
                 try:
                     yield await asyncio.wait_for(queue.get(), .5)
