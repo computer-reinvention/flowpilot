@@ -39,7 +39,6 @@ def create_router(bindings):
                   wait_seconds: float = Query(default=0, ge=0, le=25)):
         # Race a bounded DB-backed poll against disconnect; never cancel execution.
         import asyncio
-        from contextlib import suppress
         from pydantic import ValidationError
         from ..task_contracts import ErrorCode
         from .repository import fail

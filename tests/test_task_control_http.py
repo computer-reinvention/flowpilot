@@ -16,7 +16,7 @@ from backend import auth, db
 from backend.task_bootstrap import install_task_api
 from backend.task_contracts import (
     API_PREFIX, Interaction, InteractionKind, PollRequest, Principal, TaskState,
-    TaskResult, InputField, TaskFault,
+    TaskResult, TaskStart, InputField, InteractionResponse, TaskFault,
 )
 from backend.task_ports import AssistanceBinding
 from backend.task_settings import TaskSettings
@@ -214,3 +214,117 @@ async def test_completion_cannot_override_cancel_intent(system):
     with pytest.raises(TaskFault):
         await control.finish(lease, view.revision, TaskState.COMPLETED, result=TaskResult(answer='late result'))
     assert (await client.get(receipt['status_url'], headers=headers)).json()['state'] == 'cancelling'
+
+
+@pytest.mark.asyncio
+async def test_disconnect_during_commit_still_dispatches_once(system, monkeypatch):
+    client, control, bindings, starts, host = system
+    headers, jwt, _ = await key_for(client)
+    principal = Principal(account_id=auth.decode_token(jwt['Authorization'][7:]))
+    admitted = asyncio.Event()
+    release = asyncio.Event()
+    original = control.repository.admit
+    async def delayed(*args):
+        result = await original(*args)
+        admitted.set()
+        await release.wait()
+        return result
+    monkeypatch.setattr(control.repository, 'admit', delayed)
+    request = TaskStart(task='No network synthetic task', idempotency_key='disconnect-001')
+    caller = asyncio.create_task(control.start(principal, request))
+    await admitted.wait()
+    caller.cancel()
+    await asyncio.gather(caller, return_exceptions=True)
+    release.set()
+    await wait_started(starts)
+    receipt = await control.start(principal, request)
+    assert receipt.task_id == starts[0].lease.task_id and len(starts) == 1
+
+
+@pytest.mark.asyncio
+async def test_success_followup_and_profile_delete_history(system):
+    client, control, bindings, starts, host = system
+    headers, _, _ = await key_for(client)
+    receipt = await admit(client, headers)
+    await wait_started(starts)
+    lease = starts[0].lease
+    view = await control.get(lease.principal, lease.task_id, PollRequest())
+    finished = await control.finish(lease, view.revision, TaskState.COMPLETED, result=TaskResult(answer='Synthetic answer'))
+    assert finished.result.answer == 'Synthetic answer'
+    # An idle browser reservation is not released merely by completion.
+    assert (await client.delete(API_PREFIX + '/profiles/' + lease.profile_id, headers=headers)).status_code == 409
+    await control.release_browser(lease, profile_saved=True)
+    followup = await admit(client, headers, idempotency_key='followup-001', session_id=lease.session_id, profile_id=lease.profile_id)
+    assert followup['profile_id'] == receipt['profile_id'] and followup['task_id'] != receipt['task_id']
+    await wait_started(starts, 2)
+    await client.post(followup['status_url'] + '/cancel', headers=headers)
+    async with asyncio.timeout(2):
+        while (await client.get(followup['status_url'], headers=headers)).json()['state'] != 'cancelled':
+            await asyncio.sleep(.01)
+    assert (await client.delete(API_PREFIX + '/profiles/' + lease.profile_id, headers=headers)).status_code == 204
+    assert (await client.get(receipt['status_url'], headers=headers)).status_code == 404
+    retry = await client.post(API_PREFIX, headers=headers, json={'task': 'Inspect synthetic page', 'idempotency_key': 'admission-001'})
+    assert retry.status_code == 404  # retained tombstone never re-executes
+
+
+@pytest.mark.asyncio
+async def test_poll_wait_is_bounded_and_cancelled_poll_does_not_cancel_task(system):
+    client, control, bindings, starts, host = system
+    headers, _, _ = await key_for(client)
+    receipt = await admit(client, headers)
+    await wait_started(starts)
+    lease = starts[0].lease
+    view = await control.get(lease.principal, lease.task_id, PollRequest())
+    read = asyncio.create_task(control.get(lease.principal, lease.task_id, PollRequest(after_revision=view.revision, wait_seconds=25)))
+    await asyncio.sleep(.02)
+    read.cancel()
+    await asyncio.gather(read, return_exceptions=True)
+    assert (await control.get(lease.principal, lease.task_id, PollRequest())).state == 'running'
+    loop = asyncio.get_running_loop()
+    begin = loop.time()
+    unchanged = await control.get(lease.principal, lease.task_id, PollRequest(after_revision=view.revision, wait_seconds=.1))
+    assert unchanged.revision == view.revision and .08 <= loop.time() - begin < .5
+
+
+@pytest.mark.asyncio
+async def test_auth_bounds_login_rate_and_hosted_secret(system, monkeypatch):
+    client, control, bindings, starts, host = system
+    for _ in range(10):
+        response = await client.post('/api/auth/login', json={'email': 'absent@example.test', 'password': 'synthetic'})
+        assert response.status_code == 401
+    response = await client.post('/api/auth/login', json={'email': 'absent@example.test', 'password': 'synthetic'})
+    assert response.status_code == 429 and response.headers['Retry-After'] == '60'
+    monkeypatch.delenv('JWT_SECRET')
+    with pytest.raises(RuntimeError, match='configured JWT_SECRET'):
+        auth.validate_hosted_secret(True)
+
+
+@pytest.mark.asyncio
+async def test_loopback_tcp_client_signup_key_task_and_cancel(system):
+    """No ASGI transport shortcuts: a fresh TCP HTTP client against uvicorn."""
+    import socket
+    import uvicorn
+    client, control, bindings, starts, host = system
+    sock = socket.socket()
+    sock.bind(('127.0.0.1', 0))
+    sock.listen(128)
+    address = sock.getsockname()
+    server = uvicorn.Server(uvicorn.Config(client._transport.app, lifespan='off', access_log=False, log_level='critical'))
+    job = asyncio.create_task(server.serve(sockets=[sock]))
+    try:
+        async with asyncio.timeout(3):
+            while not server.started:
+                await asyncio.sleep(.01)
+        async with httpx.AsyncClient(base_url=f'http://127.0.0.1:{address[1]}', trust_env=False) as external:
+            headers, _, _ = await key_for(external)
+            receipt = await admit(external, headers)
+            await wait_started(starts)
+            assert (await external.get(receipt['status_url'], headers=headers)).json()['state'] == 'running'
+            assert (await external.post(receipt['status_url'] + '/cancel', headers=headers)).status_code == 202
+            async with asyncio.timeout(3):
+                while (await external.get(receipt['status_url'], headers=headers)).json()['state'] != 'cancelled':
+                    await asyncio.sleep(.01)
+    finally:
+        server.should_exit = True
+        await asyncio.wait_for(job, 5)
+        sock.close()

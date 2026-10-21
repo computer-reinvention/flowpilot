@@ -1,7 +1,7 @@
 """Durable task orchestration. Factories/bind perform no filesystem or task I/O."""
 
 import asyncio
-from contextlib import suppress
+import weakref
 from datetime import timedelta
 
 from ..task_contracts import (
@@ -20,13 +20,25 @@ class Control:
         self._executions = {}
         self._stops = {}
         self._waiters = {}
-        self._locks = {}
+        self._locks = weakref.WeakValueDictionary()
+        self._admissions = set()
 
     def bind(self, bindings):
         self.bindings = bindings
 
     def _lock(self, task_id):
         return self._locks.setdefault(task_id, asyncio.Lock())
+
+    async def _durable(self, operation):
+        """Own commit/callback work even when the HTTP request disconnects."""
+        job = asyncio.create_task(operation)
+        self._admissions.add(job)
+        def finished(task):
+            self._admissions.discard(task)
+            if not task.cancelled():
+                task.exception()  # retrieve errors even if the caller went away
+        job.add_done_callback(finished)
+        return await asyncio.shield(job)
 
     async def startup(self):
         from ..auth import JWT_SECRET, validate_hosted_secret
@@ -49,6 +61,10 @@ class Control:
         self.accepting = False
         if self.repository is None:
             return
+        # Disconnect-safe admission jobs own the commit/dispatch window. Drain
+        # them before taking the execution snapshot so shutdown cannot miss one.
+        if self._admissions:
+            await asyncio.gather(*tuple(self._admissions), return_exceptions=True)
         for task_id, (lease, job) in tuple(self._executions.items()):
             if not job.done():
                 await self.cancel(lease.principal, task_id)
@@ -68,7 +84,10 @@ class Control:
     async def start(self, principal, request):
         if not self.accepting:
             raise TaskFault(task_error(ErrorCode.SHUTDOWN, 'Admission is closed', 5))
-        # Gate shutdown against an in-flight admission before spawning.
+        return await self._durable(self._admit_dispatch(principal, request))
+
+    async def _admit_dispatch(self, principal, request):
+        # Caller cancellation cannot strand a committed queued record.
         admission = await self.repository.admit(principal, request)
         execution = await self.repository.claim(principal, admission.task_id)
         if execution:
@@ -115,6 +134,9 @@ class Control:
         return view
 
     async def cancel(self, principal, task_id):
+        return await self._durable(self._cancel(principal, task_id))
+
+    async def _cancel(self, principal, task_id):
         async with self._lock(task_id):
             view = await self.repository.request_cancel(principal, task_id)
             if view.state == TaskState.CANCELLING and task_id not in self._stops:
@@ -138,6 +160,9 @@ class Control:
             self._stops.pop(lease.task_id, None)
 
     async def respond(self, principal, task_id, interaction_id, response):
+        return await self._durable(self._respond(principal, task_id, interaction_id, response))
+
+    async def _respond(self, principal, task_id, interaction_id, response):
         async with self._lock(task_id):
             before = await self.repository.get(principal, task_id)
             waiter = self._waiters.get((task_id, interaction_id, response.generation))

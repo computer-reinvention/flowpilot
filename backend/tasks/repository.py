@@ -107,7 +107,9 @@ class Repository:
                 if prior:
                     if not hmac.compare_digest(prior['fingerprint'], request.fingerprint()):
                         fail(ErrorCode.CONFLICT, 'Idempotency key is already bound to another request')
-                    return TaskAdmission.model_validate_json(prior['receipt'])
+                    receipt = TaskAdmission.model_validate_json(prior['receipt'])
+                    self._row(db, principal, receipt.task_id)
+                    return receipt
                 profile_id = request.profile_id
                 session_id = request.session_id
                 if session_id:
@@ -220,6 +222,10 @@ class Repository:
                 if decision is None:
                     fail(ErrorCode.NOT_FOUND, 'Not found')
                 digest = response.receipt_digest(self.secret, principal, task_id, interaction_id)
+                prior = db.execute('SELECT * FROM bt_idempotency WHERE owner=? AND operation=? AND key=?',
+                                   (principal.account_id, 'respond', response.idempotency_key)).fetchone()
+                if prior and not hmac.compare_digest(prior['fingerprint'], digest):
+                    fail(ErrorCode.CONFLICT, 'Idempotency key is already bound to another response')
                 if decision['digest']:
                     if decision['response_key'] != response.idempotency_key or not hmac.compare_digest(decision['digest'], digest):
                         fail(ErrorCode.CONFLICT, 'Interaction already has a different decision')
@@ -232,6 +238,8 @@ class Repository:
                 view = self._write(db, row, TaskState.RUNNING, progress=progress)
                 db.execute('UPDATE bt_interactions SET response_key=?,digest=?,confirmed=?,receipt=? WHERE task=? AND id=?',
                            (response.idempotency_key, digest, response.confirmed, view.model_dump_json(), task_id, interaction_id))
+                db.execute('INSERT INTO bt_idempotency VALUES(?,?,?,?,?)',
+                           (principal.account_id, 'respond', response.idempotency_key, digest, view.model_dump_json()))
                 return view
         return await self._run(operation)
 
@@ -330,6 +338,12 @@ class Repository:
                 profile = self._profile(db, principal, profile_id)
                 if not profile['deleting'] or db.execute('SELECT 1 FROM bt_tasks WHERE profile=? AND reserved=1', (profile_id,)).fetchone():
                     fail(ErrorCode.CONFLICT)
+                # Runtime has removed archives/scripts/context before we erase
+                # durable interaction/result history. Idempotency tombstones
+                # remain so retrying a deleted task cannot execute it again.
+                db.execute('DELETE FROM bt_capabilities WHERE task IN (SELECT id FROM bt_tasks WHERE profile=?)', (profile_id,))
+                db.execute('DELETE FROM bt_interactions WHERE task IN (SELECT id FROM bt_tasks WHERE profile=?)', (profile_id,))
+                db.execute('DELETE FROM bt_tasks WHERE profile=?', (profile_id,))
                 db.execute('DELETE FROM bt_sessions WHERE profile=?', (profile_id,))
                 db.execute('DELETE FROM bt_profiles WHERE id=?', (profile_id,))
         return await self._run(operation)

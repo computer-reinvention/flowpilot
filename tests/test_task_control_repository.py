@@ -33,3 +33,28 @@ async def test_atomic_admission_claim_and_restart(tmp_path):
     assert await restarted.claim(owner, admissions[0].task_id) is None
     with sqlite3.connect(restarted.path) as db:
         assert db.execute('select count(*) from bt_tasks').fetchone()[0] == 1
+
+
+@pytest.mark.asyncio
+async def test_additive_upgrade_of_legacy_platform_database(tmp_path, monkeypatch):
+    from backend import db
+    from backend.tasks.repository import Repository
+    path = tmp_path / 'tasks.sqlite3'
+    monkeypatch.setattr(db, 'DB_PATH', path)
+    await db.init_db()
+    with sqlite3.connect(path) as database:
+        database.execute("INSERT INTO users VALUES('legacy','legacy@example.test','synthetic_hash','Legacy','2026-01-01')")
+    repository = Repository(TaskSettings(state_dir=tmp_path), b'x' * 32)
+    await repository.initialize()
+    await repository.initialize()
+    with sqlite3.connect(path) as database:
+        assert database.execute('SELECT id FROM users').fetchall() == [('legacy',)]
+        assert database.execute('SELECT version FROM bt_schema').fetchall() == [(1,)]
+
+
+def test_factories_do_not_touch_disk(tmp_path):
+    from backend.tasks.control import create_control
+    settings = TaskSettings(state_dir=tmp_path / 'absent')
+    control = create_control(settings)
+    assert not settings.state_dir.exists()
+    assert not control.accepting and control.repository is None
