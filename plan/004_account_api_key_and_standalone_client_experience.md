@@ -32,3 +32,37 @@ Own frontend auth/key/task/profile/help UI and hooks, new frontend verification 
 ## Handoff / definition of done
 
 Provide frontend fixtures, runnable HTTP examples, precise API usage documentation and passing isolated checks. Log in → create key → run isolated browser task is the acceptance path. No Harp changes, deployment or real website transactions are needed for this stream.
+
+## Lane004 implementation evidence
+
+Branch: `implementation/lane-004`, based on frozen foundation `0ccc06a`. All implementation stayed in `/Users/pgwork/Desktop/code/flowpilot-worktrees/lane-004`; no backend production/shared-contract, lockfile, Docker/Compose, Harp or other-lane changes were made. No deployment, provider credential, live service or website effect was used.
+
+### Delivered checkpoints (ordered)
+
+1. `d7351f4` — frozen browser-task HTTP types/client, no-store/redirect refusal, account disposal/generation guards, golden fixture tests.
+2. `51dee1d` — separate Browser tasks surface; fresh/explicit owned-profile/session reuse; task-ID reattachment; serialized status polling; questions/approve/decline/browser resume; cancel intent; current-pause private viewer; account-keyed dashboard and key/password cleanup; real-DOM HTTP mock checks.
+3. `915d74b` — retryable key-list UI, metadata-only key state, exact uncertain-admission retries, definite rejection recovery and useful busy-profile errors.
+4. `ab2672c` — `docs/browser-task-api.md`, standalone Python/JavaScript clients, bounded curl helper, synthetic fixture HTTP service and executable example checks.
+5. `47b3a93` — late-401 account-switch fencing, expired secret-entry/viewer cleanup, private-terminal input enforcement and extra account/DOM regressions.
+
+Files: `frontend/src/{lib/browserTasks.ts,lib/api.ts,hooks/useBrowserTasks.ts,hooks/useAuth.ts,hooks/useApiKeys.ts,App.tsx}`, auth forms, sidebar/shell, API-key settings, new `components/tasks/BrowserTasks.tsx`, dedicated `frontend/tests/{accountHttp,browserTasks,ui}.test.mjs`, `docs/browser-task-api.md`, and `examples/browser_tasks/{http_client.py,http_client.mjs,curl_http.sh,mock_http.mjs,test_http.mjs}`. This evidence section is the only plan change.
+
+### Verification actually executed
+
+- `npm --prefix frontend run build`: passed, including TypeScript; existing >500 kB bundle warning remains (final bundle ~570 kB). Dependencies were reused through the ignored worktree-local `frontend/node_modules` symlink; no package manifest/lock changes.
+- `node --test frontend/tests/*.test.mjs examples/browser_tasks/test_http.mjs`: **8 passed**, repeatedly. Runs local headless Chrome with a new temporary profile and local mock HTTP server, plus real Python/JS/curl subprocesses. Covers signup/login error/password clearing, once-only plaintext disclosure and no key storage, metadata/list/revoke failure/success, two fresh owned profiles, busy/delete handling, fresh/default versus explicit profile/session payloads, exact lost-admission retry payload/key, private answer clearing, declined confirmation, stale-generation rejection, browser-help expiry/window closure on resume, cancellation intent/terminal rendering, expired unsubmitted values, account logout and second-account foreign-task denial. The account HTTP regression delays an old 401 until after token switch and proves the new token survives.
+- `/Users/pgwork/Desktop/code/flowpilot/.venv/bin/python -m pytest -q`: **170 passed, 12 live skips**. First run without agent-host dependencies had one Pi host failure; repeating with a temporary worktree-local `agent-host/node_modules` symlink to existing root dependencies passed. That unignored symlink was removed after verification; no root modules were changed.
+- `npm --prefix agent-host test`: **4 passed**, with the same temporary dependency symlink.
+- `git diff --check 0ccc06a..HEAD`, `bash -n examples/browser_tasks/curl_http.sh`, Python example compile: passed.
+
+### Exact contract assumptions and integration limits
+
+- Uses the existing account routes/envelopes and JWT storage convention. Browser-task endpoints/payloads mirror the frozen foundation; idempotency is a **body field**, not an invented header. Auth/key responses and assistance mints are never intentionally cached by the clients. Foundation `backend/main.py` has no no-store response middleware/headers for legacy auth/key routes: **lane001 must ensure server/proxy `Cache-Control: no-store`**, and lane006 must verify it. Frontend request cache flags alone do not prove server-side cache safety.
+- Frozen policy permits assistance minting only for a current browser pause and returns `frame-ancestors 'none'`. The owner UI therefore prepares a grant, then opens a top-level private popup on explicit click; no API key goes into a viewer URL. Viewer addresses are not rendered in task history/storage. Popup blocking has an explicit retry message.
+- A managed viewer closes on pause/account/navigation/expiry changes; remint/resume/cancel/expiry/restart are the server-revocation mechanisms. **No independent grant-revoke-on-logout endpoint is frozen**. A deliberately copied capability cannot be invalidated solely by closing UI/logout; do not claim otherwise. No schema was changed to conceal this limitation.
+- `ProfileList.next_cursor` exists but no cursor request parameter is frozen. The UI reports truncation rather than guessing pagination. Profile reuse is explicit; busy/recovery profiles are not silently replaced. Browser-task and legacy flow profile surfaces remain distinct.
+- Refresh recovers pending metadata by explicit task-ID reattachment; it does not recover answers, prompts, viewer grants or pending uncertain-admission payloads. Exact admission retry state is memory-only. Preserve the caller's original payload/key outside logs through a suitable client-secret boundary if process-crash recovery is required. Private responses are never automatically replayed/rebound after stale/uncertain outcomes.
+- Python/JS bootstrap creates an in-memory temporary key, performs one operation, then attempts explicit revocation using the dashboard token; it prints no key/JWT. Revocation does not cancel an admitted task. Curl output deliberately strips returned keys/tokens/help links, so usable key creation should use dashboard or in-memory bootstrap. All ordinary clients require only a base origin/key; no broker or SDK.
+- The mock service is a fixture responder, not an authorization, persistence or executor implementation. Local checks prove UI/client contract behavior, **not** actual server ownership enforcement, durable profile restoration, provider execution, reverse-proxy Origin handling, viewer revocation enforcement or website exactly-once effects. Assembled system acceptance remains with lane006; no branch merge was performed.
+
+Verdict: **conditionally verified** — lane004 is complete against frozen fixtures/local HTTP and real DOM; lane001/003 composition and lane006 real-service verification remain integration prerequisites, not work implemented here.
