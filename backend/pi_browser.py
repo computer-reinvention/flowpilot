@@ -18,7 +18,7 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                         run_reflex, save_reflex, exploration_tools=None, on_event=None,
                         interaction_tools=None, observation_policy=None):
     from .runner import _DUMP_ELEMENTS_JS, _execute_reflex
-    from .observation import ProgressGuard, create_observation
+    from .observation import ProgressGuard, action_observation, create_observation
     from .task_contracts import ErrorCode, TaskFault, task_error
     from .task_settings import TaskSettings
     # Preserve the historical duck-typed test/client seam; real local Browser
@@ -28,7 +28,7 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
         if isinstance(browser, Browser):
             observation_policy = create_observation(TaskSettings.from_env())
     progress = ProgressGuard(getattr(getattr(observation_policy, 'settings', None), 'no_progress_limit', 3))
-    completed_actions = set()
+    consumed_actions = set()
     string = {"type": "string"}
     definitions = [
         tool("observe", "Read the current URL and visible interactive elements.", {}),
@@ -90,6 +90,9 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
         if exploration_tools and name in exploration_tools:
             return (await exploration_tools[name](**args)).model_dump()
         if exploration_tools and name == "finish_exploration":
+            if observation_policy is not None:
+                observation = await observation_policy.observe(browser)
+                await observation_policy.require_fresh(browser, observation)
             completion = "Exploration finished"
             return {"finished": True}
         if name == "observe":
@@ -118,9 +121,9 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                 script = ('async (inputs, entryUrl) => { '
                           'if (await (' + args['precondition'] + ')(inputs, entryUrl) !== true) '
                           "throw new Error('Precondition failed'); "
-                          'const result = await (' + script + ')(inputs, entryUrl); '
+                          'const __flowpilotExecutionValue = await (' + script + ')(inputs, entryUrl); '
                           'if (await (' + args['postcondition'] + ')(inputs, entryUrl) !== true) '
-                          "throw new Error('Postcondition failed; effects may be partial, do not replay'); return result; }")
+                          "throw new Error('Postcondition failed; effects may be partial, do not replay'); return __flowpilotExecutionValue; }")
             ok, value = await _execute_reflex(script, inputs, entry_url, browser,
                                             **({'observation_policy': observation_policy, 'expected_observation': observation} if observation_policy is not None else {}))
             return {"success": ok, "result": value}
@@ -164,21 +167,26 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                 if observation is None:
                     raise RuntimeError('Call observe before browser actions')
                 await observation_policy.require_fresh(browser, observation)
-                signature = hashlib.sha256(json.dumps([name, args], sort_keys=True).encode()).hexdigest()
-                if signature in completed_actions:
-                    raise TaskFault(task_error(ErrorCode.NO_PROGRESS, 'Action already verified; do not repeat its effects'))
+                signature = hashlib.sha256(json.dumps([name, args, inputs], sort_keys=True).encode()).hexdigest()
+                if signature in consumed_actions:
+                    raise TaskFault(task_error(ErrorCode.NO_PROGRESS, 'Action already attempted; effects may be complete or partial. Inspect and repair, do not replay'))
                 progress.before(signature, observation)
+                # Once arbitrary JS/reflex execution is entered, a false return,
+                # thrown error or lost callback cannot prove absence of effects.
+                # Consume the task-local signature before dispatch, not on success.
+                if name in ('execute', 'run_reflex'):
+                    consumed_actions.add(signature)
             succeeded = False
+            context_token = action_observation.set((browser, observation_policy, observation)) if guarded and observation_policy is not None else None
             try:
                 result = await dispatch_inner(name, args)
                 if guarded and observation_policy is not None:
                     await observation_policy.after_action(browser, observation, name)
-                    if name == 'execute' and result.get('success'):
-                        completed_actions.add(signature)
-                    elif name == 'run_reflex' and not result.get('error'):
-                        completed_actions.add(signature)
-                succeeded = True
+                succeeded = not (isinstance(result, dict) and
+                                 (result.get('success') is False or result.get('error')))
             finally:
+                if context_token is not None:
+                    action_observation.reset(context_token)
                 if name in ('navigate', 'human_help', 'request_input_values', 'request_confirmation'):
                     needs_observation = True
                 elif guarded:

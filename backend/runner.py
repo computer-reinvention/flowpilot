@@ -52,6 +52,10 @@ logger = logging.getLogger(__name__)
 
 
 def _observation_policy(browser, policy):
+    from .observation import action_observation
+    origin = action_observation.get()
+    if origin is not None and origin[0] is browser:
+        return origin[1]
     if policy is None and isinstance(browser, Browser):
         from .observation import create_observation
         from .task_settings import TaskSettings
@@ -143,6 +147,11 @@ async def _execute_reflex(
     immediately see what selectors are available and continue.
     """
     observation_policy = _observation_policy(browser_session, observation_policy)
+    if expected_observation is None:
+        from .observation import action_observation
+        origin = action_observation.get()
+        if origin is not None and origin[0] is browser_session:
+            expected_observation = origin[2]
     page = await browser_session.must_get_current_page()
 
     # Navigate to entry_url if we're on a blank page
@@ -328,6 +337,8 @@ async def _generate_reflex(
     inputs: dict,
     browser_session,
     llm,
+    *,
+    observation_policy=None,
 ) -> tuple[bool, str, str | None]:
     """Generate a reflex script from scratch by examining the live page.
 
@@ -339,6 +350,7 @@ async def _generate_reflex(
     Returns (success, message, script_or_None).
     """
     entry_url = flow.entry_url or ""
+    observation_policy = _observation_policy(browser_session, observation_policy)
     if not entry_url:
         return False, "No entry URL to navigate to", None
 
@@ -347,14 +359,20 @@ async def _generate_reflex(
     # Navigate and wait for page to settle
     try:
         await page.goto(entry_url)
-        await asyncio.sleep(2)
+        if observation_policy is None:
+            await asyncio.sleep(2)
     except Exception as e:
         return False, f"Failed to navigate to {entry_url}: {e}", None
 
     # Dump interactive elements
     try:
-        elements = await page.evaluate(_DUMP_ELEMENTS_JS)
-        current_url = await page.get_url()
+        if observation_policy is not None:
+            observation = await observation_policy.observe(browser_session)
+            await observation_policy.require_fresh(browser_session, observation)
+            current_url, elements = observation.url, observation.elements
+        else:
+            elements = await page.evaluate(_DUMP_ELEMENTS_JS)
+            current_url = await page.get_url()
     except Exception as e:
         return False, f"Failed to read page state: {e}", None
 
@@ -401,6 +419,7 @@ async def _generate_reflex(
         inputs=inputs,
         entry_url=entry_url,
         browser_session=browser_session,
+        **({'observation_policy': observation_policy, 'expected_observation': observation} if observation_policy is not None else {}),
     )
 
     if success:
@@ -415,6 +434,7 @@ async def _generate_reflex(
         browser_session=browser_session,
         llm=llm,
         max_attempts=1,
+        **({'observation_policy': observation_policy} if observation_policy is not None else {}),
     )
 
     if repaired and fixed:

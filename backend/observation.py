@@ -8,6 +8,7 @@ Snapshots may be sent to the model but must not be persisted or traced.
 
 import asyncio
 from dataclasses import dataclass, field
+from contextvars import ContextVar
 import hashlib
 import hmac
 import json
@@ -18,6 +19,11 @@ from .task_contracts import ErrorCode, TaskFault, task_error
 from .task_ports import ElementReference, Observation
 from .task_settings import TaskSettings
 from .trace import trace
+
+# Carries Pi's originating snapshot through legacy reflex/exploration callbacks
+# without changing their public signatures or copying runtime implementation.
+# Scoped/reset around one serialized dispatch; never a process-global browser.
+action_observation = ContextVar('flowpilot_action_observation', default=None)
 
 
 # One synchronous evaluation builds URL, document identity, controls, relevant
