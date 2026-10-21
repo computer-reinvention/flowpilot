@@ -2,6 +2,7 @@
 
 import json
 import re
+import urllib.parse
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -79,7 +80,8 @@ def view(body, previous=None):
 
 
 def ordinary_safe(body):
-    forbidden = {"assistance_url", "capability", "cdp_url", "api_key", "password", "otp", "values"}
+    forbidden = {"assistance_url", "capability", "cdp_url", "api_key", "password", "otp", "values",
+                 "lease", "lease_generation", "execution_generation", "principal"}
     def walk(item):
         if isinstance(item, dict):
             assert not forbidden.intersection(item), "secret-bearing field in ordinary response"
@@ -91,3 +93,16 @@ def ordinary_safe(body):
         elif isinstance(item, str):
             assert "/browser-tasks/help/" not in item and "fp_live_" not in item
     walk(body)
+
+
+def assistance_state(body, interaction, expected_url=None):
+    """Public metadata consumer; never equate pause and internal execution epochs."""
+    assert set(body) == {'interaction', 'url', 'viewport_width', 'viewport_height'}
+    assert body['interaction'] == interaction
+    parsed = urllib.parse.urlsplit(body['url'])
+    assert parsed.scheme in {'http', 'https'} and parsed.hostname
+    if expected_url is not None:
+        assert body['url'].rstrip('/') == expected_url.rstrip('/')
+    for name in ('viewport_width', 'viewport_height'):
+        assert type(body[name]) is int and 1 <= body[name] <= 16384
+    ordinary_safe(body)

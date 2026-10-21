@@ -6,6 +6,7 @@ import urllib.error
 from concurrent.futures import ThreadPoolExecutor
 
 from .client import Client
+from .assistance import public_assistance_targets
 from .wire import PREFIX, admission, ordinary_safe, view
 
 
@@ -187,6 +188,11 @@ def run_service(evidence, base, site, allow_tasks=False):
                    "http_retry_followup")
     evidence.check("questions_decline_http", lambda: interaction_boundaries(owner, foreign, created_profiles[1], evidence.run_id, site))
     evidence.check("cancel_capability_http", lambda: cancel_boundary(owner, created_profiles[1], evidence.run_id))
+    assistance_profiles = []
+    def isolated_assistance_profiles():
+        assistance_profiles.extend(profiles(owner, evidence.run_id + '-assistance'))
+    if evidence.check('assistance_test_profiles', isolated_assistance_profiles):
+        evidence.check('public_assistance_targets', lambda: public_assistance_targets(evidence, owner, foreign, assistance_profiles[0], evidence.run_id, site))
     def revoke():
         response = dashboard.request("DELETE", "/api/v1/api-keys/" + key_id)
         assert response.status == 200

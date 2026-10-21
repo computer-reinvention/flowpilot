@@ -24,6 +24,8 @@ def scripted_peer(exchanges):
                     assert remaining, "unexpected peer request"
                     case = remaining.pop(0)
                 assert (self.command, self.path) == (case["method"], case["path"])
+                for name, value in case.get('expected_headers', {}).items():
+                    assert self.headers.get(name) == value
                 if "request" in case and self.command != "GET":
                     assert body == case["request"]
                 if case.get("drop_response"):

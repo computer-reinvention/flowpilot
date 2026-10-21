@@ -33,7 +33,7 @@ def main():
     if args.offline:
         result = subprocess.run([sys.executable, "-m", "pytest", "tests/test_task_acceptance_contract.py",
                                  "tests/test_task_acceptance_browser.py", "tests/test_task_acceptance_security.py",
-                                 "tests/test_task_acceptance_baseline.py", "-q"],
+                                 "tests/test_task_acceptance_baseline.py", "tests/test_task_acceptance_assistance.py", "-q"],
                                 cwd=ROOT, capture_output=True, text=True, timeout=120)
         counts = {name: int(value) for value, name in re.findall(r"(\d+) (passed|failed|skipped|error)", result.stdout)}
         evidence.record("offline_harness", "passed" if result.returncode == 0 else "failed",
