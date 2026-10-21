@@ -17,8 +17,9 @@
     }
     reverse_proxy 127.0.0.1:8080 {
         # Do not use client-supplied forwarded headers for authorization/Origin.
+        header_up Host {$FLOWPILOT_EXTERNAL_HOST}
         header_up X-Forwarded-Proto https
-        header_up X-Forwarded-Host {host}
+        header_up X-Forwarded-Host {$FLOWPILOT_EXTERNAL_HOST}
         header_up -Forwarded
         transport http {
             dial_timeout 5s

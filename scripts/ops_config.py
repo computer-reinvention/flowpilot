@@ -1,5 +1,6 @@
 """Non-secret hosted preflight. Exit nonzero on missing security prerequisites."""
 import argparse
+import ipaddress
 import os
 from pathlib import Path
 import stat
@@ -26,11 +27,23 @@ def validate(env, *, hosted=True):
         errors.append("stable JWT_SECRET of at least 32 bytes required")
     if env.get("WEB_CONCURRENCY", "1") != "1" or env.get("UVICORN_WORKERS", "1") != "1":
         errors.append("exactly one backend worker required")
+    try:
+        peers = env.get("FLOWPILOT_TRUSTED_PROXY_IPS", "127.0.0.1").split(",")
+        if not peers or len(peers) > 2:
+            raise ValueError("invalid proxy peers")
+        for peer in peers:
+            address = ipaddress.ip_address(peer)
+            if address.is_unspecified or not (address.is_loopback or str(address) == "172.30.240.1"):
+                raise ValueError("unreviewed proxy address")
+    except ValueError:
+        errors.append("trusted proxies must be explicit loopback or packaged host gateway addresses, never wildcard/CIDR")
     url = urlsplit(env.get("FLOWPILOT_BASE_URL", ""))
     if hosted and (url.scheme != "https" or not url.hostname or url.username or url.query or url.fragment or url.path not in {"", "/"}):
         errors.append("public HTTPS origin required")
     if hosted and env.get("ALLOWED_ORIGINS") != env.get("FLOWPILOT_BASE_URL", "").rstrip("/"):
         errors.append("ALLOWED_ORIGINS must equal the public origin")
+    if hosted and env.get("FLOWPILOT_EXTERNAL_HOST") != url.netloc:
+        errors.append("proxy external Host must equal public URL authority")
     provider = env.get("LLM_PROVIDER", "gemini")
     key = {"gemini": "GOOGLE_API_KEY", "claude": "ANTHROPIC_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}.get(provider)
     if key:

@@ -39,6 +39,7 @@ COPY --from=agent-builder /app/agent-host/ ./agent-host/
 COPY --from=frontend-builder /app/frontend/dist/ ./frontend/
 COPY scripts/ops_health.py scripts/ops_config.py ./scripts/
 COPY scripts/ops_start.sh ./scripts/
+COPY scripts/ops_logging.json ./scripts/
 RUN useradd --uid 10001 --create-home flowpilot && mkdir -p /app/profiles /app/.pi-auth && chown -R flowpilot:flowpilot /app/profiles /app/.pi-auth
 USER flowpilot
 ARG REVISION=unknown

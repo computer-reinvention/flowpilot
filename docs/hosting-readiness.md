@@ -110,11 +110,19 @@ request capture, tracing or external analytics without equivalent redaction for 
 capability path segments and queries. Losing request error logs is intentional; use
 opaque metrics and `/health/browser-tasks` for operations.
 
-Uvicorn trusts forwarded headers only from loopback; Caddy reaches a loopback-only
+Uvicorn trusts forwarded headers only from explicit individual addresses (loopback
+by default); `FLOWPILOT_TRUSTED_PROXY_IPS` accepts only loopback or the packaged
+`172.30.240.1` host gateway, never wildcard/CIDR or browser addresses. Caddy reaches a loopback-only
 published port whose Docker NAT may present a bridge address. Do **not** set `*`.
-Assistance must validate Origin against the explicit external base URL, not arbitrary
-client/forwarded Host. Lane003/006 must verify the exact host-proxy topology before
-expanding a trusted proxy allowlist. The local rehearsal uses HTTP+WS only: HTTPS,
+Set `FLOWPILOT_EXTERNAL_HOST` to the exact public URL authority; Caddy routes only
+the configured site and replaces upstream Host/X-Forwarded-Host with that value.
+Lane003 compares Origin to actual ASGI scheme/Host, so the observed NAT source must
+be proved and explicitly trusted for scheme normalization before assistance works
+over TLS. Do not independently trust client Forwarded/X-Forwarded headers in app code.
+Uvicorn pins the websockets implementation and assembled receive limit **65,536
+bytes**, queue 16, so fragmented commands cannot grow without an upstream bound.
+Lane003/006 must verify that receive bound and exact host-proxy topology before
+changing the trusted proxy allowlist. The local rehearsal uses HTTP+WS only: HTTPS,
 real viewer/capability expiry and per-frame authorization remain integration gates.
 
 Operator prerequisites (never commit these values):
@@ -191,11 +199,23 @@ failure tests proving interrupted tasks, revoked capabilities and archive preser
 
 ## Evidence ledger and remaining gates
 
-Local evidence is recorded in plan005. Eight offline tests cover settings forwarding,
+Local evidence is recorded in plan005. Twelve offline tests cover settings forwarding,
 safe error text, disabled/enabled readiness, mocked deployment, WAL-backed SQLite
 recovery, isolated profiles, revision/checksum checks and conservative trace cleanup.
 The real-age fixture round trip recovered records and two private profile archives,
 rejected tampering and preserved an existing encrypted backup. Caddy config parsed.
+
+Dependency inventory (2026-10-21; advisories change): agent production npm install
+audited 93 packages with **0 reported vulnerabilities**; Linux Node 22.22 ran all four
+agent tests. Frontend lockfile audit reports **7 high**, rooted at
+`braces` stack exhaustion [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm),
+propagated through `micromatch`, `fast-glob`, `@ts-morph/common`, `ts-morph`,
+`@shadcn/registry`, `shadcn`. The direct dependency is dev-only shadcn; frontend
+node_modules/build tools are not copied into the runtime image, but build-time risk
+still requires frontend-owner review. npm proposes a breaking shadcn change; this
+lane did **not** run `npm audit fix`, change locks or accept that risk for the user.
+Python/OS/Chromium CVE inventory is not yet independently cleared. Image pins and
+successful builds must not be described as a clean security scan.
 
 No live provider calls, real accounts, credentials, infrastructure installation,
 certificate issuance, deployments, host firewall changes or peer files were used.

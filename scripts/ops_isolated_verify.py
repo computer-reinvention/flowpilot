@@ -60,7 +60,7 @@ def main():
         except subprocess.CalledProcessError:
             pass
         assert not (root / "corrupt-restore").exists()
-    run("caddy", "validate", "--config", str(scripts / "ops_Caddyfile"), "--adapter", "caddyfile", env={**os.environ, "FLOWPILOT_DOMAIN": "http://localhost:18080"})
+    run("caddy", "validate", "--config", str(scripts / "ops_Caddyfile"), "--adapter", "caddyfile", env={**os.environ, "FLOWPILOT_DOMAIN": "http://localhost:18080", "FLOWPILOT_EXTERNAL_HOST": "localhost:18080"})
     result = subprocess.run(["nft", "--check", "--file", str(scripts / "ops_network_policy.nft")], capture_output=True)
     print(json.dumps({"age_restore_records_profiles_tamper_no_clobber": "PASS", "caddy_parse": "PASS", "nft_namespace_check": "PASS" if result.returncode == 0 else "BLOCKED", "nft_error": result.stderr.decode()[:1500], "sandbox_reachability": "UNVERIFIED"}, indent=2))
     return bool(result.returncode)

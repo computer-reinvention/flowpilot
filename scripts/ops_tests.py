@@ -42,6 +42,16 @@ class OperationalTests(unittest.TestCase):
         for env in ({"LLM_PROVIDER": "codex"}, {"UVICORN_WORKERS": "4"}, {"LLM_PROVIDER": "unknown"}):
             self.assertTrue(config.validate(env, hosted=False))
 
+    def test_proxy_trust_and_packaged_receive_bound(self):
+        env = {"JWT_SECRET": "x" * 32, "GOOGLE_API_KEY": "fixture"}
+        for peer in ("*", "172.30.240.0/24", "172.30.240.3", "0.0.0.0"):
+            failures = config.validate({**env, "FLOWPILOT_TRUSTED_PROXY_IPS": peer}, hosted=False)
+            self.assertTrue(any("trusted proxies" in item for item in failures))
+        self.assertEqual(config.validate({**env, "FLOWPILOT_TRUSTED_PROXY_IPS": "172.30.240.1"}, hosted=False), [])
+        startup = (ROOT / "scripts" / "ops_start.sh").read_text()
+        self.assertIn("--ws websockets --ws-max-size 65536 --ws-max-queue 16", startup)
+        self.assertIn("--no-access-log", startup)
+
     def test_health_checks_enabled_composition(self):
         paths = []
 

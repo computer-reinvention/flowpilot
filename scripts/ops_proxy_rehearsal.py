@@ -45,24 +45,29 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         log = Path(tmp) / "proxy.log"
         with log.open("wb") as output:
-            proc = subprocess.Popen(["caddy", "run", "--config", str(Path(__file__).with_name("ops_Caddyfile")), "--adapter", "caddyfile"], env={**os.environ, "FLOWPILOT_DOMAIN": "http://localhost:18080"}, stdout=output, stderr=output)
+            proc = subprocess.Popen(["caddy", "run", "--config", str(Path(__file__).with_name("ops_Caddyfile")), "--adapter", "caddyfile"], env={**os.environ, "FLOWPILOT_DOMAIN": "http://localhost:18080", "FLOWPILOT_EXTERNAL_HOST": "localhost:18080"}, stdout=output, stderr=output)
             try:
                 for attempt in range(50):
                     try:
-                        urllib.request.urlopen("http://127.0.0.1:18080/health", timeout=1).close()
+                        urllib.request.urlopen("http://localhost:18080/health", timeout=1).close()
                         break
                     except Exception:
                         time.sleep(0.1)
                 else:
                     raise RuntimeError("local proxy unavailable")
-                url = "http://127.0.0.1:18080/help/" + sentinel + "?token=" + sentinel
+                url = "http://localhost:18080/api/v1/browser-tasks/help/" + sentinel + "?token=" + sentinel
                 request = urllib.request.Request(url, headers={"Forwarded": "host=evil.invalid", "X-Forwarded-Proto": "http"})
                 with urllib.request.urlopen(request) as response:
                     assert response.headers["Referrer-Policy"] == "no-referrer"
                 assert seen[-1].get("X-Forwarded-Proto") == "https"
+                assert seen[-1].get("Host") == "localhost:18080"
+                assert seen[-1].get("X-Forwarded-Host") == "localhost:18080"
                 assert "Forwarded" not in seen[-1]
+                before = len(seen)
+                urllib.request.urlopen(urllib.request.Request(url, headers={"Host": "foreign.invalid"})).close()
+                assert len(seen) == before, "foreign Host routed to backend"
                 with socket.create_connection(("127.0.0.1", 18080), timeout=3) as sock:
-                    sock.sendall((f"GET /help/{sentinel}/stream HTTP/1.1\r\nHost: localhost:18080\r\nOrigin: http://localhost:18080\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n").encode())
+                    sock.sendall((f"GET /api/v1/browser-tasks/help/{sentinel}/stream HTTP/1.1\r\nHost: localhost:18080\r\nOrigin: http://localhost:18080\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n").encode())
                     assert b"101" in sock.recv(4096)
                 try:
                     urllib.request.urlopen(urllib.request.Request(url, data=b"x" * 140000), timeout=3)
