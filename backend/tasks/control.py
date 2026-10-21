@@ -244,6 +244,9 @@ class Control:
     async def save_capability(self, binding):
         await self.repository.save_capability(binding)
 
+    async def assistance_lease(self, principal, task_id, request):
+        return await self.repository.assistance_lease(principal, task_id, request)
+
     async def capability(self, digest, now):
         return await self.repository.capability(digest, now)
 

@@ -356,6 +356,18 @@ class Repository:
         if view.state != TaskState.WAITING_FOR_BROWSER or not view.interaction or (view.interaction.interaction_id, view.interaction.generation) != (binding.interaction_id, binding.generation) or min(view.interaction.expires_at, binding.expires_at) <= timestamp:
             fail(ErrorCode.ASSISTANCE_EXPIRED, 'Assistance is no longer available')
 
+    async def assistance_lease(self, principal, task_id, request):
+        def operation():
+            with self.transaction() as db:
+                row = self._row(db, principal, task_id)
+                lease = self._lease(row)
+                self._fenced(db, lease)
+                view = TaskView.model_validate_json(row['view'])
+                if view.state != TaskState.WAITING_FOR_BROWSER or not view.interaction or (view.interaction.interaction_id, view.interaction.generation) != (request.interaction_id, request.generation) or view.interaction.expires_at <= now():
+                    fail(ErrorCode.STALE_GENERATION, 'Browser assistance pause is no longer active')
+                return lease
+        return await self._run(operation)
+
     async def save_capability(self, binding):
         def operation():
             with self.transaction() as db:

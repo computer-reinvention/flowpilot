@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from backend import auth, db
 from backend.task_bootstrap import install_task_api
 from backend.task_contracts import (
-    API_PREFIX, Interaction, InteractionKind, PollRequest, Principal, TaskState,
+    API_PREFIX, AssistanceRequest, Interaction, InteractionKind, PollRequest, Principal, TaskState,
     TaskResult, TaskStart, InputField, InteractionResponse, TaskFault,
 )
 from backend.task_ports import AssistanceBinding
@@ -169,7 +169,9 @@ async def test_interaction_secret_receipts_confirmation_and_capabilities(system)
     async with asyncio.timeout(2):
         while (await client.get(receipt['status_url'], headers=headers)).json()['state'] != 'waiting_for_browser':
             await asyncio.sleep(.01)
-    binding = AssistanceBinding(lease=lease, interaction_id='browser', generation=3, digest=hashlib.sha256(b'synthetic-token').hexdigest(), expires_at=browser.expires_at)
+    assistance_lease = await control.assistance_lease(lease.principal, lease.task_id, AssistanceRequest(interaction_id='browser', generation=3))
+    assert assistance_lease == lease and assistance_lease.generation != 3
+    binding = AssistanceBinding(lease=assistance_lease, interaction_id='browser', generation=3, digest=hashlib.sha256(b'synthetic-token').hexdigest(), expires_at=browser.expires_at)
     await control.save_capability(binding)
     assert await control.capability(binding.digest, now()) == binding
     await client.post(receipt['status_url'] + '/cancel', headers=headers)
