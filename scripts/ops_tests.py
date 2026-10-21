@@ -122,6 +122,53 @@ class OperationalTests(unittest.TestCase):
             self.assertTrue((root / "platform.db").exists())
             self.assertTrue((root / "recent.trace").exists())
 
+    def test_failed_backup_does_not_publish_or_replace(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "profiles"
+            source.mkdir()
+            (source / "fixture").write_text("state")
+            output = root / "backup.age"
+            with patch.object(backup.subprocess, "run", side_effect=OSError("disk full")):
+                with self.assertRaises(OSError):
+                    backup.backup(source, output, "rev", "public-recipient")
+            self.assertFalse(output.exists())
+            self.assertEqual(sorted(p.name for p in root.iterdir()), ["profiles"])
+            output.write_bytes(b"previous-good-archive")
+            with self.assertRaises(ValueError):
+                backup.backup(source, output, "rev", "public-recipient")
+            self.assertEqual(output.read_bytes(), b"previous-good-archive")
+
+    def test_restore_rejects_traversal_before_extraction(self):
+        import io
+        import tarfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            identity = root / "identity"
+            identity.write_text("fixture")
+            identity.chmod(0o600)
+
+            def fake_decrypt(arguments, **kwargs):
+                output = Path(arguments[arguments.index("-o") + 1])
+                with tarfile.open(output, "w") as tar:
+                    info = tarfile.TarInfo("state/../../escaped")
+                    info.size = 1
+                    tar.addfile(info, io.BytesIO(b"x"))
+
+            with patch.object(backup.subprocess, "run", side_effect=fake_decrypt):
+                with self.assertRaises(ValueError):
+                    backup.restore(root / "unused.age", root / "new", "rev", identity)
+            self.assertFalse((root / "new").exists())
+            self.assertFalse((root / "escaped").exists())
+
+    def test_runtime_low_disk_and_proxy_fail_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            usage = shutil._ntuple_diskusage(100, 99, 1)
+            with patch.object(config.shutil, "disk_usage", return_value=usage):
+                failures = config.runtime_checks({"PROFILES_DIR": tmp, "DOCKER_HOST": "unix:///var/run/docker.sock"})
+            self.assertTrue(any("DISK_LOW" in item for item in failures))
+            self.assertTrue(any("private socket proxy" in item for item in failures))
+
     def test_deploy_commands_are_mocked_and_scoped(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

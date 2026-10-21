@@ -28,6 +28,7 @@ def outside(source, destination):
 
 def snapshot(source, target, revision):
     source = source.resolve(strict=True)
+    outside(source, target)
     target.mkdir(mode=0o700)
     files = {}
     schemas = {}
@@ -64,6 +65,9 @@ def verify(root, revision):
     manifest = json.loads((root / "ops-manifest.json").read_text())
     if manifest["format"] != 1 or manifest["revision"] != revision:
         raise ValueError("restore requires exact backup format and application revision")
+    actual = {str(file.relative_to(root)) for file in root.rglob("*") if file.is_file() and file.name != "ops-manifest.json"}
+    if actual != set(manifest["files"]):
+        raise ValueError("backup file inventory mismatch")
     for name, expected in manifest["files"].items():
         file = root / name
         if not file.resolve().is_relative_to(root.resolve()) or file.is_symlink() or digest(file) != expected:
@@ -93,8 +97,15 @@ def backup(source, output, revision, recipient):
         encrypted = tmp / "encrypted.age"
         subprocess.run(["age", "-r", recipient, "-o", str(encrypted), str(archive)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         encrypted.chmod(0o600)
+        with encrypted.open("rb") as stream:
+            os.fsync(stream.fileno())
         # Atomic no-clobber publication; partial encryption cannot replace good archives.
         os.link(encrypted, output)
+        descriptor = os.open(output.parent, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
 
 
 def restore(archive, destination, revision, identity):
