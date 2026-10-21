@@ -1,0 +1,443 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-22",
+  "lane": "R3 OS/Chromium image audit",
+  "base_revision": "0b5d115",
+  "scanner": {
+    "image": "aquasec/trivy:0.75.0@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa",
+    "why_this_version": "0.75.0 released 2026-10-01; deliberately not the 0.76.x tags published days earlier, and outside the early-2026 compromised Docker Hub tag range",
+    "db_updated_at": "2026-10-21T19:18:22Z",
+    "mode": "docker save archive mounted read-only; no Docker socket in the scanner",
+    "scope": "--scanners vuln --pkg-types os,library; os-pkgs gated here, lang-pkgs reported as context and gated by ops_dependency_audit.py"
+  },
+  "runtime_feeds": {
+    "chrome_stable_linux": "156.0.8078.47",
+    "node": "nodejs.org/dist/index.json security flag",
+    "python": "python.org release API (same minor line)"
+  },
+  "gate": "python scripts/ops_image_audit.py --image backend=<tag> --image sandbox=<tag>: exit 1 on any HIGH/CRITICAL OS-package or bundled-runtime finding not covered by an unexpired, justified scripts/ops_image_allowlist.json entry; OS findings with a distro fix can never be allowlisted; runtime entries bind the exact version; exit 2 on infrastructure errors.",
+  "images": {
+    "sandbox": {
+      "dockerfile": "Dockerfile.sandbox",
+      "before": {
+        "tag": "flowpilot-r3-sandbox:audit (main 0b5d115)",
+        "image_id": "sha256:43ece3ae68efcb30d3c54d3e76788dc0665865b2726ba40ae6414f5a7b2106e1",
+        "os": "debian 12.13",
+        "by_severity": {
+          "CRITICAL": 11,
+          "HIGH": 153,
+          "LOW": 298,
+          "MEDIUM": 302,
+          "UNKNOWN": 10
+        },
+        "fix_available_all_severities": 117,
+        "high_critical_by_debian_status": {
+          "affected": 80,
+          "fix_deferred": 41,
+          "fixed": 41,
+          "will_not_fix": 2
+        },
+        "runtimes": {
+          "chromium": {
+            "/root/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome": "156.0.8078.4",
+            "/root/.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell": "156.0.8078.4"
+          },
+          "node": {
+            "/usr/local/lib/python3.12/site-packages/playwright/driver/node": "24.21.0"
+          },
+          "python": {
+            "/usr/local/bin/python3": "3.12.12"
+          }
+        },
+        "language_packages_context_only": {
+          "python-pkg": {
+            "LOW": 1,
+            "MEDIUM": 5
+          }
+        }
+      },
+      "intermediate_bookworm_patched": {
+        "tag": "flowpilot-r3-sandbox:candidate (commit b938943)",
+        "image_id": "sha256:4cc7ff6b9e930110fdef012c74cc4882590c39cd7bf3d48993f2e828f078f59f",
+        "os": "debian 12.15",
+        "by_severity": {
+          "CRITICAL": 4,
+          "HIGH": 100,
+          "LOW": 208,
+          "MEDIUM": 206,
+          "UNKNOWN": 5
+        },
+        "fix_available_all_severities": 0,
+        "high_critical_by_debian_status": {
+          "affected": 73,
+          "fix_deferred": 29,
+          "will_not_fix": 2
+        },
+        "runtimes": {
+          "chromium": {
+            "/opt/chrome-for-testing/chrome-linux64/chrome": "156.0.8078.47"
+          },
+          "python": {
+            "/usr/local/bin/python3": "3.12.15"
+          }
+        },
+        "language_packages_context_only": {
+          "python-pkg": {
+            "LOW": 1,
+            "MEDIUM": 5
+          }
+        }
+      },
+      "after": {
+        "tag": "flowpilot-r3-sandbox:final (trixie)",
+        "image_id": "sha256:11a75b37dec46faba3d57cf8d46aef602e970e1aa07e7ea46c9b215c62a27d2e",
+        "os": "debian 13.7",
+        "by_severity": {
+          "CRITICAL": 1,
+          "HIGH": 69,
+          "LOW": 160,
+          "MEDIUM": 154,
+          "UNKNOWN": 5
+        },
+        "fix_available_all_severities": 0,
+        "high_critical_by_debian_status": {
+          "affected": 66,
+          "will_not_fix": 1,
+          "fix_deferred": 3
+        },
+        "runtimes": {
+          "chromium": {
+            "/opt/chrome-for-testing/chrome-linux64/chrome": "156.0.8078.47"
+          },
+          "python": {
+            "/usr/local/bin/python3": "3.12.15"
+          }
+        },
+        "language_packages_context_only": {
+          "python-pkg": {
+            "LOW": 1,
+            "MEDIUM": 5
+          }
+        }
+      }
+    },
+    "backend": {
+      "dockerfile": "Dockerfile.backend (frontend/agent build stages contribute only frontend dist, agent-host sources/node_modules and /usr/local/bin/node to the runtime image)",
+      "before": {
+        "tag": "flowpilot-r3-backend:audit (main 0b5d115)",
+        "image_id": "sha256:38c065982da4ce05f176869457e7214ce231a2f7824fa4c11d731fb07befc031",
+        "os": "debian 12.13",
+        "by_severity": {
+          "CRITICAL": 11,
+          "HIGH": 130,
+          "LOW": 205,
+          "MEDIUM": 243,
+          "UNKNOWN": 10
+        },
+        "fix_available_all_severities": 118,
+        "high_critical_by_debian_status": {
+          "affected": 71,
+          "fix_deferred": 27,
+          "fixed": 42,
+          "will_not_fix": 1
+        },
+        "runtimes": {
+          "chromium": {
+            "/opt/playwright/chromium-1248/chrome-linux64/chrome": "156.0.8078.4",
+            "/opt/playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell": "156.0.8078.4"
+          },
+          "node": {
+            "/app/.venv/lib/python3.12/site-packages/playwright/driver/node": "24.21.0",
+            "/usr/local/bin/node": "22.22.0"
+          },
+          "python": {
+            "/usr/local/bin/python3": "3.12.12"
+          }
+        },
+        "language_packages_context_only": {
+          "python-pkg": {
+            "CRITICAL": 2,
+            "HIGH": 17,
+            "LOW": 3,
+            "MEDIUM": 16
+          }
+        }
+      },
+      "intermediate_bookworm_patched": {
+        "tag": "flowpilot-r3-backend:candidate (commit b938943)",
+        "image_id": "sha256:c3d35d4e5e1b574dc20a8a80c51e3dba61cf9bb105c170257d205c073342d4fd",
+        "os": "debian 12.15",
+        "by_severity": {
+          "CRITICAL": 4,
+          "HIGH": 98,
+          "LOW": 177,
+          "MEDIUM": 200,
+          "UNKNOWN": 5
+        },
+        "fix_available_all_severities": 3,
+        "high_critical_by_debian_status": {
+          "affected": 71,
+          "fix_deferred": 27,
+          "will_not_fix": 1,
+          "fixed": 3
+        },
+        "runtimes": {
+          "chromium": {
+            "/opt/playwright/chromium-1248/chrome-linux64/chrome": "156.0.8078.4",
+            "/opt/playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell": "156.0.8078.4"
+          },
+          "node": {
+            "/app/.venv/lib/python3.12/site-packages/playwright/driver/node": "24.21.0",
+            "/usr/local/bin/node": "22.23.4"
+          },
+          "python": {
+            "/usr/local/bin/python3": "3.12.15"
+          }
+        },
+        "language_packages_context_only": {
+          "python-pkg": {
+            "CRITICAL": 2,
+            "HIGH": 17,
+            "LOW": 3,
+            "MEDIUM": 16
+          }
+        }
+      },
+      "after": {
+        "tag": "flowpilot-r3-backend:final (trixie)",
+        "image_id": "sha256:d03778ee24964d7d47668bb5a08f217dd106ea06caa8b6fa2ec4c416931fdd75",
+        "os": "debian 13.7",
+        "by_severity": {
+          "CRITICAL": 1,
+          "HIGH": 70,
+          "LOW": 142,
+          "MEDIUM": 149,
+          "UNKNOWN": 5
+        },
+        "fix_available_all_severities": 3,
+        "high_critical_by_debian_status": {
+          "affected": 65,
+          "fix_deferred": 3,
+          "fixed": 3
+        },
+        "runtimes": {
+          "chromium": {
+            "/opt/playwright/chromium-1248/chrome-linux64/chrome": "156.0.8078.4",
+            "/opt/playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell": "156.0.8078.4"
+          },
+          "node": {
+            "/app/.venv/lib/python3.12/site-packages/playwright/driver/node": "24.21.0",
+            "/usr/local/bin/node": "22.23.4"
+          },
+          "python": {
+            "/usr/local/bin/python3": "3.12.15"
+          }
+        },
+        "language_packages_context_only": {
+          "python-pkg": {
+            "CRITICAL": 2,
+            "HIGH": 17,
+            "LOW": 3,
+            "MEDIUM": 16
+          }
+        }
+      }
+    }
+  },
+  "remediated": [
+    {
+      "change": "python:3.12.12-slim-bookworm -> python:3.12.15-slim-trixie (digest pinned) for backend and sandbox",
+      "reason": "CPython missed 3.12.13-3.12.15 (3.12 is security-fix-only); Debian 12 is in LTS. Moving to Debian 13 removed ~30 HIGH/CRITICAL per image that bookworm leaves fix_deferred/affected (libglib2.0, libsqlite3, libexpat, libharfbuzz, openssl, gzip, libtiff, ...)."
+    },
+    {
+      "change": "node:22.22.0-bookworm-slim -> node:22.23.4-trixie-slim (digest pinned) for frontend/agent build stages and the copied runtime node",
+      "reason": "22.22.0 missed security releases 22.22.2, 22.23.0, 22.23.2, 22.23.4 (Trivy cannot see the copied binary; caught by the runtime feed check)."
+    },
+    {
+      "change": "apt-get upgrade within the pinned suite before package installs (both images)",
+      "reason": "Cleared every OS HIGH/CRITICAL with a distro fix (openssl/libssl3, perl-base, gnutls, krb5, pcre2, libcap2): fix-available OS findings (all severities) 115 -> 0 per image."
+    },
+    {
+      "change": "Sandbox Chromium: Playwright 1.64.0 bundle 156.0.8078.4 -> Chrome for Testing 156.0.8078.47 (current Linux stable); sha256 e6c94490f0b6b337225aeb2d2a5034858516b7017356980ba94f5176d8774a50 enforced at build, GCS md5 matched when pinned",
+      "reason": "Playwright 1.64.0 is the newest release and still ships a pre-stable 156 snapshot. The sandbox renders untrusted web content and only needs CDP, so it no longer depends on Playwright's browser pin. Entrypoint fails closed if the pinned binary is missing (no silent fallback)."
+    },
+    {
+      "change": "Sandbox: removed curl/libcurl, Debian supervisor + python3.11, x11-utils (libxtst6); Playwright pip package and its bundled Node 24.21.0 driver uninstalled after install-deps; supervisor 4.3.0 via pip --require-hashes",
+      "reason": "Unused or duplicate runtime surface (curl/libcurl and python3.11 alone carried 16 HIGH/CRITICAL on bookworm) plus an unscanned Node binary. dbus-x11 deliberately kept: without it apt pulls full systemd via dbus-user-session (+4 HIGH)."
+    },
+    {
+      "change": "Xvfb -nolisten tcp; /root no longer chmod 755 in the sandbox",
+      "reason": "Hardens the accepted X server findings (unix socket only) and stops exposing /root to sandboxuser."
+    }
+  ],
+  "accepted_summary": {
+    "base-misc": {
+      "entries": 4,
+      "packages": [
+        "libacl1",
+        "libsystemd0",
+        "libudev1",
+        "perl-base"
+      ],
+      "images": [
+        "backend",
+        "sandbox"
+      ],
+      "critical": [],
+      "justification": "Essential base package with no Debian fix (affected/deferred/will-not-fix). Affected paths (setuid ACL helpers, Perl Archive::Tar, systemd-homed, gzip CLI, minizip) are not invoked on untrusted input; systemd is not running inside the containers and libsystemd0 is only linked for journald/sd-bus client helpers."
+    },
+    "bundled-runtime": {
+      "entries": 2,
+      "packages": [
+        "chromium",
+        "node"
+      ],
+      "images": [
+        "backend"
+      ],
+      "critical": [],
+      "justification": "Backend Chromium is Playwright 1.64.0's pinned build (156.0.8078.4); 1.64.0 is the newest Playwright and the version is owned by uv.lock (dependency lane). Hosted browser tasks run in the sandbox image, which ships stable 156.0.8078.47; the backend binary is used only by native/REPL mode, which must not browse untrusted sites in hosted deployments. Remove when Playwright ships a 156 stable-or-newer build."
+    },
+    "cups": {
+      "entries": 2,
+      "packages": [
+        "libcups2t64"
+      ],
+      "images": [
+        "backend",
+        "sandbox"
+      ],
+      "critical": [],
+      "justification": "Chromium links libcups for print dialogs; Debian lists these unfixed. The CVEs need a malicious CUPS/IPP server or shared queue: no cupsd runs, no printer is configured, and sandbox egress is policy-restricted."
+    },
+    "ncurses": {
+      "entries": 4,
+      "packages": [
+        "libncursesw6",
+        "libtinfo6",
+        "ncurses-base",
+        "ncurses-bin"
+      ],
+      "images": [
+        "backend",
+        "sandbox"
+      ],
+      "critical": [],
+      "justification": "Essential terminal library from the base image; Debian lists it unfixed. No untrusted terminfo or terminal input is processed: services are non-interactive and never attach a TTY to remote parties."
+    },
+    "util-linux": {
+      "entries": 36,
+      "packages": [
+        "bsdutils",
+        "libblkid1",
+        "liblastlog2-2",
+        "libmount1",
+        "libsmartcols1",
+        "libuuid1",
+        "login",
+        "mount",
+        "util-linux"
+      ],
+      "images": [
+        "backend",
+        "sandbox"
+      ],
+      "critical": [],
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL)."
+    },
+    "xclient": {
+      "entries": 4,
+      "packages": [
+        "libx11-6",
+        "libx11-data",
+        "libx11-xcb1",
+        "libxrender1"
+      ],
+      "images": [
+        "backend",
+        "sandbox"
+      ],
+      "critical": [],
+      "justification": "X11 client library with no Debian fix. Malicious input must come from the X server, which is the container-local Xvfb under the same uid; web content never speaks the X protocol."
+    },
+    "xml-tiff-glib": {
+      "entries": 10,
+      "packages": [
+        "libtiff6",
+        "libxml2"
+      ],
+      "images": [
+        "backend",
+        "sandbox"
+      ],
+      "critical": [
+        "CVE-2026-6653 libxml2"
+      ],
+      "justification": "Unfixed in Debian. Chromium for Testing does not link this system library (verified with ldd; it bundles its own libxml/SQLite/HarfBuzz/expat and web image decoders). Installed only as a dependency of local trusted-data consumers (Mesa libllvm, shared-mime-info, gdk-pixbuf, fontconfig); no untrusted documents reach it."
+    },
+    "xserver": {
+      "entries": 10,
+      "packages": [
+        "xserver-common",
+        "xvfb"
+      ],
+      "images": [
+        "backend",
+        "sandbox"
+      ],
+      "critical": [],
+      "justification": "Debian lists these X server CVEs unfixed. Exploitation needs a malicious X client. Sandbox: Xvfb listens only on its local unix socket (-nolisten tcp) in a per-task container and its only client is the same-uid Chromium, so this is post-browser-compromise only. Backend: installed by `playwright install --with-deps` but never started (Chromium launches headless)."
+    }
+  },
+  "accepted_runtime": [
+    {
+      "id": "CHROMIUM-BEHIND-STABLE",
+      "package": "chromium",
+      "installed": "156.0.8078.4",
+      "group": "bundled-runtime",
+      "review_by": "2026-11-15",
+      "justification": "Backend Chromium is Playwright 1.64.0's pinned build (156.0.8078.4); 1.64.0 is the newest Playwright and the version is owned by uv.lock (dependency lane). Hosted browser tasks run in the sandbox image, which ships stable 156.0.8078.47; the backend binary is used only by native/REPL mode, which must not browse untrusted sites in hosted deployments. Remove when Playwright ships a 156 stable-or-newer build.",
+      "severity": "HIGH",
+      "status": "fixed",
+      "fixed": "156.0.8078.47",
+      "title": "Bundled Chromium is older than current Linux stable 156.0.8078.47",
+      "images": [
+        "backend"
+      ]
+    },
+    {
+      "id": "NODE-SECURITY-RELEASE-MISSED",
+      "package": "node",
+      "installed": "24.21.0",
+      "group": "bundled-runtime",
+      "review_by": "2026-11-15",
+      "justification": "Node 24.21.0 is the driver bundled inside the uv.lock-pinned Playwright 1.64.0 wheel; it only speaks to the parent Python process over stdio pipes and never parses network input itself. Fixed by a Playwright upgrade owned by the dependency lane; /usr/local/bin/node (agent host) is on 22.23.4, the latest security release.",
+      "severity": "HIGH",
+      "status": "fixed",
+      "fixed": "24.22.1",
+      "title": "Node.js misses security release(s) 24.22.1",
+      "images": [
+        "backend"
+      ]
+    }
+  ],
+  "verification": {
+    "sandbox_smoke_and_e2e": "FLOWPILOT_SANDBOX_IMAGE=flowpilot-r3-sandbox:final FLOWPILOT_EXPECT_BROWSER=156.0.8078.47 FLOWPILOT_BACKEND_IMAGE=flowpilot-r3-backend:final python3 scripts/ops_sandbox_smoke.py -> PASS 9222 + socat 9223 + new target; PASS backend Playwright connect_over_cdp -> render + 11838-byte PNG",
+    "sandbox_health": "Docker HEALTHCHECK (Python urllib) healthy; Xvfb/chrome/socat run as sandboxuser; ldd chrome: 0 missing libraries",
+    "backend_native_chromium": "Playwright chromium.launch() in backend:final (cap_drop ALL, no network) rendered and screenshotted with 156.0.8078.4",
+    "backend_asgi": "ops_asgi_rehearsal.py inside backend:final -> PASS 65536-byte receive bound",
+    "backend_lifecycle": "ops_backend_rehearsal.py: disabled /health 200, restart, graceful stop PASS; its enabled-composition 503 expectation fails identically on the unmodified baseline image (pre-existing stale expectation, left unchanged); with enabled=200 baseline and final pass identically",
+    "agent_host": "node --test auth.test.mjs codemode.test.mjs on Node 22.23.4 inside backend:final -> 4 passed",
+    "backend_import": "python -c 'import backend.main' inside backend:final -> ok",
+    "ops_unit_tests": "python -m unittest discover -s scripts -p ops_tests.py -> 13 passed (12 existing + image audit gate)",
+    "gate_final": "ops_image_audit.py on final images with committed allowlist -> PASS exit 0 (141 accepted image findings, 0 unaccepted)",
+    "gate_negative_control": "same allowlist on baseline images -> FAIL exit 1 (186 unaccepted)"
+  },
+  "limits": [
+    "Advisory status is a point-in-time DB snapshot; allowlist review_by dates force re-review (OS 2026-11-22, runtimes 2026-11-15).",
+    "Trivy cannot see libraries statically bundled inside Chromium; Chromium coverage is by version against Google stable, not per CVE.",
+    "Backend venv findings (Trivy view 2 CRITICAL / 17 HIGH) are the dependency lane's pip-audit scope and are NOT cleared here.",
+    "Builds and smoke ran under amd64 emulation on an arm64 Docker Desktop host; the Linux Chromium 'No usable sandbox!' gate and network isolation proof still require a real Linux host.",
+    "OS packages remain upstream-resolved (apt upgrade/install-deps), so images are not bit-for-bit reproducible; the gate must run on every rebuild."
+  ]
+}

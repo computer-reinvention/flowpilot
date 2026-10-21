@@ -518,3 +518,35 @@ Final verdict remains **blocked**, not override incompatibility established and 
 global hosting/security approval. Candidate runtime-license COPY also remains in
 the uncommitted slice; source license in frontend commit is verified, but deployers
 must not omit the runtime attribution follow-up.
+
+## R3 OS/Chromium image audit evidence — 2026-10-22
+
+Branch from main `0b5d115`. Commits: `fef81de` (pinned-Trivy gate
+`scripts/ops_image_audit.py`), `b938943` (base bumps + in-suite upgrade, sandbox on
+sha256-pinned Chrome for Testing 156.0.8078.47, curl/python3.11/Playwright driver
+removed), `ae42705` (fixable OS findings can never be allowlisted; backend-to-sandbox
+CDP smoke), `07adc26` (both images on Debian 13 trixie), followed by the evidence
+commit adding `scripts/ops_image_allowlist.json`, `scripts/ops_image_triage.json` and
+the hosting-readiness "OS and bundled-runtime image audit" section.
+
+HIGH/CRITICAL counts, OS packages plus bundled runtimes: sandbox 11C/153H -> 1C/69H;
+backend 11C/130H -> 1C/70H. No remaining OS finding has a distro fix. The 141
+remaining findings are 72 unique, justified allowlist entries. Two of them are backend
+runtimes owned by the `uv.lock` Playwright pin: Chromium 156.0.8078.4 and the Node
+24.21.0 driver.
+
+Gate results: final images exit 0; baseline images exit 1 (186 unaccepted).
+
+Final-image verification:
+- sandbox CDP on 9222 and socat 9223;
+- backend Playwright `connect_over_cdp` render/screenshot;
+- backend native launch;
+- ASGI rehearsal;
+- agent-host 4/4;
+- ops tests 13/13;
+- lifecycle rehearsal identical to baseline. Its enabled-503 expectation fails on both
+  baseline and final, so the failure predates this lane.
+
+This does NOT clear `DEPENDENCY_SECURITY_UNRESOLVED`, because the Python advisories and
+the lane-005 candidate are untouched. It also does not clear the Linux "No usable
+sandbox!" gate or `HOST_NETWORK_POLICY_UNVERIFIED`; both need a real Linux host.

@@ -5,9 +5,14 @@ containers/network and no published ports or host mounts. Does NOT prove task cr
 reconciliation; the foundation intentionally lacks executor/control implementations.
 """
 import json
+import os
 import subprocess
 import time
 import uuid
+
+
+BACKEND_IMAGE = os.environ.get("FLOWPILOT_BACKEND_IMAGE", "flowpilot-lane005-backend:verify")
+TOOLS_IMAGE = os.environ.get("FLOWPILOT_TOOLS_IMAGE", "flowpilot-lane005-tools:verify")
 
 
 def docker(*args):
@@ -21,6 +26,7 @@ def main():
     docker("network", "create", "--internal", "--label", "flowpilot.ops=lane005", network)
     api = """from http.server import BaseHTTPRequestHandler,HTTPServer
 import json
+import os
 class H(BaseHTTPRequestHandler):
  def do_GET(self):
   self.send_response(200); self.end_headers()
@@ -30,7 +36,7 @@ class H(BaseHTTPRequestHandler):
 HTTPServer(('0.0.0.0',2375),H).serve_forever()
 """
     try:
-        resources.append(docker("run", "-d", "--platform", "linux/amd64", "--label", "flowpilot.ops=lane005", "--network", network, "--network-alias", "docker-proxy", "--cpus", "0.25", "--memory", "128m", "--pids-limit", "64", "flowpilot-lane005-tools:verify", "python", "-c", api))
+        resources.append(docker("run", "-d", "--platform", "linux/amd64", "--label", "flowpilot.ops=lane005", "--network", network, "--network-alias", "docker-proxy", "--cpus", "0.25", "--memory", "128m", "--pids-limit", "64", TOOLS_IMAGE, "python", "-c", api))
         # Give an emulated fixture server a bounded startup window.
         for attempt in range(30):
             try:
@@ -41,7 +47,7 @@ HTTPServer(('0.0.0.0',2375),H).serve_forever()
         else:
             raise RuntimeError("fake Docker API unavailable")
         for enabled, expected in (("false", 200), ("true", 503)):
-            container = docker("run", "-d", "--platform", "linux/amd64", "--label", "flowpilot.ops=lane005", "--network", network, "--cpus", "1", "--memory", "1g", "--pids-limit", "128", "--tmpfs", "/app/profiles:uid=10001,gid=10001,mode=0700,size=2g", "-e", "DOCKER_HOST=tcp://docker-proxy:2375", "-e", "GOOGLE_API_KEY=synthetic-fixture-not-a-provider-key", "-e", "JWT_SECRET=synthetic-local-fixture-secret-at-least-32-bytes", "-e", "FLOWPILOT_TASKS_ENABLED=" + enabled, "flowpilot-lane005-backend:verify")
+            container = docker("run", "-d", "--platform", "linux/amd64", "--label", "flowpilot.ops=lane005", "--network", network, "--cpus", "1", "--memory", "1g", "--pids-limit", "128", "--tmpfs", "/app/profiles:uid=10001,gid=10001,mode=0700,size=2g", "-e", "DOCKER_HOST=tcp://docker-proxy:2375", "-e", "GOOGLE_API_KEY=synthetic-fixture-not-a-provider-key", "-e", "JWT_SECRET=synthetic-local-fixture-secret-at-least-32-bytes", "-e", "FLOWPILOT_TASKS_ENABLED=" + enabled, BACKEND_IMAGE)
             resources.append(container)
             path = "/health/browser-tasks" if enabled == "true" else "/health"
             probe = "import urllib.request,urllib.error;\ntry: print(urllib.request.urlopen('http://127.0.0.1:8080" + path + "',timeout=2).status)\nexcept urllib.error.HTTPError as e: print(e.code)"

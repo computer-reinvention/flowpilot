@@ -1,8 +1,34 @@
 # flowpilot sandbox image
 # Provides: Chromium + CDP (via socat) + Xvfb
 # Ports: 9222 (CDP direct), 9223 (socat-forwarded CDP — accessible cross-container)
+#
+# Vulnerability posture is gated by scripts/ops_image_audit.py; accepted findings and
+# their justifications live in scripts/ops_image_allowlist.json.
 
-FROM python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c
+# ── Browser download (build-only stage; nothing here reaches the runtime except Chrome)
+# Chrome for Testing is the same Google build channel Playwright bundles, but pinned to
+# the current Linux stable patch instead of Playwright's pre-stable 156.0.8078.4 snapshot.
+# Bump CHROME_VERSION + CHROME_SHA256 together; the build fails on a hash mismatch.
+FROM python:3.12.15-slim-trixie@sha256:cb33f7f771ecec2ef1225cf39b159591a040391bd73e4c01f00fdfc4c47611d2 AS chrome-download
+ARG CHROME_VERSION=156.0.8078.47
+ARG CHROME_SHA256=e6c94490f0b6b337225aeb2d2a5034858516b7017356980ba94f5176d8774a50
+RUN python - <<'EOF'
+import hashlib, os, urllib.request, zipfile
+version, expected = os.environ["CHROME_VERSION"], os.environ["CHROME_SHA256"]
+url = "https://storage.googleapis.com/chrome-for-testing-public/%s/linux64/chrome-linux64.zip" % version
+urllib.request.urlretrieve(url, "/tmp/chrome.zip")
+digest = hashlib.sha256(open("/tmp/chrome.zip", "rb").read()).hexdigest()
+if digest != expected:
+    raise SystemExit("chrome-linux64.zip sha256 %s != pinned %s" % (digest, expected))
+with zipfile.ZipFile("/tmp/chrome.zip") as archive:
+    for info in archive.infolist():
+        path = archive.extract(info, "/opt/chrome-for-testing")
+        mode = (info.external_attr >> 16) & 0o777
+        if mode:
+            os.chmod(path, mode)
+EOF
+
+FROM python:3.12.15-slim-trixie@sha256:cb33f7f771ecec2ef1225cf39b159591a040391bd73e4c01f00fdfc4c47611d2
 ARG REVISION=unknown
 LABEL org.opencontainers.image.revision=$REVISION
 
@@ -11,18 +37,19 @@ ENV DEBIAN_FRONTEND=noninteractive \
     RESOLUTION=1920x1080x24
 
 # ── System dependencies ──────────────────────────────────────────────
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Browser
+# `apt-get upgrade` stays within the pinned trixie (Debian 13) suite (point + security
+# updates); it never changes release. Intentionally absent: curl (health checks use
+# Python), Debian's supervisor (drags in a second Python interpreter), and the unused
+# x11-utils debugging tools.
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && apt-get install -y --no-install-recommends \
     # Virtual framebuffer (Chromium still needs a display for proper rendering)
     xvfb \
-    # Process manager
-    supervisor \
     # TCP forwarder (Chromium ignores --remote-debugging-address on ARM)
     socat \
     # Utilities
-    curl \
     procps \
-    x11-utils \
+    # Provides the dbus-session-bus virtual; without it apt satisfies that with
+    # dbus-user-session, which pulls in full systemd (+4 HIGH findings, no benefit).
     dbus-x11 \
     # Fonts (Chromium needs at least one font family)
     fonts-liberation \
@@ -30,27 +57,31 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-dejavu-core \
     # Libraries Chromium needs
     libnss3 \
-    libatk-bridge2.0-0 \
+    libatk-bridge2.0-0t64 \
     libdrm2 \
     libxcomposite1 \
     libxdamage1 \
     libxrandr2 \
     libgbm1 \
-    libasound2 \
+    libasound2t64 \
     libpango-1.0-0 \
     libcairo2 \
-    libcups2 \
+    libcups2t64 \
     libxkbcommon0 \
-    libgtk-3-0 \
+    libgtk-3-0t64 \
     && rm -rf /var/lib/apt/lists/*
 
-# ── Python packages ──────────────────────────────────────────────────
-RUN pip install --no-cache-dir \
-    playwright==1.64.0 \
-    && playwright install chromium \
+# ── Process manager + Chromium system libraries ──────────────────────
+# Playwright is used only for `install-deps` (its maintained Chromium library list) and
+# is then removed together with its bundled Node driver, which the sandbox never runs.
+COPY sandbox/requirements.txt /tmp/sandbox-requirements.txt
+RUN pip install --no-cache-dir --require-hashes -r /tmp/sandbox-requirements.txt \
     && playwright install-deps chromium \
-    && chmod 755 /root \
-    && chmod -R o+rX /root/.cache/ms-playwright
+    && pip uninstall -y playwright greenlet pyee typing_extensions \
+    && apt-get purge -y --auto-remove curl \
+    && rm -rf /var/lib/apt/lists/* /tmp/sandbox-requirements.txt
+
+COPY --from=chrome-download /opt/chrome-for-testing /opt/chrome-for-testing
 
 # ── Non-root user ────────────────────────────────────────────────────
 RUN useradd -m -s /bin/bash sandboxuser
@@ -75,6 +106,6 @@ EXPOSE 9222 9223
 
 # ── Health check ─────────────────────────────────────────────────────
 HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -sf http://localhost:9222/json/version > /dev/null
+    CMD ["python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9222/json/version', timeout=4)"]
 
 ENTRYPOINT ["/entrypoint.sh"]

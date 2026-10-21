@@ -8,22 +8,14 @@ mkdir -p "${PROFILE_DST}"
 chown -R sandboxuser:sandboxuser "${PROFILE_DST}"
 
 # ── Find Chromium binary ─────────────────────────────────────────────
-# Prefer Playwright's bundled Chromium (works reliably in containers).
-# Fall back to system chromium if Playwright's isn't found.
-PW_CHROME=$(find /root/.cache/ms-playwright -type f -name 'chrome' 2>/dev/null | head -1 || true)
-if [ -n "$PW_CHROME" ] && [ -x "$PW_CHROME" ]; then
-    echo "Using Playwright Chromium: $PW_CHROME"
-    CHROME_BIN="$PW_CHROME"
-elif command -v chromium &>/dev/null; then
-    echo "Using system chromium"
-    CHROME_BIN="chromium"
-elif command -v chromium-browser &>/dev/null; then
-    echo "Using system chromium-browser"
-    CHROME_BIN="chromium-browser"
-else
-    echo "ERROR: No Chromium binary found!" >&2
+# The image ships one digest-pinned Chrome for Testing build (Dockerfile.sandbox,
+# audited by scripts/ops_image_audit.py). No silent fallback to another browser.
+CHROME_BIN="/opt/chrome-for-testing/chrome-linux64/chrome"
+if [ ! -x "$CHROME_BIN" ]; then
+    echo "ERROR: pinned Chromium binary missing at $CHROME_BIN" >&2
     exit 1
 fi
+echo "Using Chrome for Testing: $CHROME_BIN"
 export CHROME_BIN
 
 # ── Export environment for supervisord children ──────────────────────
@@ -33,4 +25,4 @@ export CHROME_AUTORESTART="${CHROME_AUTORESTART:-true}"
 
 # ── Start supervisord (manages Xvfb, Chromium, socat CDP forwarder) ──
 echo "Starting supervisord..."
-exec /usr/bin/supervisord -c /etc/supervisor/conf.d/sandbox.conf
+exec /usr/local/bin/supervisord -c /etc/supervisor/conf.d/sandbox.conf

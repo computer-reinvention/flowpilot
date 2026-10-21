@@ -1,0 +1,1084 @@
+{
+  "schema_version": 1,
+  "policy": "Each entry accepts exactly one HIGH/CRITICAL finding (id + package) for the listed images until review_by; runtime entries also bind the exact installed version. Expired, unjustified or version-mismatched entries fail scripts/ops_image_audit.py. Never add an entry for a finding whose fix is available in the pinned suite: rebuild instead.",
+  "accepted": [
+    {
+      "id": "CVE-2026-54369",
+      "package": "libacl1",
+      "group": "base-misc",
+      "review_by": "2026-11-22",
+      "justification": "Essential base package with no Debian fix (affected/deferred/will-not-fix). Affected paths (setuid ACL helpers, Perl Archive::Tar, systemd-homed, gzip CLI, minizip) are not invoked on untrusted input; systemd is not running inside the containers and libsystemd0 is only linked for journald/sd-bus client helpers.",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "acl: Symlink traversal privilege escalation via libacl functions",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-16742",
+      "package": "libsystemd0",
+      "group": "base-misc",
+      "review_by": "2026-11-22",
+      "justification": "Essential base package with no Debian fix (affected/deferred/will-not-fix). Affected paths (setuid ACL helpers, Perl Archive::Tar, systemd-homed, gzip CLI, minizip) are not invoked on untrusted input; systemd is not running inside the containers and libsystemd0 is only linked for journald/sd-bus client helpers.",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "systemd: systemd-homed: Local privilege escalation via missing home-record signature verification",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-16742",
+      "package": "libudev1",
+      "group": "base-misc",
+      "review_by": "2026-11-22",
+      "justification": "Essential base package with no Debian fix (affected/deferred/will-not-fix). Affected paths (setuid ACL helpers, Perl Archive::Tar, systemd-homed, gzip CLI, minizip) are not invoked on untrusted input; systemd is not running inside the containers and libsystemd0 is only linked for journald/sd-bus client helpers.",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "systemd: systemd-homed: Local privilege escalation via missing home-record signature verification",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-9538",
+      "package": "perl-base",
+      "group": "base-misc",
+      "review_by": "2026-11-22",
+      "justification": "Essential base package with no Debian fix (affected/deferred/will-not-fix). Affected paths (setuid ACL helpers, Perl Archive::Tar, systemd-homed, gzip CLI, minizip) are not invoked on untrusted input; systemd is not running inside the containers and libsystemd0 is only linked for journald/sd-bus client helpers.",
+      "severity": "HIGH",
+      "status": "fix_deferred",
+      "fixed": null,
+      "title": "perl-Archive-Tar: perl-Archive-Tar: Denial of Service via crafted tar header with large entry size",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CHROMIUM-BEHIND-STABLE",
+      "package": "chromium",
+      "installed": "156.0.8078.4",
+      "group": "bundled-runtime",
+      "review_by": "2026-11-15",
+      "justification": "Backend Chromium is Playwright 1.64.0's pinned build (156.0.8078.4); 1.64.0 is the newest Playwright and the version is owned by uv.lock (dependency lane). Hosted browser tasks run in the sandbox image, which ships stable 156.0.8078.47; the backend binary is used only by native/REPL mode, which must not browse untrusted sites in hosted deployments. Remove when Playwright ships a 156 stable-or-newer build.",
+      "severity": "HIGH",
+      "status": "fixed",
+      "fixed": "156.0.8078.47",
+      "title": "Bundled Chromium is older than current Linux stable 156.0.8078.47",
+      "images": [
+        "backend"
+      ]
+    },
+    {
+      "id": "NODE-SECURITY-RELEASE-MISSED",
+      "package": "node",
+      "installed": "24.21.0",
+      "group": "bundled-runtime",
+      "review_by": "2026-11-15",
+      "justification": "Node 24.21.0 is the driver bundled inside the uv.lock-pinned Playwright 1.64.0 wheel; it only speaks to the parent Python process over stdio pipes and never parses network input itself. Fixed by a Playwright upgrade owned by the dependency lane; /usr/local/bin/node (agent host) is on 22.23.4, the latest security release.",
+      "severity": "HIGH",
+      "status": "fixed",
+      "fixed": "24.22.1",
+      "title": "Node.js misses security release(s) 24.22.1",
+      "images": [
+        "backend"
+      ]
+    },
+    {
+      "id": "CVE-2026-34980",
+      "package": "libcups2t64",
+      "group": "cups",
+      "review_by": "2026-11-22",
+      "justification": "Chromium links libcups for print dialogs; Debian lists these unfixed. The CVEs need a malicious CUPS/IPP server or shared queue: no cupsd runs, no printer is configured, and sandbox egress is policy-restricted.",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "cups: OpenPrinting CUPS: Shared PostScript queue lets anonymous Print-Job requests reach `lp` code execution over the network",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-55453",
+      "package": "libcups2t64",
+      "group": "cups",
+      "review_by": "2026-11-22",
+      "justification": "Chromium links libcups for print dialogs; Debian lists these unfixed. The CVEs need a malicious CUPS/IPP server or shared queue: no cupsd runs, no printer is configured, and sandbox egress is policy-restricted.",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "cups: cups: Arbitrary code execution via newline injection in printer status messages",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2025-69720",
+      "package": "libncursesw6",
+      "group": "ncurses",
+      "review_by": "2026-11-22",
+      "justification": "Essential terminal library from the base image; Debian lists it unfixed. No untrusted terminfo or terminal input is processed: services are non-interactive and never attach a TTY to remote parties.",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "ncurses: ncurses: Buffer overflow vulnerability may lead to arbitrary code execution.",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2025-69720",
+      "package": "libtinfo6",
+      "group": "ncurses",
+      "review_by": "2026-11-22",
+      "justification": "Essential terminal library from the base image; Debian lists it unfixed. No untrusted terminfo or terminal input is processed: services are non-interactive and never attach a TTY to remote parties.",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "ncurses: ncurses: Buffer overflow vulnerability may lead to arbitrary code execution.",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2025-69720",
+      "package": "ncurses-base",
+      "group": "ncurses",
+      "review_by": "2026-11-22",
+      "justification": "Essential terminal library from the base image; Debian lists it unfixed. No untrusted terminfo or terminal input is processed: services are non-interactive and never attach a TTY to remote parties.",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "ncurses: ncurses: Buffer overflow vulnerability may lead to arbitrary code execution.",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2025-69720",
+      "package": "ncurses-bin",
+      "group": "ncurses",
+      "review_by": "2026-11-22",
+      "justification": "Essential terminal library from the base image; Debian lists it unfixed. No untrusted terminfo or terminal input is processed: services are non-interactive and never attach a TTY to remote parties.",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "ncurses: ncurses: Buffer overflow vulnerability may lead to arbitrary code execution.",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-76642",
+      "package": "bsdutils",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: failed external mount helper still runs privileged X-mount post-hooks",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78408",
+      "package": "bsdutils",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: nsenter --join-cgroup leaks root cgroup migration authority",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78409",
+      "package": "bsdutils",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: X-mount.subdir detached-tree resolution can escape via intermediate symlinks",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78410",
+      "package": "bsdutils",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: restricted bind mounts do not pin the source, allowing X-mount.owner/group/mode redirection",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-76642",
+      "package": "libblkid1",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: failed external mount helper still runs privileged X-mount post-hooks",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78408",
+      "package": "libblkid1",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: nsenter --join-cgroup leaks root cgroup migration authority",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78409",
+      "package": "libblkid1",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: X-mount.subdir detached-tree resolution can escape via intermediate symlinks",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78410",
+      "package": "libblkid1",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: restricted bind mounts do not pin the source, allowing X-mount.owner/group/mode redirection",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-76642",
+      "package": "liblastlog2-2",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: failed external mount helper still runs privileged X-mount post-hooks",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78408",
+      "package": "liblastlog2-2",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: nsenter --join-cgroup leaks root cgroup migration authority",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78409",
+      "package": "liblastlog2-2",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: X-mount.subdir detached-tree resolution can escape via intermediate symlinks",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78410",
+      "package": "liblastlog2-2",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: restricted bind mounts do not pin the source, allowing X-mount.owner/group/mode redirection",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-76642",
+      "package": "libmount1",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: failed external mount helper still runs privileged X-mount post-hooks",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78408",
+      "package": "libmount1",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: nsenter --join-cgroup leaks root cgroup migration authority",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78409",
+      "package": "libmount1",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: X-mount.subdir detached-tree resolution can escape via intermediate symlinks",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78410",
+      "package": "libmount1",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: restricted bind mounts do not pin the source, allowing X-mount.owner/group/mode redirection",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-76642",
+      "package": "libsmartcols1",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: failed external mount helper still runs privileged X-mount post-hooks",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78408",
+      "package": "libsmartcols1",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: nsenter --join-cgroup leaks root cgroup migration authority",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78409",
+      "package": "libsmartcols1",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: X-mount.subdir detached-tree resolution can escape via intermediate symlinks",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78410",
+      "package": "libsmartcols1",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: restricted bind mounts do not pin the source, allowing X-mount.owner/group/mode redirection",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-76642",
+      "package": "libuuid1",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: failed external mount helper still runs privileged X-mount post-hooks",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78408",
+      "package": "libuuid1",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: nsenter --join-cgroup leaks root cgroup migration authority",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78409",
+      "package": "libuuid1",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: X-mount.subdir detached-tree resolution can escape via intermediate symlinks",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78410",
+      "package": "libuuid1",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: restricted bind mounts do not pin the source, allowing X-mount.owner/group/mode redirection",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-76642",
+      "package": "login",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: failed external mount helper still runs privileged X-mount post-hooks",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78408",
+      "package": "login",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: nsenter --join-cgroup leaks root cgroup migration authority",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78409",
+      "package": "login",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: X-mount.subdir detached-tree resolution can escape via intermediate symlinks",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78410",
+      "package": "login",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: restricted bind mounts do not pin the source, allowing X-mount.owner/group/mode redirection",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-76642",
+      "package": "mount",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: failed external mount helper still runs privileged X-mount post-hooks",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78408",
+      "package": "mount",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: nsenter --join-cgroup leaks root cgroup migration authority",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78409",
+      "package": "mount",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: X-mount.subdir detached-tree resolution can escape via intermediate symlinks",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78410",
+      "package": "mount",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: restricted bind mounts do not pin the source, allowing X-mount.owner/group/mode redirection",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-76642",
+      "package": "util-linux",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: failed external mount helper still runs privileged X-mount post-hooks",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78408",
+      "package": "util-linux",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: nsenter --join-cgroup leaks root cgroup migration authority",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78409",
+      "package": "util-linux",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: X-mount.subdir detached-tree resolution can escape via intermediate symlinks",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-78410",
+      "package": "util-linux",
+      "group": "util-linux",
+      "review_by": "2026-11-22",
+      "justification": "Essential Debian base package from the official python slim image; Debian lists it unfixed. Affected code is mount/nsenter/login/lastlog administration paths. Images never mount untrusted filesystems or offer logins; network-facing processes run as non-root (backend uid 10001; sandbox Chromium/socat/Xvfb as sandboxuser) in containers started with no-new-privileges and without CAP_SYS_ADMIN (backend additionally cap_drop ALL).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "util-linux: util-linux: restricted bind mounts do not pin the source, allowing X-mount.owner/group/mode redirection",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-88806",
+      "package": "libx11-6",
+      "group": "xclient",
+      "review_by": "2026-11-22",
+      "justification": "X11 client library with no Debian fix. Malicious input must come from the X server, which is the container-local Xvfb under the same uid; web content never speaks the X protocol.",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "libX11: libX11: Heap-based buffer overflow via malicious X server",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-88806",
+      "package": "libx11-data",
+      "group": "xclient",
+      "review_by": "2026-11-22",
+      "justification": "X11 client library with no Debian fix. Malicious input must come from the X server, which is the container-local Xvfb under the same uid; web content never speaks the X protocol.",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "libX11: libX11: Heap-based buffer overflow via malicious X server",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-88806",
+      "package": "libx11-xcb1",
+      "group": "xclient",
+      "review_by": "2026-11-22",
+      "justification": "X11 client library with no Debian fix. Malicious input must come from the X server, which is the container-local Xvfb under the same uid; web content never speaks the X protocol.",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "libX11: libX11: Heap-based buffer overflow via malicious X server",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-88807",
+      "package": "libxrender1",
+      "group": "xclient",
+      "review_by": "2026-11-22",
+      "justification": "X11 client library with no Debian fix. Malicious input must come from the X server, which is the container-local Xvfb under the same uid; web content never speaks the X protocol.",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "libXrender: libXrender: Code injection via heap overflow in RenderQueryPictFormats",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-36849",
+      "package": "libtiff6",
+      "group": "xml-tiff-glib",
+      "review_by": "2026-11-22",
+      "justification": "Unfixed in Debian. Chromium for Testing does not link this system library (verified with ldd; it bundles its own libxml/SQLite/HarfBuzz/expat and web image decoders). Installed only as a dependency of local trusted-data consumers (Mesa libllvm, shared-mime-info, gdk-pixbuf, fontconfig); no untrusted documents reach it.",
+      "severity": "HIGH",
+      "status": "will_not_fix",
+      "fixed": null,
+      "title": "[Denial of Service via large SamplesPerPixel tag]",
+      "images": [
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-52490",
+      "package": "libtiff6",
+      "group": "xml-tiff-glib",
+      "review_by": "2026-11-22",
+      "justification": "Unfixed in Debian. Chromium for Testing does not link this system library (verified with ldd; it bundles its own libxml/SQLite/HarfBuzz/expat and web image decoders). Installed only as a dependency of local trusted-data consumers (Mesa libllvm, shared-mime-info, gdk-pixbuf, fontconfig); no untrusted documents reach it.",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "libtiff: libtiff: Arbitrary code execution via process_command_opts() function",
+      "images": [
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-6653",
+      "package": "libxml2",
+      "group": "xml-tiff-glib",
+      "review_by": "2026-11-22",
+      "justification": "Unfixed in Debian. Chromium for Testing does not link this system library (verified with ldd; it bundles its own libxml/SQLite/HarfBuzz/expat and web image decoders). Installed only as a dependency of local trusted-data consumers (Mesa libllvm, shared-mime-info, gdk-pixbuf, fontconfig); no untrusted documents reach it.",
+      "severity": "CRITICAL",
+      "status": "affected",
+      "fixed": null,
+      "title": "libxml2: mingw-libxml2: libxml2: Denial of Service via crafted XML input due to use-after-free",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-74860",
+      "package": "libxml2",
+      "group": "xml-tiff-glib",
+      "review_by": "2026-11-22",
+      "justification": "Unfixed in Debian. Chromium for Testing does not link this system library (verified with ldd; it bundles its own libxml/SQLite/HarfBuzz/expat and web image decoders). Installed only as a dependency of local trusted-data consumers (Mesa libllvm, shared-mime-info, gdk-pixbuf, fontconfig); no untrusted documents reach it.",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "libxml2: double-free/UAF in libxml2 Python bindings",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-86138",
+      "package": "libxml2",
+      "group": "xml-tiff-glib",
+      "review_by": "2026-11-22",
+      "justification": "Unfixed in Debian. Chromium for Testing does not link this system library (verified with ldd; it bundles its own libxml/SQLite/HarfBuzz/expat and web image decoders). Installed only as a dependency of local trusted-data consumers (Mesa libllvm, shared-mime-info, gdk-pixbuf, fontconfig); no untrusted documents reach it.",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "libxml2: libxml2: Arbitrary code execution via heap-based buffer overflow",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-86139",
+      "package": "libxml2",
+      "group": "xml-tiff-glib",
+      "review_by": "2026-11-22",
+      "justification": "Unfixed in Debian. Chromium for Testing does not link this system library (verified with ldd; it bundles its own libxml/SQLite/HarfBuzz/expat and web image decoders). Installed only as a dependency of local trusted-data consumers (Mesa libllvm, shared-mime-info, gdk-pixbuf, fontconfig); no untrusted documents reach it.",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "libxml2: libxml2: Integer overflow in xmlURIEscapeStr may lead to arbitrary code execution",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-86140",
+      "package": "libxml2",
+      "group": "xml-tiff-glib",
+      "review_by": "2026-11-22",
+      "justification": "Unfixed in Debian. Chromium for Testing does not link this system library (verified with ldd; it bundles its own libxml/SQLite/HarfBuzz/expat and web image decoders). Installed only as a dependency of local trusted-data consumers (Mesa libllvm, shared-mime-info, gdk-pixbuf, fontconfig); no untrusted documents reach it.",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "libxml2: libxml2: Arbitrary code execution via stack-based buffer overflow in xmlSnprintfElements",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-86142",
+      "package": "libxml2",
+      "group": "xml-tiff-glib",
+      "review_by": "2026-11-22",
+      "justification": "Unfixed in Debian. Chromium for Testing does not link this system library (verified with ldd; it bundles its own libxml/SQLite/HarfBuzz/expat and web image decoders). Installed only as a dependency of local trusted-data consumers (Mesa libllvm, shared-mime-info, gdk-pixbuf, fontconfig); no untrusted documents reach it.",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "libxml2: libxml2: Heap-based buffer overflow in xmlXPtrEval due to xpointer length saturation",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-86143",
+      "package": "libxml2",
+      "group": "xml-tiff-glib",
+      "review_by": "2026-11-22",
+      "justification": "Unfixed in Debian. Chromium for Testing does not link this system library (verified with ldd; it bundles its own libxml/SQLite/HarfBuzz/expat and web image decoders). Installed only as a dependency of local trusted-data consumers (Mesa libllvm, shared-mime-info, gdk-pixbuf, fontconfig); no untrusted documents reach it.",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "libxml2: libxml2: Data integrity issues due to integer overflow in write callbacks",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-86144",
+      "package": "libxml2",
+      "group": "xml-tiff-glib",
+      "review_by": "2026-11-22",
+      "justification": "Unfixed in Debian. Chromium for Testing does not link this system library (verified with ldd; it bundles its own libxml/SQLite/HarfBuzz/expat and web image decoders). Installed only as a dependency of local trusted-data consumers (Mesa libllvm, shared-mime-info, gdk-pixbuf, fontconfig); no untrusted documents reach it.",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "libxml2: libxml2: Information disclosure, SSRF, or denial of service due to improper parseFlags propagation.",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2023-5574",
+      "package": "xserver-common",
+      "group": "xserver",
+      "review_by": "2026-11-22",
+      "justification": "Debian lists these X server CVEs unfixed. Exploitation needs a malicious X client. Sandbox: Xvfb listens only on its local unix socket (-nolisten tcp) in a per-task container and its only client is the same-uid Chromium, so this is post-browser-compromise only. Backend: installed by `playwright install --with-deps` but never started (Chromium launches headless).",
+      "severity": "HIGH",
+      "status": "fix_deferred",
+      "fixed": null,
+      "title": "xorg-x11-server: Use-after-free bug in DamageDestroy",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-88812",
+      "package": "xserver-common",
+      "group": "xserver",
+      "review_by": "2026-11-22",
+      "justification": "Debian lists these X server CVEs unfixed. Exploitation needs a malicious X client. Sandbox: Xvfb listens only on its local unix socket (-nolisten tcp) in a per-task container and its only client is the same-uid Chromium, so this is post-browser-compromise only. Backend: installed by `playwright install --with-deps` but never started (Chromium launches headless).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "xorg-x11-server: xwayland: xorg-x11-server: Arbitrary code execution via double-free in XKB geometry handling",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-93516",
+      "package": "xserver-common",
+      "group": "xserver",
+      "review_by": "2026-11-22",
+      "justification": "Debian lists these X server CVEs unfixed. Exploitation needs a malicious X client. Sandbox: Xvfb listens only on its local unix socket (-nolisten tcp) in a per-task container and its only client is the same-uid Chromium, so this is post-browser-compromise only. Backend: installed by `playwright install --with-deps` but never started (Chromium launches headless).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "xorg-x11-server: xorg-x11-server: Arbitrary code execution via use-after-free in passive grab handling",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-93521",
+      "package": "xserver-common",
+      "group": "xserver",
+      "review_by": "2026-11-22",
+      "justification": "Debian lists these X server CVEs unfixed. Exploitation needs a malicious X client. Sandbox: Xvfb listens only on its local unix socket (-nolisten tcp) in a per-task container and its only client is the same-uid Chromium, so this is post-browser-compromise only. Backend: installed by `playwright install --with-deps` but never started (Chromium launches headless).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "xorg-x11-server: xorg-x11-server: Privilege escalation via crafted RandR provider property requests",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-93523",
+      "package": "xserver-common",
+      "group": "xserver",
+      "review_by": "2026-11-22",
+      "justification": "Debian lists these X server CVEs unfixed. Exploitation needs a malicious X client. Sandbox: Xvfb listens only on its local unix socket (-nolisten tcp) in a per-task container and its only client is the same-uid Chromium, so this is post-browser-compromise only. Backend: installed by `playwright install --with-deps` but never started (Chromium launches headless).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "xorg-x11-server: xorg-x11-server: Out-of-bounds write via unvalidated modifier in ProcXIPassiveUngrabDevice",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2023-5574",
+      "package": "xvfb",
+      "group": "xserver",
+      "review_by": "2026-11-22",
+      "justification": "Debian lists these X server CVEs unfixed. Exploitation needs a malicious X client. Sandbox: Xvfb listens only on its local unix socket (-nolisten tcp) in a per-task container and its only client is the same-uid Chromium, so this is post-browser-compromise only. Backend: installed by `playwright install --with-deps` but never started (Chromium launches headless).",
+      "severity": "HIGH",
+      "status": "fix_deferred",
+      "fixed": null,
+      "title": "xorg-x11-server: Use-after-free bug in DamageDestroy",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-88812",
+      "package": "xvfb",
+      "group": "xserver",
+      "review_by": "2026-11-22",
+      "justification": "Debian lists these X server CVEs unfixed. Exploitation needs a malicious X client. Sandbox: Xvfb listens only on its local unix socket (-nolisten tcp) in a per-task container and its only client is the same-uid Chromium, so this is post-browser-compromise only. Backend: installed by `playwright install --with-deps` but never started (Chromium launches headless).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "xorg-x11-server: xwayland: xorg-x11-server: Arbitrary code execution via double-free in XKB geometry handling",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-93516",
+      "package": "xvfb",
+      "group": "xserver",
+      "review_by": "2026-11-22",
+      "justification": "Debian lists these X server CVEs unfixed. Exploitation needs a malicious X client. Sandbox: Xvfb listens only on its local unix socket (-nolisten tcp) in a per-task container and its only client is the same-uid Chromium, so this is post-browser-compromise only. Backend: installed by `playwright install --with-deps` but never started (Chromium launches headless).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "xorg-x11-server: xorg-x11-server: Arbitrary code execution via use-after-free in passive grab handling",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-93521",
+      "package": "xvfb",
+      "group": "xserver",
+      "review_by": "2026-11-22",
+      "justification": "Debian lists these X server CVEs unfixed. Exploitation needs a malicious X client. Sandbox: Xvfb listens only on its local unix socket (-nolisten tcp) in a per-task container and its only client is the same-uid Chromium, so this is post-browser-compromise only. Backend: installed by `playwright install --with-deps` but never started (Chromium launches headless).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "xorg-x11-server: xorg-x11-server: Privilege escalation via crafted RandR provider property requests",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    },
+    {
+      "id": "CVE-2026-93523",
+      "package": "xvfb",
+      "group": "xserver",
+      "review_by": "2026-11-22",
+      "justification": "Debian lists these X server CVEs unfixed. Exploitation needs a malicious X client. Sandbox: Xvfb listens only on its local unix socket (-nolisten tcp) in a per-task container and its only client is the same-uid Chromium, so this is post-browser-compromise only. Backend: installed by `playwright install --with-deps` but never started (Chromium launches headless).",
+      "severity": "HIGH",
+      "status": "affected",
+      "fixed": null,
+      "title": "xorg-x11-server: xorg-x11-server: Out-of-bounds write via unvalidated modifier in ProcXIPassiveUngrabDevice",
+      "images": [
+        "backend",
+        "sandbox"
+      ]
+    }
+  ]
+}

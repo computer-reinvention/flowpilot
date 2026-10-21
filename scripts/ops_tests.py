@@ -213,6 +213,51 @@ class OperationalTests(unittest.TestCase):
             self.assertIn(name, compose)
             self.assertIn(name, example)
 
+    def test_image_audit_gate_requires_justified_unexpired_acceptance(self):
+        import datetime
+        audit = load("ops_image_audit")
+        feeds = {"chromium": "156.0.8078.47", "node": [("22.23.4", True), ("22.23.3", False), ("24.22.1", True)],
+                 "python": ["3.12.15", "3.12.14", "3.13.9"]}
+        report = {"Results": [
+            {"Class": "os-pkgs", "Type": "debian", "Target": "img", "Vulnerabilities": [
+                {"VulnerabilityID": "CVE-1", "PkgName": "libx", "InstalledVersion": "1", "Severity": "HIGH", "Status": "affected"},
+                {"VulnerabilityID": "CVE-2", "PkgName": "liby", "InstalledVersion": "1", "FixedVersion": "2", "Severity": "CRITICAL", "Status": "fixed"},
+                {"VulnerabilityID": "CVE-3", "PkgName": "libz", "InstalledVersion": "1", "Severity": "MEDIUM", "Status": "affected"}]},
+            {"Class": "lang-pkgs", "Type": "python-pkg", "Target": "venv", "Vulnerabilities": [
+                {"VulnerabilityID": "GHSA-1", "PkgName": "pkg", "InstalledVersion": "1", "Severity": "CRITICAL"}]}]}
+        runtimes = audit.parse_runtimes("chromium\t/c\tGoogle Chrome for Testing 156.0.8078.4 \nnode\t/n\tv22.23.3\n"
+                                        "node\t/m\tv22.23.4\npython\t/p\t3.12.15\n")
+        self.assertEqual(runtimes["node"], {"/n": "22.23.3", "/m": "22.23.4"})
+        findings, context = audit.normalize("sandbox", report, runtimes, feeds)
+        self.assertEqual(context, {"python-pkg": {"CRITICAL": 1}})  # gated by ops_dependency_audit, not here
+        ids = sorted(f["id"] for f in findings)
+        self.assertEqual(ids, ["CHROMIUM-BEHIND-STABLE", "CVE-1", "CVE-2", "CVE-3", "NODE-SECURITY-RELEASE-MISSED"])
+        today = datetime.date(2026, 10, 22)
+        with tempfile.TemporaryDirectory() as tmp:
+            allow = Path(tmp) / "allow.json"
+            allow.write_text(json.dumps({"accepted": [
+                {"id": "CVE-1", "package": "libx", "images": ["sandbox"], "justification": "unfixed upstream", "review_by": "2026-12-01"},
+                {"id": "CVE-2", "package": "liby", "images": ["sandbox"], "justification": "", "review_by": "2026-12-01"},
+                {"id": "NODE-SECURITY-RELEASE-MISSED", "package": "node", "images": ["sandbox"], "installed": "22.23.3",
+                 "justification": "old", "review_by": "2026-10-01"},
+                {"id": "CHROMIUM-BEHIND-STABLE", "package": "chromium", "images": ["backend"], "installed": "156.0.8078.4",
+                 "justification": "other image only", "review_by": "2026-12-01"}]}))
+            entries, problems = audit.load_allowlist(allow, today)
+        self.assertEqual(len(problems), 2)  # empty justification and expired review date are rejected
+        summary, unaccepted = audit.evaluate(findings, entries)
+        self.assertEqual(sorted(f["id"] for f in unaccepted), ["CHROMIUM-BEHIND-STABLE", "CVE-2", "NODE-SECURITY-RELEASE-MISSED"])
+        self.assertEqual(summary["sandbox"]["gated_accepted"], 1)
+        self.assertEqual(summary["sandbox"]["by_severity"]["MEDIUM"], 1)  # reported, never gated
+        fixable = next(f for f in findings if f["id"] == "CVE-2")
+        justified = dict(entries[("CVE-1", "libx")], id="CVE-2", package="liby")
+        self.assertFalse(audit.accepted(fixable, {("CVE-2", "liby"): justified}))  # fix exists: never acceptable
+        chromium = next(f for f in findings if f["package"] == "chromium")
+        pinned = dict(entries[("CHROMIUM-BEHIND-STABLE", "chromium")], images=["sandbox"])
+        self.assertTrue(audit.accepted(chromium, {("CHROMIUM-BEHIND-STABLE", "chromium"): pinned}))
+        # A runtime acceptance is bound to the exact version; any other build is re-gated.
+        stale = dict(pinned, installed="155.0.1.1")
+        self.assertFalse(audit.accepted(chromium, {("CHROMIUM-BEHIND-STABLE", "chromium"): stale}))
+
 
 if __name__ == "__main__":
     unittest.main()
