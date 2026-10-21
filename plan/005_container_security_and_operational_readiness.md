@@ -330,3 +330,191 @@ clean locked agent npm ci; initial run failed only because own-worktree agent
 node_modules was absent, not from a source regression. Two dedicated dependency
 regressions pass. License and CSS provenance gate is resolved; no CSS trimming or
 component-runtime dependency change. Prior 500kB Vite chunk warning remains.
+
+Distribution follow-up: backend packaging copies the exact MIT notice to
+`/usr/share/licenses/shadcn-tailwind/LICENSE` in the runtime image, outside dist,
+so minified asset bytes remain identical and the deployed distribution retains its
+attribution. Standalone dist redistributors must likewise include the source notice.
+
+### Python candidate compatibility evidence (acceptance pending final image gates)
+
+Applied only the approved five exact overrides in own worktree and frozen own venv.
+Graph from `fd81220`: exactly aiohttp 3.14.4, AnyIO 4.14.2, MCP/mcp-types 2.2.0,
+Pillow 13.0.0, pypdf 6.19.0; no added/removed package names. Certifi was already
+patched independently. Browser-use remains 0.13.11, browser-harness 0.1.13.
+Full versioned-lock-entry comparison additionally finds one metadata-only change:
+the approved global AnyIO override removes httpx2's `sys_platform != 'emscripten'`
+marker from its AnyIO edge. No other unchanged-version package entry changes. AnyIO
+was already unconditional elsewhere in the project; supported Linux/macOS target
+selection is unchanged. No Emscripten support/build is claimed. Lock manifest records
+exactly the five approved overrides, not additional overrides/upgrades.
+Candidate SHA256: pyproject
+`58e96aea9a6c6978c1faccb28b79aae6b88aca5e9cd8058203969f4d5f6f6f94`, uv.lock
+`a24c0b9204db335c62e01a14a689ecaf374d589b53d8f1830bbc4ff1a440967a`.
+
+Dedicated actual-dependency regressions in `tests/test_dependency_compatibility.py`:
+
+- Real ephemeral loopback TLS handshake and echo through AnyIO: trusted localhost
+  succeeds, wrong hostname fails SSLCertVerificationError; cancelled task group
+  executes finally and settles. No external TLS/provider request.
+- Actual Chromium PNG/JPEG screenshots decode/resize in Pillow13; browser-use Python
+  highlight image conversion; browser-use GIF with task/font/goal overlays writes
+  multiframe artifact and seeks/decodes second frame. Local-browser watchdog's actual
+  aiohttp `/json/version` discovery succeeds, closed-port deadline fails as expected.
+- Benign six-codec PNG/JPEG/GIF/WebP/TIFF/BMP roundtrips and deliberately lowered
+  pixel-bomb rejection thresholds. This is **not** a native-code exploit/fuzz proof;
+  EPS/Ghostscript, malformed TIFF vulnerability variants and other codecs unexercised.
+- Actual browser-use FileSystem reads a generated receipt PDF, prioritizes/truncates
+  a 24-page >60k-character PDF, returns <62k output including metadata, and handles
+  malformed PDF. The upstream limit is **output only**, not CPU/RAM containment:
+  it parses all pages synchronously before truncation. Hostile-PDF resource bounds
+  remain an explicit application gap; no configuration/contract was changed here.
+- MCP2.2 client/server imports and CallToolRequest/Result schema roundtrip, with
+  socket bind/connect forbidden. This deliberately runs in a child process: browser-use
+  MCP CLI server import reconfigures/disables process logging by design (unchanged
+  browser-use0.13.11). First in-process test contaminated a later retention caplog
+  check; corrected **test isolation**, never weakened logging assertion/application.
+- Production frozen graph has **no video extra**. Default absence branch remains
+  explicit; separate auxiliary tools (imageio2.37.2, numpy2.4.1, imageio-ffmpeg0.6.0)
+  exercise real browser-use VideoRecorderService resize/pad -> numpy -> ffmpeg MP4
+  encode/decode: six PNG/JPEG-derived frames, 33x25 viewport padded to 48x32, exact
+  frame count/dimensions verified. Tools are outside own frozen venv/production graph.
+
+Initial pre-new-test full offline suite: **434 passed, 12 live deselected**. Expanded
+suite exposed only the MCP test's logging contamination above, now isolated; focused
+compatibility+retention rerun **26 passed, 1 optional video skipped**. Separate real
+video run **1 passed**. Ops suite **12 passed**; actual ASGI rehearsal rejects >65536
+assembled and fragmented WS messages (1009) and keeps capability paths out of logs.
+Uvicorn warns its pinned websockets implementation is deprecated; no opportunistic
+protocol implementation switch was made. Final full suite/image/audit results follow.
+
+### Production image build completion
+
+Original background build `sh_15f2b56ff002U9lZHKX1J6D8eL` completed successfully,
+image config digest `sha256:e4eb02238dc6832e56957e8f1f1a1476fd922244188c695eff23f78f65d16d34`.
+No duplicate build was started while it ran and no polling loop was used. Delay
+was dependency download throughput, not an override error: Debian 96.7MB fetched
+in 13m44s (~117kB/s), then Chromium156.0.8078.4 + Playwright FFmpeg/headless shell
+downloaded successfully. Frozen uv0.9.5 production sync passed on Python3.12.12.
+This initial image predates the final license COPY line added during its build;
+a sequential cached packaging refresh adds only that attribution layer, followed
+by test-only frozen-dev and optional-video overlays. No production dependency
+install layer or app source change is intentionally introduced by the refresh.
+Integrator subsequently reports parent main `7dccdfe` includes lane002 bounded
+sandbox logs and dispatch receipt CAS. This candidate intentionally remains on
+its coherent merged `b55c32c` base until committed; it does not overwrite or revert
+those newer fixes. Historical triage's missing-code requests are not a current
+assessment of `7dccdfe`. Rebase/integration verification of that newer source is
+the next parent gate, distinct from this exact dependency amendment.
+
+Reproduction after image build (network is disabled for actual runtime checks):
+
+```sh
+docker build --platform linux/amd64 --target offline-tests -f scripts/ops_dependency_verify.Dockerfile -t flowpilot-lane005-deps:offline-tests .
+docker build --platform linux/amd64 --target video-tests -f scripts/ops_dependency_verify.Dockerfile -t flowpilot-lane005-deps:video-tests .
+.venv/bin/python scripts/ops_dependency_image_checks.py --suite full
+.venv/bin/python scripts/ops_dependency_image_checks.py --suite asgi
+.venv/bin/python scripts/ops_dependency_image_checks.py --suite frontend
+.venv/bin/python scripts/ops_dependency_image_checks.py --image flowpilot-lane005-deps:video-tests --suite video
+```
+
+Only own source fixtures/scripts/frontend/manifests are bound read-only. Built app
+code and agent come from production image; no host socket, credentials, profiles or
+provider network. Test image freezes dev requirements; optional video libraries go
+to separate `/opt/video-tools`, not the production environment. Runtime resource
+caps: 2 CPUs, 2GiB, PID1024, 256MiB SHM, disposable profile tmpfs. The Node22 UI
+fixture wrapper uses no-sandbox only for its owned ephemeral headless browser;
+this does not alter deployment sandbox policy or claim kernel/network isolation.
+
+Image refresh and both test overlays completed. Final production image config digest
+`sha256:1e9e9b1b97c62683ce4e04139b1e3780be665c8789351b334343155a2ddd6032`,
+inspected image ID/manifest `sha256:4e4d790968c9b692035cdd3b7c5930570eade51a62b392311415b8464e0032b4`;
+label `fd81220-deps-lock-a24c0b9204db` identifies the tested precommit bytes, not an
+invented final commit SHA. Frozen test overlay installed only five locked dev
+packages. Optional video overlay installed only the three named auxiliary tools.
+
+Image checks so far: ASGI 65536 assembled/fragmented bound and log secrecy **PASS**;
+Node22 frontend/client **6 passed**, including actual Linux Chromium UI; auxiliary
+actual MP4 **1 passed**. First Linux UI run failed on teardown with ENOTEMPTY after
+root Chrome exited while renderer children still wrote to its owned temp profile.
+The disposable wrapper now starts a separate Chromium process group, forwards stop,
+and reaps only that group before Node removes the profile. No frontend test/assertion
+or component code changed. Full Node22 UI rerun passed; original failure retained
+here rather than presented as a first-pass success.
+
+The foundation-era backend rehearsal also failed its obsolete assumption that enabled
+composition always returns503. Merged bootstrap `_load` now loads all lane components.
+Own rehearsal now separately asserts disabled liveness200, assembled idle readiness200,
+and explicit forbidden-raw-tracing startup503, including restart and graceful exit for
+each. This preserves the unavailable-path requirement with a deliberate failure
+fixture instead of requiring absent source modules; no production readiness code
+or assertion is bypassed. Final lifecycle/full-image suite outcomes follow.
+
+Audit rerun against the **actual three candidate image tags** returned Python0,
+frontend0 and agent-production0; OS/Chromium explicitly **UNVERIFIED**. Auditor/tool
+installs stayed in discarded overlays. No provider calls or host daemon/firewall
+changes; a ready idle process is not sandbox/network/security clearance.
+
+### Independent verification verdict — BLOCKED, candidate NOT committed
+
+Production provenance check **PASS**: UID10001; 112 installed distributions match
+frozen lock; exact pyproject/lock bytes; all **42 backend Python source files** and
+all **4 frontend dist files** match the own merged worktree; runtime MIT notice
+byte-identical. Actual image build, frozen sync and dependency audits are complete.
+Actual startup/restart/graceful-exit rehearsal **PASS** for disabled liveness200,
+assembled enabled idle readiness200 and explicit raw-trace startup rejection503.
+This is idle startup proof, not actual task interruption/recovery or host isolation.
+
+Full Linux/amd64 Python3.12 image suite: **444 passed, 1 failed, 1 optional-video
+skipped, 12 live deselected** (304.76s). Required unresolved criterion:
+
+- **Criterion:** unchanged direct-Chromium owned-process SIGKILL/durable-effect test
+  can start its synthetic browser under the Linux image runtime.
+- **Reproduction:** `tests/test_task_acceptance_browser.py::test_owned_browser_sigkill_after_durable_effect_without_replay`
+  through the full image runner; direct packaged Chromium with its existing flags.
+- **Expected:** `DevToolsActivePort` appears, then the durable-effect/SIGKILL/no-replay
+  assertions execute successfully.
+- **Observed:** browser exits before readiness; diagnostic launch returns **-6**
+  and `FATAL ... No usable sandbox!`. No later effect/recovery assertion is reached
+  in this image test. Do not describe it as an override regression or a passing gate.
+- **Comparison:** exact direct-launch failure (-6, same sandbox diagnostic) reproduced
+  in both pre-amendment image `sha256:080641dddf90993ebd961b9c315f85679024da98bac842c593b4c2fd90311902`
+  (revision c7fc157) and candidate inspected above. The unchanged test passes on
+  own macOS candidate venv (**1 passed**, 1.90s), and the entire macOS suite passed
+  **445**. This narrows the blocker to this local Linux Chromium-sandbox environment,
+  not evidence against any specific updated Python API. Exact kernel mechanism is
+  not adjudicated merely from Chromium's generic suggested-workaround message.
+- **Boundary:** no `--no-sandbox` added to this test, no skip/assertion relaxation,
+  privilege/capability addition, host namespace/AppArmor/daemon/kernel modification,
+  or peer-file repair. A sandbox-capable disposable Linux environment or explicit
+  integrator decision about the existing macOS proof is required. Do not silently
+  treat either as authority to waive the image gate.
+
+Therefore **do not commit/cherry-pick the Python candidate yet**. Preserve own
+pyproject/lock, dedicated regressions, runtime-license COPY and fixture scripts
+uncommitted. Independent certifi `42d202c` and frontend `fd81220` remain verified
+checkpoints with their stated scopes. This evidence-only checkpoint is NOT approval
+of uncommitted overrides. Parent `7dccdfe` remains unmerged/unmodified here.
+
+Global blockers remain separately named: nft bridge conntrack policy rejected with
+Protocol error (host network enforcement unverified), OS/Chromium advisory inventory
+unverified, plus the direct-Chromium image-fixture sandbox blocker above. Zero Python/
+npm advisory counts clear none of them. No provider calls/deployment occurred.
+
+Candidate remains in the worktree, not staged. Additional sanitized source-only
+backup (seven explicit own source/test/fixture files, no secrets/peer files):
+`/private/var/folders/tp/nvzb0t5s0jqb9lyy9r0wn0940000gn/T/opencode/lane005-python-candidate-a24c0b9204db-7cf8ed439d80.patch`,
+SHA256 `7cf8ed439d80f499f6e3e06fd5605bd095c03e82a8b20af1b8fd204d42b45e0b`.
+This is a backup of the existing dirty code slice, not a new integration commit;
+do not apply it on top of those same working changes. Only narrative/machine
+evidence is committed at this blocked checkpoint.
+
+Final focused Linux image rerun (dedicated dependencies, actual Chromium Pi
+observation/stale/no-progress/completion/repair, actual TLS viewer/assistance and
+retention): **51 passed, 1 auxiliary-video skipped**, 146.15s. Separate actual
+video test remains **1 passed**, so this skip does not conceal missing codec proof.
+This focused success does not waive the unchanged full-image direct-launch failure.
+Final verdict remains **blocked**, not override incompatibility established and not
+global hosting/security approval. Candidate runtime-license COPY also remains in
+the uncommitted slice; source license in frontend commit is verified, but deployers
+must not omit the runtime attribution follow-up.
