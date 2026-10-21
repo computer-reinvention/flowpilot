@@ -3,6 +3,8 @@
 # Ports: 9222 (CDP direct), 9223 (socat-forwarded CDP — accessible cross-container)
 
 FROM python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c
+ARG REVISION=unknown
+LABEL org.opencontainers.image.revision=$REVISION
 
 ENV DEBIAN_FRONTEND=noninteractive \
     DISPLAY=:1 \

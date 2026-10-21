@@ -24,7 +24,7 @@ case "${1:-help}" in
   setup|cleanup) die 'Removed unsafe automation. See docs/hosting-readiness.md; no host installation, global Caddy rewrite or resource pruning is performed.' ;;
   validate) check_env ;;
   build)
-    docker build --platform "${FLOWPILOT_PLATFORM:-linux/amd64}" --label flowpilot.ops=lane005 -t flowpilot-sandbox:latest -f "$PROJECT_DIR/Dockerfile.sandbox" "$PROJECT_DIR"
+    docker build --platform "${FLOWPILOT_PLATFORM:-linux/amd64}" --build-arg "REVISION=${FLOWPILOT_REVISION:-unknown}" -t flowpilot-sandbox:latest -f "$PROJECT_DIR/Dockerfile.sandbox" "$PROJECT_DIR"
     compose build backend ;;
   up) authorize; check_env; compose up -d --wait --wait-timeout 120 ;;
   stop) authorize; compose stop --timeout 65 ;;

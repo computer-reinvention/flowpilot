@@ -37,6 +37,7 @@ Run from the integrated checkout (never print `docker compose config` with real 
 
 ```sh
 python -m unittest discover -s scripts -p ops_tests.py -v
+python scripts/ops_compose_verify.py
 bash -n deploy
 # Placeholder is ONLY for structural Compose validation, never for a service:
 JWT_SECRET=structural-check-not-a-deploy-key docker compose config --quiet
@@ -226,8 +227,26 @@ propagated through `micromatch`, `fast-glob`, `@ts-morph/common`, `ts-morph`,
 node_modules/build tools are not copied into the runtime image, but build-time risk
 still requires frontend-owner review. npm proposes a breaking shadcn change; this
 lane did **not** run `npm audit fix`, change locks or accept that risk for the user.
-Python/OS/Chromium CVE inventory is not yet independently cleared. Image pins and
-successful builds must not be described as a clean security scan.
+Python production lock export audited with pip-audit 2.9.0 in a disposable container:
+**28 known advisories in 6 packages**, not accepted or fixed in this lane:
+
+| Locked package | Advisory count | Reported fixed version (review compatibility) |
+| --- | ---: | --- |
+| aiohttp 3.14.3 | 8 | 3.14.4 |
+| anyio 4.12.1 | 2 | 4.14.2 |
+| certifi 2026.7.22 | 1 | 2026.10.19 |
+| mcp 2.1.1 (transitive) | 1 | 2.2.0 for the installed major |
+| pillow 12.3.0 | 8 | 13.0.0 |
+| pypdf 6.16.2 | 8 | 6.19.0 covers the reported set |
+
+`python scripts/ops_dependency_audit.py` reproduces the Python/frontend/agent inventory,
+printing advisory IDs, aliases and reported fixes, and exits nonzero on findings.
+It installs the auditor **only inside a disposable container**, never the host or
+production image. `--disable-pip --no-deps` audits the complete frozen lock export;
+it does not re-resolve production dependencies or claim package hash verification.
+Dependency-owner compatibility review, lock updates and repeat audits are a release
+gate. OS/Chromium CVE inventory remains unverified. Image pins and successful builds
+must not be described as a clean security scan.
 
 All four Linux/amd64 production build stages (frontend, agent, complete backend,
 sandbox) built successfully locally. Backend and sandbox image sizes in the initial
@@ -237,6 +256,36 @@ image as well as the local Python environment; uvicorn emits a deprecation warni
 for the legacy websockets implementation. The frozen dependency revision currently
 honors its assembled receive limit; any uvicorn upgrade must rerun the fragmented
 message test rather than assuming future alias behavior is unchanged.
+
+Disposable backend rehearsal passed disabled liveness, enabled-but-missing composition
+503, both states after restart and graceful exit 0 against a fake Docker API on a
+unique internal network. It did not attach the host socket or publish any ports.
+The offline sandbox CDP smoke passed with no published ports. These are packaging
+tests; they do not establish real task interruption/recovery, network isolation,
+durable tmpfs state, or rate-limit correctness.
+
+### Exact application/contract requests to the integrator
+
+- **001:** implement terminal-only history retention using `history_retention_days`;
+  ensure login/signup and all existing/new API key routes have enforceable limits;
+  retain fail-closed readiness until startup reconciliation is complete.
+- **002:** consume all `TaskSettings.sandbox_*` resource values at Docker creation;
+  set per-sandbox bounded Docker `log_config`, drop unnecessary capabilities
+  (especially `NET_RAW`/`NET_ADMIN`), never publish remote CDP, and enforce idle /
+  failed-save-quarantine retention without deleting leased profiles or previous
+  known-good archives. Existing `cleanup_orphans()` uses broad Flowpilot labels:
+  scope it to this deployment and generation before hosted startup. The packaging
+  helper intentionally does not duplicate that unsafe cleanup externally.
+- **000/001/002:** there is currently no lease-aware maintenance/retention port in
+  `task_ports.py`. If cleanup must run outside the runtime, amend the shared contract
+  with an atomic, deployment-scoped, generation-checked maintenance operation first;
+  do not infer safe deletion from container age or account labels alone.
+- **003/006:** actual ASGI scheme/Host is the Origin authority. Verify the observed
+  host-proxy NAT peer and trust only that individual address; verify exact external
+  Host normalization, 65,536-byte assembled and fragmented WS rejection, private
+  path/query capability logs and real viewer authorization with the merged runtime.
+- **004 / shared lock owner:** review the seven frontend build-tool advisories;
+  coordinate any dependency/lock updates rather than modifying a peer lockfile here.
 
 No live provider calls, real accounts, credentials, infrastructure installation,
 certificate issuance, deployments, host firewall changes or peer files were used.
