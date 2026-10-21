@@ -1,0 +1,41 @@
+# REVIEW ARTIFACT ONLY. Never run on the working host during verification.
+# Linux bridge-family filtering catches same-bridge and routed IPv4/IPv6 traffic.
+# Requires br_netfilter/bridge nft support; dedicated fp-sandbox0 bridge from Compose.
+# Replies to backend-initiated CDP are permitted; new browser-initiated lateral traffic is not.
+table bridge flowpilot_guard {
+    set denied4 {
+        type ipv4_addr
+        flags interval
+        elements = { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8,
+                     169.254.0.0/16, 172.16.0.0/12, 192.0.0.0/24, 192.0.2.0/24,
+                     192.168.0.0/16, 198.18.0.0/15, 198.51.100.0/24,
+                     203.0.113.0/24, 224.0.0.0/4, 240.0.0.0/4 }
+    }
+    chain forward {
+        type filter hook forward priority -200; policy accept;
+        meta ibrname "fp-sandbox0" ct state established,related accept
+        # Never depend on Docker's FORWARD rules or DNS/URL validation alone.
+        meta ibrname "fp-sandbox0" ether type ip ip daddr @denied4 drop
+        # IPv6 disabled for sandbox egress until an explicit public-IPv6 policy is tested.
+        meta ibrname "fp-sandbox0" ether type ip6 drop
+        meta ibrname "fp-sandbox0" ether type ip ip protocol tcp tcp dport { 80, 443 } accept
+        meta ibrname "fp-sandbox0" ether type ip drop
+    }
+    chain input {
+        type filter hook input priority -200; policy accept;
+        meta ibrname "fp-sandbox0" ct state established,related accept
+        meta ibrname "fp-sandbox0" ether type ip ip daddr @denied4 drop
+        # Public routed website packets traverse bridge input before IP forwarding.
+        meta ibrname "fp-sandbox0" ether type ip ip protocol tcp tcp dport { 80, 443 } accept
+        meta ibrname "fp-sandbox0" ether type ip drop
+        meta ibrname "fp-sandbox0" ether type ip6 drop
+    }
+}
+# Host-owned PUBLIC addresses are not covered by RFC1918 denial above.
+table inet flowpilot_host_guard {
+    chain input {
+        type filter hook input priority -200; policy accept;
+        iifname "fp-sandbox0" ct state established,related accept
+        iifname "fp-sandbox0" drop
+    }
+}

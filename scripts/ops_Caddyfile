@@ -1,0 +1,31 @@
+# Standalone candidate; MERGE global options and site with existing config manually.
+# Error logs can include request URI too, even with access logging disabled.
+{
+    log default {
+        exclude http.log.error
+    }
+}
+# Do not enable debug/access logging: assistance paths AND queries are secrets.
+{$FLOWPILOT_DOMAIN} {
+    request_body {
+        max_size 128KB
+    }
+    header {
+        Referrer-Policy no-referrer
+        X-Content-Type-Options nosniff
+        -Server
+    }
+    reverse_proxy 127.0.0.1:8080 {
+        # Do not use client-supplied forwarded headers for authorization/Origin.
+        header_up Host {$FLOWPILOT_EXTERNAL_HOST}
+        header_up X-Forwarded-Proto https
+        header_up X-Forwarded-Host {$FLOWPILOT_EXTERNAL_HOST}
+        header_up -Forwarded
+        transport http {
+            dial_timeout 5s
+            response_header_timeout 35s
+        }
+        stream_timeout 10m
+        stream_close_delay 5s
+    }
+}
