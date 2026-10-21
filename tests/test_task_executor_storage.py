@@ -50,7 +50,14 @@ def test_task_transport_has_no_host_publication(tmp_path):
     assert kwargs['labels']['flowpilot-task'] == '1'
     assert kwargs['environment']['CHROME_AUTORESTART'] == 'false'
     assert kwargs['log_config']['Type'] == 'json-file'
-    assert kwargs['log_config']['Config'] == {'max-size': '1m', 'max-file': '2'}
+    assert kwargs['log_config']['Config'] == {'max-size': '10m', 'max-file': '3'}
+
+
+def test_legacy_transport_does_not_override_daemon_log_driver(tmp_path):
+    manager = SandboxManager(str(tmp_path))
+    manager._client = MagicMock()
+    manager.start()
+    assert 'log_config' not in manager.client.containers.create.call_args.kwargs
 
 
 def test_save_failure_preserves_archive_and_quarantines(tmp_path):
