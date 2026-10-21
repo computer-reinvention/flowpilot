@@ -99,6 +99,10 @@ Lane003 identified two missing internal seams. The integrator owns this additive
 
 Affected owners: 001 implements authorized lookup/persistence checks, 002 supplies browser metadata, 003 wires public mint/state, and 006 verifies real-service expiry/race/ownership behavior. Peer doubles inherit these methods through autospec. Apply the integrator's amendment commit before continuing those lanes; do not independently edit the shared contracts.
 
+### Approved additive port amendment — direct API human-writer drain
+
+Cross-lane review found that the viewer drains its own inputs, but direct API responses need the same fence before waking agent execution. `TaskExecutor.release_human(lease, interaction_id, generation)` drains/fences every handle for that exact pause, releases held controls and rejects stale execution/pause generations. It never acquires a new writer merely to release it. Repeated release for the same valid pause, including a pause where no viewer was opened, is idempotent. Future writer acquisition/input for that pause remains fenced. Control validates the live response, waits for this method within its cancellation budget, then resolves/revokes and wakes the agent; timeout/failure does not approve or wake execution. Owners: 001 orchestration, 002 writer lifecycle, 006 real race verification. No public JSON changes.
+
 ## Foundation completion gate
 
 - [x] Wire schemas, transitions, errors, settings and all port signatures are executable and versioned.
