@@ -46,6 +46,7 @@ class Site:
 <button id='{self.selector}' data-action='cart'>Add synthetic item</button>
 <button id='submit'>Confirm synthetic submission</button>
 <button id='agent'>Agent continuation marker</button>
+{('<output data-result id="volatile-tick">0</output>') if volatile else ''}
 <button id='delay'>Delayed update</button><div id='state'>initial</div>
 <div id='drag' draggable='true'>Drag me</div><div id='drop'>Drop here</div>
 <a id='navigate' href='/next'>Next page</a>{f"<iframe src='{self.frame_url}/frame'></iframe>" if frames else ''}
@@ -69,7 +70,8 @@ document.querySelector('#name').onchange = () => effect('input');
 document.querySelector('#drag').ondragstart = e => e.dataTransfer.setData('text/plain','fixture');
 document.querySelector('#drop').ondragover = e => e.preventDefault();
 document.querySelector('#drop').ondrop = e => {{e.preventDefault(); effect('drag');}};
-if ({str(volatile).lower()}) setInterval(() => document.body.dataset.volatile = String(Date.now()), 30);
+if ({str(volatile).lower()}) setInterval(() => {{ document.body.dataset.volatile = String(Date.now());
+  document.querySelector('#volatile-tick').textContent = String(Date.now()); }}, 30);
 </script>"""
 
 

@@ -72,3 +72,5 @@ def run_assembled_docker(evidence):
             # Stopped task containers remain network members; include only this
             # unique network, never a global flowpilot label sweep.
             network.remove()
+            evidence.record('owned_docker_cleanup', 'passed', 'only containers attached to this run-labelled network removed, then that exact network removed',
+                            owned_containers_removed=len(containers), unique_network_removed=True)
