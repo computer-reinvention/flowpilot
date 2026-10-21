@@ -53,13 +53,22 @@ class ChatSandbox:
         container = self.manager.client.containers.get(self.info['container_id'])
         # Graceful Supervisor shutdown lets Chromium flush its profile first.
         container.stop(timeout=20)
+        bits = None
         try:
             bits, _ = container.get_archive('/tmp/chrome-profile')
             with tempfile.TemporaryFile() as source:
-                for chunk in bits:
-                    source.write(chunk)
-                    if source.tell() > 272 * 1024 * 1024:
-                        raise ValueError('Browser profile archive exceeds the recovery budget')
+                try:
+                    for chunk in bits:
+                        source.write(chunk)
+                        if source.tell() > 272 * 1024 * 1024:
+                            raise ValueError('Browser profile archive exceeds the recovery budget')
+                finally:
+                    # An abandoned archive stream holds Docker's container lock;
+                    # the retained recovery container could then never be
+                    # inspected, stopped or deleted until garbage collection.
+                    close = getattr(bits, 'close', None)
+                    if close:
+                        close()
                 source.seek(0)
                 temporary = self.archive.with_suffix('.tar.tmp')
                 total = 0

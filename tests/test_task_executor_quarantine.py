@@ -399,3 +399,32 @@ async def test_real_control_reports_save_failure_and_quota_refusal(tmp_path):
     after = await control.start(owner, TaskStart(task='Synthetic effect', idempotency_key='quota-real-4'))
     assert (await settle(after.task_id)).error.code == ErrorCode.PROFILE_RECOVERY_REQUIRED
     assert runs == [admitted.task_id, after.task_id]
+
+
+def test_budget_save_failure_closes_the_daemon_archive_stream(tmp_path):
+    """An abandoned get_archive stream keeps Docker's container lock: later
+    inspect/stop/remove of the retained artifact hangs (reproduced in real
+    Docker). A failed save must release the stream before reporting failure."""
+    from backend.tasks.browser_adapter import TaskSandbox
+    settings = TaskSettings(state_dir=tmp_path)
+    sandbox = TaskSandbox(tmp_path, 'key', settings=settings, lease=lease_for())
+    sandbox.archive.write_bytes(b'previous-good-archive')
+    sandbox.info = {'container_id': 'container', 'sandbox_id': 'sandbox'}
+    sandbox.manager._client = MagicMock()
+    stream = {'open': False}
+
+    def oversized():
+        stream['open'] = True
+        try:
+            while True:
+                yield b'\0' * (8 * MIB)
+        finally:
+            stream['open'] = False
+    container = sandbox.manager.client.containers.get.return_value
+    container.get_archive.return_value = (oversized(), {})
+    with pytest.raises(RuntimeError, match='Profile save failed'):
+        sandbox._close()
+    assert not stream['open']  # closed although the raised traceback is still alive
+    assert sandbox.archive.read_bytes() == b'previous-good-archive'
+    assert (tmp_path / 'recovery-required').exists()
+    container.remove.assert_not_called()
