@@ -303,6 +303,68 @@ promote this branch based on its documentation or an HTTP 200 alone.
 
 ## Read-only dependency and implementation triage — 2026-10-21
 
+**Coordinated implementation follow-up:** main `b55c32c` merged as `57372a2`.
+Certifi-only patch committed `42d202c`; 30 focused tests passed in own frozen venv.
+Frontend licensing gate is resolved from exact release tarball MIT LICENSE.md,
+verified against formerly locked SHA512. CSS/license are vendored unchanged; CLI
+removed. Clean Linux Node22 build/audit pass with **zero npm findings**, all four
+merged-source dist files byte-identical, runtime dependency map unchanged, six
+frontend/client checks (real Chromium DOM included) and four agent checks passed.
+291 obsolete lock entries removed; no surviving version changes; six already-bundled
+optional WASI metadata entries made explicit by npm (no WASI build claimed).
+**Python override acceptance is BLOCKED, not complete:** candidate remains uncommitted.
+Historical proposals below are not proof those overrides have been accepted.
+Full incremental evidence is in plan005 and machine report.
+
+Current Python candidate evidence: exact approved graph (five overridden packages
+plus coupled mcp-types; certifi separate), browser-use still 0.13.11. Own frozen
+Python3.13 **445 passed, 1 auxiliary-video skip, 12 live deselected**; separate real
+MP4 pipeline **1 passed**. Actual PNG/JPEG Chromium screenshots, GIF overlays, six
+benign image codecs, pixel-bound rejection, AnyIO strict local TLS/cancellation,
+MCP imports/schema without socket use, browser-use aiohttp CDP discovery and PDF
+extraction/output truncation pass. Existing real Chromium Pi stale/no-progress/
+completion/repair and assistance tests are in that full suite. Candidate frozen
+112-package production export audit reports **zero Python findings**; Node22 agent
+four tests and audit zero. Final Node22 Linux frontend/client suite **six passed**,
+including actual Chromium UI; actual Linux video **one passed** and ASGI65536 bound
+and secret-free logs pass. Production image rebuild/frozen sync/provenance **passed**:
+112 installed distributions, exact manifests, 42 backend source files, four frontend
+dist files and runtime license matched; UID10001. Idle backend startup/restart/
+graceful-exit checks pass for disabled200, assembled enabled200 and trace-rejected503.
+
+**Unresolved image gate:** full Linux suite **444 passed, 1 failed, 1 video skip,
+12 live deselected**. The unchanged owned-process SIGKILL/durable-effect test's direct
+Chromium exits -6 before CDP readiness with `No usable sandbox!`. Both the old
+c7fc157 image and the candidate reproduce the identical direct-launch failure.
+That exact test passes on macOS; the local Linux sandbox environment remains a
+blocker. No test flag/skip/assertion or host security configuration was weakened
+to force green. Candidate image ID
+`sha256:4e4d790968c9b692035cdd3b7c5930570eade51a62b392311415b8464e0032b4`,
+label `fd81220-deps-lock-a24c0b9204db`, identifies tested precommit bytes, not a final
+accepted source revision. A sandbox-capable disposable Linux rerun or explicit
+integrator acceptance decision is still required; **do not integrate the uncommitted
+Python slice as certified**. Parent-reported `7dccdfe` log/CAS fixes were not merged
+or overwritten by this pass; recheck after eventual coordinated integration.
+
+Focused image rerun: **51 passed, 1 auxiliary-video skipped**, covering dedicated
+dependency APIs plus actual Pi Chromium observation/repair/completion, TLS viewer/
+assistance and retention. Separate actual video test passed. This does not waive
+the full-image failure. Exact candidate stays uncommitted (with a hashed source-only
+backup recorded in plan005); only evidence is committed at this blocked checkpoint.
+Runtime MIT-copy packaging follow-up is part of that pending slice, not silently
+claimed to be in the earlier frontend commit.
+
+Important limits: browser-use's PDF 60k-character cap limits **output only**, after
+synchronous parsing of all pages, not hostile-file CPU/RAM. No EPS/Ghostscript or
+hostile native-TIFF/fuzz coverage is claimed. Video codecs were installed only in an
+auxiliary test target, not enabled in production. Upstream optional MCP server import
+intentionally disables process logging, so its import test runs in a socket-forbidden
+child; it is not imported by the ASGI service. No assertion/logging guard was weakened.
+The exact CSS MIT notice is also copied outside dist to
+`/usr/share/licenses/shadcn-tailwind/LICENSE` in the backend distribution; standalone
+dist redistributors must include the source notice. Baseline dist asset bytes stay
+identical.
+
 Machine-readable actionable inventory: `scripts/ops_dependency_triage.json`.
 It includes **all 28 Python advisory IDs, aliases and individual reported fixed
 versions**, all seven frontend package/version findings, locked dependency paths,
