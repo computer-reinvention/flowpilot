@@ -1,6 +1,7 @@
 """Durable task orchestration. Factories/bind perform no filesystem or task I/O."""
 
 import asyncio
+import logging
 import weakref
 from datetime import timedelta
 
@@ -9,6 +10,10 @@ from ..task_contracts import (
     TaskState, task_error,
 )
 from .repository import Repository, fail, now
+
+logger = logging.getLogger(__name__)
+MAINTENANCE_INTERVAL_SECONDS = 60
+MAINTENANCE_BATCH_SIZE = 100
 
 
 class Control:
@@ -22,6 +27,7 @@ class Control:
         self._waiters = {}
         self._locks = weakref.WeakValueDictionary()
         self._admissions = set()
+        self._maintenance_task = None
 
     def bind(self, bindings):
         self.bindings = bindings
@@ -56,10 +62,39 @@ class Control:
             # If recover attested a saved profile via release_browser, this is
             # an idempotent no-op. Otherwise conservatively quarantine it.
             await self.repository.release_browser(lease, profile_saved=False)
+        await self._maintain_once()
+        self._maintenance_task = asyncio.create_task(self._maintenance_loop())
         self.accepting = True
+
+    async def _maintain_once(self):
+        job = asyncio.create_task(self.repository.prune_history(batch_size=MAINTENANCE_BATCH_SIZE))
+        try:
+            count = await asyncio.shield(job)
+        except asyncio.CancelledError:
+            # to_thread cancellation cannot stop an open SQLite transaction.
+            # Drain the bounded commit/rollback before lifecycle shutdown returns.
+            try:
+                await job
+            except Exception:
+                logger.warning('Task history maintenance failed; details withheld')
+            raise
+        except Exception:
+            logger.warning('Task history maintenance failed; details withheld')
+        else:
+            if count:
+                logger.info('Task history maintenance completed pruned_count=%d', count)
+
+    async def _maintenance_loop(self):
+        while True:
+            await asyncio.sleep(MAINTENANCE_INTERVAL_SECONDS)
+            await self._maintain_once()
 
     async def shutdown(self):
         self.accepting = False
+        maintenance, self._maintenance_task = self._maintenance_task, None
+        if maintenance is not None:
+            maintenance.cancel()
+            await asyncio.gather(maintenance, return_exceptions=True)
         if self.repository is None:
             return
         # Disconnect-safe admission jobs own the commit/dispatch window. Drain

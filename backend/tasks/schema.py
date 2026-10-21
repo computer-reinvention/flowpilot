@@ -21,11 +21,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS bt_session_active ON bt_tasks(session)
  WHERE state NOT IN ('completed','failed','cancelled','interrupted');
 CREATE UNIQUE INDEX IF NOT EXISTS bt_profile_writer ON bt_tasks(profile) WHERE reserved=1;
 CREATE INDEX IF NOT EXISTS bt_account_capacity ON bt_tasks(owner,reserved);
+CREATE INDEX IF NOT EXISTS bt_profile_history ON bt_tasks(profile,reserved,state);
+CREATE INDEX IF NOT EXISTS bt_terminal_history_age
+ ON bt_tasks(julianday(json_extract(view,'$.updated_at')),id)
+ WHERE reserved=0 AND state IN ('completed','failed','cancelled','interrupted');
 CREATE TABLE IF NOT EXISTS bt_idempotency (
  owner TEXT NOT NULL, operation TEXT NOT NULL, key TEXT NOT NULL,
  fingerprint TEXT NOT NULL, receipt TEXT NOT NULL,
  PRIMARY KEY(owner,operation,key)
 );
+CREATE INDEX IF NOT EXISTS bt_response_history
+ ON bt_idempotency(json_extract(receipt,'$.task_id')) WHERE operation='respond';
 CREATE TABLE IF NOT EXISTS bt_interactions (
  task TEXT NOT NULL, id TEXT NOT NULL, generation INTEGER NOT NULL,
  descriptor TEXT NOT NULL, response_key TEXT, digest TEXT, confirmed INTEGER,
@@ -34,4 +40,5 @@ CREATE TABLE IF NOT EXISTS bt_interactions (
 CREATE TABLE IF NOT EXISTS bt_capabilities (
  digest TEXT PRIMARY KEY, task TEXT NOT NULL, binding TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS bt_capability_task ON bt_capabilities(task);
 """
