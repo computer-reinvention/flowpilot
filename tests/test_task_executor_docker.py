@@ -351,9 +351,9 @@ async def main():
                     container = sandbox.manager.client.containers.get(sandbox.info['container_id'])
                     container.reload()
                     assert not container.attrs['HostConfig']['PortBindings']
-                    assert container.attrs['HostConfig']['PidsLimit'] == 256
+                    assert container.attrs['HostConfig']['PidsLimit'] == settings.sandbox_pids
                     assert container.attrs['HostConfig']['LogConfig'] == {
-                        'Type': 'json-file', 'Config': {'max-size': '1m', 'max-file': '2'}}
+                        'Type': 'json-file', 'Config': {'max-size': '10m', 'max-file': '3'}}
                     browser = await playwright.chromium.connect_over_cdp(websocket)
                     context = browser.contexts[0]
                     page = await context.new_page()
