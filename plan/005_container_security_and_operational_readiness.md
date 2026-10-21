@@ -52,6 +52,7 @@ frontend, lockfile, root-checkout or peer-worktree files were modified.
 5. `fe3ce79` — explicit proxy Host/trust, WS receive limits and protocol log suppression.
 6. `efc3d01` — resolved Compose checks and nested secret-context regression closure.
 7. `00cc3a5` — reproducible dependency audit/release gates and sandbox revision identity.
+8. `c7fc157` — evidence ledger and explicit machine-visible hosted readiness blockers.
 
 ### Delivered executable artifacts
 
@@ -138,8 +139,21 @@ frontend, lockfile, root-checkout or peer-worktree files were modified.
    bytes, chosen provider key or deliberately supplied private Pi subscription auth
    (refresh limitations documented), offline age identity and off-host backups.
 
-No deployment/setup/up/stop/cleanup was run on the actual host. No host tools were
+No `deploy setup/up/stop/cleanup` command targeted the actual installation; Docker
+stop/restart commands affected only disposable labelled fixtures. No host tools were
 installed, certificates issued, live accounts contacted or credentials copied.
 Only labelled disposable fixture containers/networks were removed. Reusable uniquely
 named `flowpilot-lane005-*:verify` build images remain for integrator rechecks; no shared
 cache/daemon/image pruning was performed. Hosted readiness remains intentionally blocked.
+
+Final recheck: **12 ops tests + 53 foundation tests passed**, resolved Compose,
+compilation/shell/whitespace checks passed; no lane005 fixture containers or networks
+remained. Backend image `sha256:080641dddf90993ebd961b9c315f85679024da98bac842c593b4c2fd90311902`
+(revision `c7fc157`) passed real ASGI limits + backend restart/503/graceful stop again.
+Sandbox image `sha256:8df29717efd7cae7db0761ae0a5393d88f560d677224caea6d44483db95c849c`
+(revision `00cc3a5`) passed offline CDP again. Proxy normal/error logging rehearsal
+passed again. One transient shared-Docker extraction snapshot NotFound occurred;
+retry succeeded with no daemon repair, reset or shared pruning. The trace-retention
+test additionally covers existing `NNNN_function.name.json` traces while preserving
+arbitrary JSON/profile files. The reproducible dependency-audit helper returned the
+same 28 Python / 7 high frontend / 0 agent findings (expected nonzero audit exit).

@@ -78,8 +78,9 @@ must stop DNS changes and redirects. DNS-over-HTTPS may resolve names but cannot
 destination filtering. UDP/QUIC and arbitrary website ports are intentionally unavailable.
 Private websites/VPN destinations are unsupported by this policy. Custom private
 routes and unusual assigned public ranges need operator review. gVisor is optional,
-**not enabled or verified**. Chromium's `--no-sandbox` remains an accepted application
-design risk, not a container escape mitigation. Do not treat the shared host as a
+**not enabled or verified**. Chromium's `--no-sandbox` remains an existing application
+design risk requiring operator review, not an accepted risk or container escape
+mitigation. Do not treat the shared host as a
 security boundary against a compromised backend.
 
 The local Docker Desktop kernel rejected bridge `ct state` with **Protocol error**.
@@ -191,6 +192,8 @@ and off-host retention/rotation remain operator responsibilities.
 
 Docker logs rotate at 30MiB/service; tracing defaults off. `ops_retention.py` defaults
 to a count-only dry run for known trace extensions; applying requires `--quiesced`.
+It also recognizes the existing tracer's `NNNN_function.name.json` filename pattern,
+but preserves arbitrary JSON/profile files rather than treating every JSON as a trace.
 It never follows symlinks or deletes profiles, database rows or Docker resources.
 Use an explicitly designated trace directory, never a generic profile/state path.
 

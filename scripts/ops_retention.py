@@ -1,6 +1,7 @@
 """Explicit offline trace retention only. Never delete profiles, DB rows or containers."""
 import argparse
 import os
+import re
 from pathlib import Path
 import time
 
@@ -15,7 +16,8 @@ def clean(root, days, *, apply=False, now=None):
         dirs[:] = [d for d in dirs if not (Path(directory) / d).is_symlink()]
         for name in files:
             file = Path(directory) / name
-            if file.is_symlink() or file.suffix not in {".jsonl", ".zip", ".trace"}:
+            known_json_trace = bool(re.fullmatch(r"[0-9]{4,}_[A-Za-z_][A-Za-z0-9_.]*\.json", name))
+            if file.is_symlink() or (file.suffix not in {".jsonl", ".zip", ".trace"} and not known_json_trace):
                 continue
             info = file.stat()
             if info.st_mtime < cutoff:

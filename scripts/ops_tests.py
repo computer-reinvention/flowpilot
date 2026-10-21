@@ -120,14 +120,16 @@ class OperationalTests(unittest.TestCase):
     def test_retention_dry_run_and_protected_files(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            for name in ("old.trace", "profile.tar", "platform.db", "recent.trace"):
+            for name in ("old.trace", "0001_execute_reflex.call.json", "profile.json", "profile.tar", "platform.db", "recent.trace"):
                 (root / name).write_text("fixture")
                 os.utime(root / name, (0, 0))
             os.utime(root / "recent.trace", (200000, 200000))
             (root / "link.trace").symlink_to(root / "platform.db")
-            self.assertEqual(retention.clean(root, 1, now=200000), 1)
+            self.assertEqual(retention.clean(root, 1, now=200000), 2)
             self.assertTrue((root / "old.trace").exists())
-            self.assertEqual(retention.clean(root, 1, apply=True, now=200000), 1)
+            self.assertEqual(retention.clean(root, 1, apply=True, now=200000), 2)
+            self.assertFalse((root / "0001_execute_reflex.call.json").exists())
+            self.assertTrue((root / "profile.json").exists())
             self.assertTrue((root / "profile.tar").exists())
             self.assertTrue((root / "platform.db").exists())
             self.assertTrue((root / "recent.trace").exists())
