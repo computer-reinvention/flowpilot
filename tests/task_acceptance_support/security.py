@@ -7,7 +7,7 @@ import json
 import urllib.parse
 from pathlib import Path
 
-from .client import local_url
+from .client import Client, local_url
 
 
 def canary_variants(secret):
@@ -76,7 +76,12 @@ def probe_network(cdp_url, manifest):
     assert targets and len(targets) <= 20
     positive = network_target(manifest["allow"])
     for target in targets:
-        network_target(target)
+        network_target(target['browser_url'])
+        # A nonexistent target is not network isolation. The same disposable
+        # endpoint must demonstrably listen through an explicit host-loopback map.
+        local_url(target['host_control_url'])
+        control = Client(target['host_control_url']).request('GET', '/health')
+        assert control.status == 200, 'denied-target host control is unavailable'
     with sync_playwright() as playwright:
         browser = playwright.chromium.connect_over_cdp(cdp_url)
         context = browser.new_context(ignore_https_errors=False)
@@ -89,7 +94,7 @@ def probe_network(cdp_url, manifest):
             for index, target in enumerate(targets):
                 denied = False
                 try:
-                    page.goto(target, timeout=3000)
+                    page.goto(target['browser_url'], timeout=3000)
                 except Exception:
                     denied = True
                 outcomes.append({"target_index": index, "denied": denied})

@@ -70,7 +70,8 @@ setInterval(() => document.body.dataset.volatile = String(Date.now()), 30);
 
 
 @contextmanager
-def synthetic_site(directory):
+def synthetic_site(directory, browser_host='127.0.0.1'):
+    assert browser_host in {'127.0.0.1', 'localhost', 'host.docker.internal'}
     site = Site(directory)
 
     class Handler(BaseHTTPRequestHandler):
@@ -112,7 +113,8 @@ def synthetic_site(directory):
 
     servers = [ThreadingHTTPServer(("127.0.0.1", 0), Handler) for _ in range(2)]
     site.url = f"http://127.0.0.1:{servers[0].server_port}"
-    site.frame_url = f"http://127.0.0.1:{servers[1].server_port}"
+    site.browser_url = f"http://{browser_host}:{servers[0].server_port}"
+    site.frame_url = f"http://{browser_host}:{servers[1].server_port}"
     threads = [threading.Thread(target=server.serve_forever, daemon=True) for server in servers]
     for thread in threads:
         thread.start()

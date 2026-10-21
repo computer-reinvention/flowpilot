@@ -23,6 +23,8 @@ def main():
     parser.add_argument("--base-url", type=local_url, help="explicit disposable local service; may create run-labelled accounts")
     parser.add_argument("--require-complete", action="store_true", help="exit 2 on any unmet acceptance requirement")
     parser.add_argument("--deterministic-local", action="store_true", help="authorize disposable account/task writes; service MUST use deterministic local inference, no provider credentials")
+    parser.add_argument("--site-browser-host", choices=['127.0.0.1', 'localhost', 'host.docker.internal'], default='127.0.0.1',
+                        help="host mapping for this run's synthetic fixture, not an arbitrary external website")
     args = parser.parse_args()
     if not args.offline and not args.base_url:
         parser.error("select --offline and/or --base-url")
@@ -30,7 +32,8 @@ def main():
     (ROOT / "reports/task-acceptance").mkdir(parents=True, exist_ok=True)
     if args.offline:
         result = subprocess.run([sys.executable, "-m", "pytest", "tests/test_task_acceptance_contract.py",
-                                 "tests/test_task_acceptance_browser.py", "tests/test_task_acceptance_security.py", "-q"],
+                                 "tests/test_task_acceptance_browser.py", "tests/test_task_acceptance_security.py",
+                                 "tests/test_task_acceptance_baseline.py", "-q"],
                                 cwd=ROOT, capture_output=True, text=True, timeout=120)
         counts = {name: int(value) for value, name in re.findall(r"(\d+) (passed|failed|skipped|error)", result.stdout)}
         evidence.record("offline_harness", "passed" if result.returncode == 0 else "failed",
@@ -40,7 +43,7 @@ def main():
     if args.base_url:
         # Unique directory and two loopback listeners; no global resource cleanup.
         with tempfile.TemporaryDirectory(prefix=evidence.run_id + "-", dir=ROOT / "reports/task-acceptance") as directory:
-            with synthetic_site(directory) as site:
+            with synthetic_site(directory, args.site_browser_host) as site:
                 try:
                     run_service(evidence, args.base_url, site, args.deterministic_local)
                 except Exception as exc:

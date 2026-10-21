@@ -1,10 +1,13 @@
 """Real Chromium fixture proof, explicitly not assembled-service proof."""
 
 import time
+import uuid
 
 from playwright.sync_api import expect, sync_playwright
 
 from tests.task_acceptance_support.site import synthetic_site
+from tests.task_acceptance_support.resources import OwnedProcess, wait_file
+from tests.task_acceptance_support.wire import ROOT
 
 
 def eventually_count(site, action, count):
@@ -95,3 +98,29 @@ def test_real_browser_effect_committed_before_lost_response_never_replayed_by_fi
         page.goto(site.url)
         assert site.counters() == {'cart': 1}
         browser.close()
+
+
+def test_owned_browser_sigkill_after_durable_effect_without_replay(tmp_path):
+    with synthetic_site(tmp_path) as site, sync_playwright() as playwright:
+        run_directory = tmp_path / ('task-acceptance-' + uuid.uuid4().hex)
+        profile = run_directory / 'chromium'
+        process = OwnedProcess([playwright.chromium.executable_path, '--headless', '--no-first-run',
+                                '--disable-background-networking', '--disable-component-update',
+                                '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1',
+                                '--user-data-dir=' + str(profile), 'about:blank'], run_directory, ROOT)
+        try:
+            port = int(wait_file(profile / 'DevToolsActivePort', process).splitlines()[0])
+            browser = playwright.chromium.connect_over_cdp(f'http://127.0.0.1:{port}')
+            page = browser.contexts[0].pages[0]
+            page.goto(site.url)
+            site.hold_response = True
+            page.locator('[data-action=cart]').click()
+            assert site.after_effect.wait(3)
+            assert site.counters() == {'cart': 1}
+            process.kill()  # Actual SIGKILL of this run's child process group only.
+            site.release_response.set()
+            assert process.process.returncode < 0
+            assert site.counters() == {'cart': 1}
+            # Never instruct a replacement browser to replay an uncertain mutation.
+        finally:
+            process.close()

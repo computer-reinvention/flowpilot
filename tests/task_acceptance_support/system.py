@@ -53,7 +53,7 @@ def ownership(base, owner, foreign, profile_ids):
 
 
 def retry_followup(base, owner, foreign, profile_id, site, run_id):
-    task = {"task": f"Open {site.url}/ . Click Complete prerequisite once, then Add synthetic item once. Stop. Do not submit or sign in.",
+    task = {"task": f"Open {site.browser_url}/ . Click Complete prerequisite once, then Add synthetic item once. Stop. Do not submit or sign in.",
             "profile_id": profile_id, "idempotency_key": run_id + ":admit"}
     with ThreadPoolExecutor(max_workers=4) as pool:
         receipts = list(pool.map(lambda _: owner.start(task), range(4)))
@@ -106,7 +106,7 @@ def interaction_boundaries(owner, foreign, profile_id, run_id, site):
     assert finished["state"] == "completed"
     assert not any(secret in json.dumps(finished) for secret in values.values())
 
-    decision = owner.start({"task": f"Open {site.url}/ . Ask for explicit confirmation before clicking Confirm synthetic submission. If declined, finish without submitting.",
+    decision = owner.start({"task": f"Open {site.browser_url}/ . Ask for explicit confirmation before clicking Confirm synthetic submission. If declined, finish without submitting.",
                             "profile_id": profile_id, "idempotency_key": run_id + ":confirmation"})
     waiting = owner.wait(decision["task_id"], {"waiting_for_confirmation"})
     interaction = waiting["interaction"]
@@ -152,10 +152,12 @@ def cancel_boundary(owner, profile_id, run_id):
 
 def run_service(evidence, base, site, allow_tasks=False):
     readiness = Client(base).request("GET", "/health/browser-tasks")
-    if readiness.status != 200:
+    if (readiness.status != 200 or readiness.body.get("ready") is not True
+            or readiness.body.get("enabled") is not True):
         evidence.record("service_readiness", "blocked", "task peers disabled or unavailable",
                         http_status=readiness.status)
         return
+    assert readiness.body['protocol_version'] == '1' and readiness.body['reason'] == 'ready'
     evidence.record("service_readiness", "passed", "local task readiness HTTP 200")
     if not allow_tasks:
         evidence.record("service_scenarios", "blocked", "explicit deterministic-local authorization required before creating accounts/tasks")
