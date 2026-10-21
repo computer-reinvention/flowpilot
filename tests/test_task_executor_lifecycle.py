@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -136,3 +136,76 @@ async def test_old_browser_pause_is_rejected(tmp_path):
     runtime = ConversationRuntime(TaskSettings(state_dir=tmp_path), execution(), bindings_double())
     with pytest.raises(Exception, match='stale_generation'):
         await runtime.browser('old', 1)
+
+
+@pytest.mark.asyncio
+async def test_recover_never_replays_and_only_stops_task_profiles(tmp_path):
+    from backend.tasks.memory import storage_key
+    request = execution()
+    profile = storage_key(request.lease.principal, request.lease.profile_id)
+    task = MagicMock(labels={'flowpilot-task': '1', 'profile-key': profile})
+    invalid = MagicMock(labels={'flowpilot-task': '1', 'profile-key': '../escape'})
+    manager = MagicMock()
+    manager.client.containers.list.return_value = [task, invalid]
+    bindings = bindings_double()
+    bindings.control.release_browser.side_effect = None
+    executor = Executor(TaskSettings(state_dir=tmp_path), manager_factory=lambda *args: manager)
+    executor.bind(bindings)
+    await executor.startup()
+    await executor.recover((request.lease,))
+    task.stop.assert_called_once_with(timeout=5)
+    task.remove.assert_not_called()
+    invalid.stop.assert_not_called()
+    assert (tmp_path / profile / 'recovery-required').exists()
+    assert not executor.active
+    bindings.control.release_browser.assert_awaited_once_with(request.lease, profile_saved=False)
+
+
+@pytest.mark.asyncio
+async def test_human_resume_drains_inflight_input_and_releases_keys(tmp_path):
+    from backend.task_contracts import BrowserInput, Interaction
+    from backend.tasks.runtime import HumanBrowser
+    runtime = ConversationRuntime(TaskSettings(state_dir=tmp_path), execution(), bindings_double())
+    now = datetime.now(timezone.utc)
+    interaction = Interaction(interaction_id='help', generation=1, kind='browser',
+                              message='Help', expires_at=now + timedelta(seconds=60))
+    runtime.pause = interaction
+    runtime.bindings.control.get.side_effect = None
+    runtime.bindings.control.get.return_value = SimpleNamespace(state=TaskState.WAITING_FOR_BROWSER,
+                                                               interaction=interaction)
+    entered, release = asyncio.Event(), asyncio.Event()
+    async def keydown(key):
+        entered.set()
+        await release.wait()
+    page = SimpleNamespace(keyboard=SimpleNamespace(down=AsyncMock(side_effect=keydown), up=AsyncMock()))
+    runtime.page = lambda: page
+    handle = HumanBrowser(runtime, interaction)
+    runtime.handles.append(handle)
+    command = asyncio.create_task(handle.send_input(BrowserInput(kind='keydown', key='Shift')))
+    await entered.wait()
+    resume = asyncio.create_task(runtime.resume())
+    await asyncio.sleep(0)
+    assert not resume.done()
+    release.set()
+    await asyncio.gather(command, resume)
+    page.keyboard.up.assert_awaited_once_with('Shift')
+    assert handle.released and runtime.pause is None
+
+
+@pytest.mark.asyncio
+async def test_recover_refuses_a_profile_opened_by_another_process(tmp_path):
+    from backend.tasks.memory import ProfileStore
+    request = execution()
+    settings = TaskSettings(state_dir=tmp_path)
+    store = ProfileStore(settings, request.lease.principal, request.lease.profile_id)
+    task = MagicMock(labels={'flowpilot-task': '1', 'profile-key': store.path.name})
+    manager = MagicMock()
+    manager.client.containers.list.return_value = [task]
+    executor = Executor(settings, manager_factory=lambda *args: manager)
+    executor.bind(bindings_double())
+    try:
+        with pytest.raises(BlockingIOError):
+            await executor.recover(())
+        task.stop.assert_not_called()
+    finally:
+        store.close()

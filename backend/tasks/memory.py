@@ -42,9 +42,11 @@ class ProfileStore(UserStore):
         self.db.commit()
 
 
-def delete_memory(settings, principal, profile_id):
+def delete_memory(settings, principal, profile_id, before_delete=None):
     store = ProfileStore(settings, principal, profile_id)
     try:
+        if before_delete:
+            before_delete(store.path.name)
         # Keep the lock inode until deletion completes: competing processes must
         # not be able to open a replacement lock while this profile is removed.
         for child in store.path.iterdir():

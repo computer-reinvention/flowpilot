@@ -1,5 +1,6 @@
 """Single-host task execution. Claimed executions are never replayed on restart."""
 import asyncio
+import fcntl
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -137,6 +138,8 @@ class Executor:
             elif not saved:
                 state, result = TaskState.FAILED, None
                 error = task_error(ErrorCode.PROFILE_RECOVERY_REQUIRED, 'Profile save failed; retained state requires recovery')
+            if not saved and hasattr(runtime, 'quarantine'):
+                runtime.quarantine()
             try:
                 view = await self.bindings.control.get(lease.principal, lease.task_id, PollRequest())
                 if view.state not in TERMINAL_STATES:
@@ -156,6 +159,7 @@ class Executor:
             return
         active.cancelled = True
         active.runtime.fenced = True
+        deadline = asyncio.get_running_loop().time() + self.settings.cancellation_seconds
         if active.worker:
             active.worker.cancel()
             # execute owns settlement and save. Stopping the container also stops
@@ -166,7 +170,10 @@ class Executor:
                 stop.cancel()
             else:
                 stop.result()
-        await asyncio.wait_for(active.settled.wait(), timeout=self.settings.shutdown_seconds)
+        waiter = asyncio.create_task(active.settled.wait())
+        done, _ = await asyncio.wait({waiter}, timeout=max(0, deadline - asyncio.get_running_loop().time()))
+        if not done:
+            waiter.cancel()
 
     async def browser(self, lease, interaction_id, generation):
         active = self.active.get(self._key(lease))
@@ -181,6 +188,8 @@ class Executor:
             manager = self.manager_factory(str(self.settings.state_dir))
             for container in manager.client.containers.list(all=True, filters={'label': 'flowpilot-task=1'}):
                 labels = container.labels
+                if labels.get('flowpilot-task') != '1':
+                    continue
                 profile = labels.get('profile-key', '')
                 if len(profile) != 64 or any(c not in '0123456789abcdef' for c in profile):
                     continue
@@ -188,8 +197,10 @@ class Executor:
                 directory.mkdir(mode=0o700, parents=True, exist_ok=True)
                 # Recovery artifacts are stopped containers: at most one writer
                 # per profile exists by the filesystem lock, never auto-replayed.
-                container.stop(timeout=5)
-                (directory / 'recovery-required').touch(mode=0o600)
+                with (directory / 'session.lock').open('a') as lock:
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    (directory / 'recovery-required').touch(mode=0o600)
+                    container.stop(timeout=5)
         await asyncio.to_thread(reconcile)
         for lease in leases:
             await self.bindings.control.release_browser(lease, profile_saved=False)
@@ -197,7 +208,16 @@ class Executor:
     async def delete_profile(self, principal, profile_id):
         if any(a.execution.lease.principal == principal and a.execution.lease.profile_id == profile_id for a in self.active.values()):
             raise TaskFault(task_error(ErrorCode.CONFLICT, 'Profile is active'))
-        delete_memory(self.settings, principal, profile_id)
+        def remove_artifacts(profile_key):
+            manager = self.manager_factory(str(self.settings.state_dir))
+            containers = manager.client.containers.list(all=True, filters={
+                'label': ['flowpilot-task=1', f'profile-key={profile_key}']})
+            for container in containers:
+                if (container.labels.get('flowpilot-task') == '1'
+                        and container.labels.get('profile-key') == profile_key):
+                    container.stop(timeout=5)
+                    container.remove(force=True)
+        await asyncio.to_thread(delete_memory, self.settings, principal, profile_id, remove_artifacts)
 
 
 def create_executor(settings):

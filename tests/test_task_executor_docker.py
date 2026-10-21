@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 import tempfile
 import threading
+import sys
 from unittest.mock import patch
 
 from backend.task_contracts import Principal
@@ -61,6 +62,46 @@ async def conversation_smoke(settings):
     assert metrics[0]['saved'] == 1 and metrics[1]['reused'] == 1
     assert bindings.observation.require_fresh.await_count >= 4
     print('LANE002_CONVERSATION_EVIDENCE=' + json.dumps(metrics), flush=True)
+
+
+async def pid_benchmark():
+    from playwright.async_api import async_playwright
+    records = []
+    with tempfile.TemporaryDirectory(prefix='lane002-pids-') as root:
+        async with async_playwright() as playwright:
+            for limit in (256, 1024):
+                settings = TaskSettings(state_dir=Path(root), sandbox_pids=limit)
+                lease = Lease(principal=Principal(account_id='benchmark'), task_id='pids', session_id='s',
+                              profile_id=f'p{limit}', generation=1)
+                store = ProfileStore(settings, lease.principal, lease.profile_id)
+                sandbox = TaskSandbox(store.path, store.path.name, settings=settings, lease=lease)
+                count, failure = 0, None
+                try:
+                    _, websocket = await sandbox.start()
+                    browser = await playwright.chromium.connect_over_cdp(websocket)
+                    context = browser.contexts[0]
+                    container = sandbox.manager.client.containers.get(sandbox.info['container_id'])
+                    for number in range(24):
+                        try:
+                            page = await asyncio.wait_for(context.new_page(), 5)
+                            await page.goto(f'data:text/html,<title>synthetic-{number}</title>', timeout=5000)
+                            count += 1
+                        except Exception as exc:
+                            failure = type(exc).__name__
+                            break
+                    stats = container.exec_run(['sh', '-c', 'cat /sys/fs/cgroup/pids.current /sys/fs/cgroup/pids.events']).output.decode()
+                    records.append({'limit': limit, 'opened_tabs': count, 'failure': failure, 'cgroup': stats})
+                    client = await browser.new_browser_cdp_session()
+                    try:
+                        await asyncio.wait_for(client.send('Browser.close'), 5)
+                    except Exception:
+                        pass
+                finally:
+                    try:
+                        await sandbox.close()
+                    finally:
+                        store.close()
+    print('LANE002_PID_BENCHMARK=' + json.dumps(records), flush=True)
 
 
 class Site(BaseHTTPRequestHandler):
@@ -131,4 +172,4 @@ async def main():
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    asyncio.run(pid_benchmark() if '--pids' in sys.argv else main())

@@ -7,6 +7,8 @@ from backend.sandbox import SandboxManager
 from backend.task_contracts import Principal
 from backend.task_settings import TaskSettings
 from backend.tasks.memory import ProfileStore, storage_key
+from backend.tasks.browser_adapter import TaskSandbox
+from backend.task_ports import Lease
 
 
 def test_profile_identity_lock_and_redacted_history(tmp_path):
@@ -47,3 +49,37 @@ def test_task_transport_has_no_host_publication(tmp_path):
     assert kwargs['mem_limit'] == '768m'
     assert kwargs['labels']['flowpilot-task'] == '1'
     assert kwargs['environment']['CHROME_AUTORESTART'] == 'false'
+
+
+def test_save_failure_preserves_archive_and_quarantines(tmp_path):
+    settings = TaskSettings(state_dir=tmp_path)
+    lease = Lease(principal=Principal(account_id='alice'), profile_id='p', task_id='t',
+                  session_id='s', generation=1)
+    sandbox = TaskSandbox(tmp_path, 'key', settings=settings, lease=lease)
+    sandbox.archive.write_bytes(b'previous-good-archive')
+    sandbox.info = {'container_id': 'container', 'sandbox_id': 'sandbox'}
+    sandbox.manager._client = MagicMock()
+    container = sandbox.manager.client.containers.get.return_value
+    container.get_archive.side_effect = RuntimeError('archive unavailable')
+    with pytest.raises(RuntimeError, match='Profile save failed'):
+        sandbox._close()
+    assert sandbox.archive.read_bytes() == b'previous-good-archive'
+    assert (tmp_path / 'recovery-required').exists()
+    container.stop.assert_called()
+    container.remove.assert_not_called()
+
+
+def test_archive_restore_rejects_links_before_container_launch(tmp_path):
+    import tarfile
+    settings = TaskSettings(state_dir=tmp_path)
+    lease = Lease(principal=Principal(account_id='alice'), profile_id='p', task_id='t',
+                  session_id='s', generation=1)
+    sandbox = TaskSandbox(tmp_path, 'key', settings=settings, lease=lease)
+    sandbox.manager._client = MagicMock()
+    with tarfile.open(sandbox.archive, 'w') as archive:
+        link = tarfile.TarInfo('chrome-profile/symlink')
+        link.type, link.linkname = tarfile.SYMTYPE, '/etc/passwd'
+        archive.addfile(link)
+    with pytest.raises(ValueError, match='Unsafe profile archive'):
+        sandbox._start()
+    sandbox.manager.client.containers.create.assert_not_called()

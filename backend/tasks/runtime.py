@@ -223,6 +223,11 @@ class ConversationRuntime:
         # Container stop terminates running JS, including timed-out evaluate calls.
         if self.session and self.session.sandbox:
             await self.session.sandbox.stop_writers()
+            async with self.writer:
+                # Chromium has exited, so no physical held input survives. Drain
+                # any in-flight transport before forgetting its bookkeeping.
+                self.keys.clear()
+                self.buttons.clear()
 
     async def close(self):
         self.fenced = True
