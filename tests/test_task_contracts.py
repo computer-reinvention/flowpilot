@@ -155,6 +155,8 @@ def test_polling_error_policy_and_profile_paths():
 
 def test_settings_are_typed_bounded_and_disabled_by_default():
     assert TaskSettings.from_env({}).enabled is False
+    assert TaskSettings.from_env({}).sandbox_pids == 1024
+    assert TaskSettings.from_env({"FLOWPILOT_TASKS_SANDBOX_PIDS": "192"}).sandbox_pids == 192
     assert TaskSettings.from_env({"PROFILES_DIR": "/synthetic/profiles"}).state_dir == Path("/synthetic/profiles/browser-tasks")
     assert TaskSettings.from_env({"FLOWPILOT_TASKS_ENABLED": "true", "FLOWPILOT_TASKS_MAX_ACTIVE_BROWSERS": "4"}).max_active_browsers == 4
     for overrides in ({"max_active_browsers": 0}, {"max_account_browsers": 4}, {"shutdown_seconds": 1}, {"assistance_ttl_seconds": 601}, {"readiness_window_seconds": 20}):
