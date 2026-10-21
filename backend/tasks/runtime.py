@@ -1,0 +1,228 @@
+"""Live task adaptation and serialized, generation-fenced human browser access."""
+import asyncio
+from datetime import datetime, timedelta, timezone
+from uuid import uuid4
+
+from ..repl import BrowserSession
+from ..task_contracts import (
+    ErrorCode, InputField, Interaction, InteractionKind, PollRequest, TaskFault,
+    TaskState, task_error,
+)
+from .browser_adapter import create_browser
+from .memory import ProfileStore
+
+
+def stale():
+    return TaskFault(task_error(ErrorCode.STALE_GENERATION, 'Browser pause is no longer active'))
+
+
+class HumanBrowser:
+    def __init__(self, runtime, interaction):
+        self.runtime, self.interaction = runtime, interaction
+        self.released = False
+
+    async def _check(self):
+        r = self.runtime
+        if self.released or r.fenced or r.pause != self.interaction:
+            raise stale()
+        view = await r.control.get(r.lease.principal, r.lease.task_id, PollRequest())
+        if view.state != TaskState.WAITING_FOR_BROWSER or view.interaction != self.interaction:
+            raise stale()
+        if self.interaction.expires_at <= datetime.now(timezone.utc):
+            raise stale()
+
+    async def screenshot(self):
+        async with self.runtime.writer:
+            await self._check()
+            return await self.runtime.page().screenshot(type='png')
+
+    async def frames(self):
+        while True:
+            yield await self.screenshot()
+            await asyncio.sleep(.2)
+
+    async def send_input(self, command):
+        async with self.runtime.writer:
+            await self._check()
+            page = self.runtime.page()
+            kind = command.kind
+            if kind in ('move', 'down', 'up'):
+                await page.mouse.move(command.x, command.y)
+            if kind == 'down':
+                self.runtime.buttons.add(command.button)
+                await page.mouse.down(button=command.button)
+            elif kind == 'up':
+                await page.mouse.up(button=command.button)
+                self.runtime.buttons.discard(command.button)
+            elif kind == 'scroll':
+                await page.mouse.wheel(command.dx, command.dy)
+            elif kind == 'keydown':
+                self.runtime.keys.add(command.key)
+                await page.keyboard.down(command.key)
+            elif kind == 'keyup':
+                await page.keyboard.up(command.key)
+                self.runtime.keys.discard(command.key)
+            elif kind == 'type':
+                await page.keyboard.insert_text(command.text)
+            elif kind == 'release':
+                await self.runtime._release_inputs()
+
+    async def release(self):
+        async with self.runtime.writer:
+            if not self.released:
+                await self.runtime._release_inputs()
+                self.released = True
+
+
+class HostedChannel:
+    def __init__(self, runtime):
+        self.runtime = runtime
+
+    async def start(self):
+        pass
+
+    async def close(self):
+        await self.runtime.resume()
+
+    async def request(self, reason, category='other', kind='browser', fields=None):
+        return await self.runtime.interact(reason, kind, fields)
+
+
+class ConversationRuntime:
+    def __init__(self, settings, execution, bindings, *, session_factory=BrowserSession):
+        self.settings, self.execution, self.bindings = settings, execution, bindings
+        self.lease, self.control = execution.lease, bindings.control
+        self.session_factory = session_factory
+        self.session = None
+        self.pause = None
+        self.pause_generation = 0
+        self.writer = asyncio.Lock()
+        self.keys, self.buttons = set(), set()
+        self.handles = []
+        self.fenced = False
+        self.declined = False
+        self.owner = None
+
+    async def open(self):
+        store = ProfileStore(self.settings, self.lease.principal, self.lease.profile_id)
+        self.session = self.session_factory(
+            store.path.name, store=store, hosted=True, verbose=False,
+            sandbox_factory=create_browser(self.settings, self.lease),
+            handoff_factory=lambda *args: HostedChannel(self),
+            on_question=self.question, observation_policy=self.bindings.observation)
+        await self.session.__aenter__()
+
+    def page(self):
+        pages = self.session.context.pages
+        if not pages:
+            raise RuntimeError('No browser page')
+        # Match the agent's selected CDP target rather than handing out another tab.
+        return self._human_page
+
+    async def _select_page(self):
+        target = self.session.browser.agent_focus_target_id
+        for page in self.session.context.pages:
+            client = await self.session.context.new_cdp_session(page)
+            try:
+                info = await client.send('Target.getTargetInfo')
+                if info['targetInfo']['targetId'] == target:
+                    self._human_page = page
+                    return
+            finally:
+                await client.detach()
+        raise RuntimeError('Active browser target unavailable')
+
+    async def question(self, question):
+        return await self.interact(question['message'], question['kind'], question.get('fields'))
+
+    async def interact(self, reason, kind='browser', fields=None):
+        if self.fenced or self.pause:
+            raise stale()
+        kind = InteractionKind.INPUT if kind == 'inputs' else InteractionKind(kind)
+        self.pause_generation += 1
+        now = datetime.now(timezone.utc)
+        interaction = Interaction(
+            interaction_id=uuid4().hex, generation=self.pause_generation, kind=kind,
+            message=str(reason)[:2000] or 'Assistance requested',
+            action_id=uuid4().hex if kind == InteractionKind.CONFIRMATION else None,
+            fields=tuple(InputField(name=f['name'], label=f.get('label') or f['name'],
+                                    kind=f.get('kind', f.get('type', 'text')),
+                                    options=tuple(f.get('options') or ())) for f in fields or ()),
+            expires_at=min(self.execution.deadline, now + timedelta(seconds=self.settings.human_wait_seconds)))
+        if kind == InteractionKind.BROWSER:
+            await self._select_page()
+        self.pause = interaction
+        try:
+            remaining = max(0, (interaction.expires_at - now).total_seconds())
+            response = await asyncio.wait_for(self.control.wait_for_interaction(self.lease, interaction), remaining)
+            response.validate_for(interaction, datetime.now(timezone.utc))
+            if self.fenced:
+                raise stale()
+            if kind == InteractionKind.CONFIRMATION:
+                if not response.confirmed:
+                    # Fail closed: a model cannot reinterpret a decline and act.
+                    self.declined = True
+                    self.fenced = True
+                    if self.owner:
+                        self.owner.cancel()
+                    raise asyncio.CancelledError
+                await self.control.require_approval(self.lease, interaction.interaction_id,
+                                                    interaction.generation, interaction.action_id)
+                return {'confirmed': True}
+            if kind == InteractionKind.INPUT:
+                return {'values': response.values}
+            return {'browser_resolved': True}
+        finally:
+            await self.resume()
+            if kind == InteractionKind.BROWSER and not self.fenced:
+                # Inspection is delegated to the frozen policy, never a local hash.
+                await self.bindings.observation.observe(self.session.browser)
+
+    async def _release_inputs(self):
+        if not (self.keys or self.buttons):
+            return
+        page = self.page()
+        for key in tuple(self.keys):
+            await page.keyboard.up(key)
+            self.keys.discard(key)
+        for button in tuple(self.buttons):
+            await page.mouse.up(button=button)
+            self.buttons.discard(button)
+
+    async def resume(self):
+        async with self.writer:
+            self.pause = None
+            await self._release_inputs()
+            for handle in self.handles:
+                handle.released = True
+            self.handles.clear()
+
+    async def browser(self, interaction_id, generation):
+        interaction = self.pause
+        if not interaction or (interaction.interaction_id, interaction.generation) != (interaction_id, generation):
+            raise stale()
+        handle = HumanBrowser(self, interaction)
+        await handle._check()
+        self.handles.append(handle)
+        return handle
+
+    async def run(self):
+        self.owner = asyncio.current_task()
+        await self.open()
+        return await self.session.ask(self.execution.request.task, dict(self.execution.request.inputs))
+
+    async def stop_writers(self):
+        self.fenced = True
+        # Container stop terminates running JS, including timed-out evaluate calls.
+        if self.session and self.session.sandbox:
+            await self.session.sandbox.stop_writers()
+
+    async def close(self):
+        self.fenced = True
+        await self.resume()
+        if self.session:
+            await self.session.__aexit__(None, None, None)
+
+
+def create_runtime(settings, execution, bindings):
+    return ConversationRuntime(settings, execution, bindings)

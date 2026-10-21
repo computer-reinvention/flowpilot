@@ -9,6 +9,19 @@ class TaskSandbox(ChatSandbox):
         super().__init__(directory, user)
         self.settings, self.lease = settings, lease
 
+    async def start(self):
+        # Do not abandon a Docker create/start thread on coroutine cancellation.
+        # BrowserSession's failure cleanup must see the eventual container ID.
+        start = asyncio.create_task(super().start())
+        try:
+            return await asyncio.shield(start)
+        except asyncio.CancelledError:
+            try:
+                await start
+            finally:
+                await self.stop_writers()
+            raise
+
     def _start(self):
         if (self.directory / 'recovery-required').exists():
             raise RuntimeError('Profile requires recovery')

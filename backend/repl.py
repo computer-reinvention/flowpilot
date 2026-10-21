@@ -203,6 +203,14 @@ class BrowserSession:
                 return ActionResult(error='Navigate to the website before saving its script')
             if len(script) > 60000 or not script.lstrip().startswith('async'):
                 return ActionResult(error='Expected a bounded async arrow function')
+            if self.hosted:
+                # Known task/interaction inputs must remain parameterized, not
+                # become credentials embedded in durable personal scripts.
+                metadata = json.dumps([name, description, script, tags])
+                if any(len(str(v)) >= 3 and str(v) in metadata for v in inputs.values() if v is not None):
+                    return ActionResult(error='Parameterize input values before saving scripts')
+                if len(name) > 128 or len(description) > 2000 or len(tags or []) > 32:
+                    return ActionResult(error='Script metadata exceeds persistence bounds')
             self.store.db.execute('''INSERT INTO reflexes(domain,name,description,script,pause_after,tags) VALUES(?,?,?,?,?,?)
                 ON CONFLICT(domain,name) DO UPDATE SET description=excluded.description,script=excluded.script,
                 pause_after=excluded.pause_after,tags=excluded.tags''',
