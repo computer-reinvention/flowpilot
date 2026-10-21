@@ -5,7 +5,7 @@ import weakref
 from datetime import timedelta
 
 from ..task_contracts import (
-    INTERACTION_STATE, TERMINAL_STATES, ErrorCode, PollRequest, TaskFault,
+    INTERACTION_STATE, TERMINAL_STATES, AssistanceRequest, ErrorCode, InteractionKind, PollRequest, TaskFault,
     TaskState, task_error,
 )
 from .repository import Repository, fail, now
@@ -184,6 +184,22 @@ class Control:
             # A live unresolved interaction must have its current claimed waiter.
             if before.interaction and before.interaction.interaction_id == interaction_id and (waiter is None or waiter.done()):
                 fail(ErrorCode.STALE_GENERATION, 'Interaction executor is no longer waiting')
+            if before.interaction and before.interaction.interaction_id == interaction_id and before.interaction.kind == InteractionKind.BROWSER:
+                response.validate_for(before.interaction, now())
+                await self.repository.validate_pending_response(principal, task_id, interaction_id, response)
+                lease = await self.repository.assistance_lease(principal, task_id, AssistanceRequest(interaction_id=interaction_id, generation=response.generation))
+                try:
+                    # No DB transaction spans this browser I/O. The executor
+                    # fences new human handles, drains writes and held controls.
+                    await asyncio.wait_for(self.bindings.executor.release_human(lease, interaction_id, response.generation), self.settings.cancellation_seconds)
+                except TaskFault:
+                    raise
+                except Exception:
+                    raise TaskFault(task_error(ErrorCode.UNAVAILABLE, 'Human browser input could not be safely released', 5)) from None
+                if waiter is None or waiter.done():
+                    fail(ErrorCode.STALE_GENERATION, 'Interaction executor is no longer waiting')
+            # Final transaction revalidates current pause/expiry and atomically
+            # revokes capabilities before any transient response reaches agent.
             view = await self.repository.resolve(principal, task_id, interaction_id, response)
             if waiter and not waiter.done() and before.interaction and view.state == TaskState.RUNNING:
                 waiter.set_result(response)
