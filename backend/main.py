@@ -29,6 +29,7 @@ from . import db as platform_db
 from . import cdp_proxy
 from . import webhooks as webhook_svc
 from .models import Flow, Run, Session
+from .task_bootstrap import install_task_api
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logging.getLogger("browser_use").setLevel(logging.DEBUG)
@@ -93,9 +94,13 @@ async def lifespan(app: FastAPI):
         logger.info("Cleaned up %d orphaned Docker containers", removed)
 
     logger.info("Platform backend starting. Profiles dir: %s", PROFILES_DIR)
-    yield
-    sandbox_mgr.stop_all()
-    logger.info("Platform backend shutting down.")
+    await app.state.browser_tasks.startup()
+    try:
+        yield
+    finally:
+        await app.state.browser_tasks.shutdown()
+        sandbox_mgr.stop_all()
+        logger.info("Platform backend shutting down.")
 
 
 # ---------------------------------------------------------------------------
@@ -1578,6 +1583,8 @@ async def v1_run_resume(run_id: str, user: dict = Depends(auth.get_current_user)
 # ---------------------------------------------------------------------------
 # Static files (frontend)
 # ---------------------------------------------------------------------------
+
+install_task_api(app)
 
 if FRONTEND_DIR.exists():
     app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")

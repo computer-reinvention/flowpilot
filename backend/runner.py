@@ -123,6 +123,8 @@ async def _execute_reflex(
     inputs: dict,
     entry_url: str,
     browser_session,
+    *,
+    observation_policy=None,
 ) -> tuple[bool, str]:
     """Execute a reflex JS script via the Actor API. No LLM calls.
 
@@ -131,6 +133,9 @@ async def _execute_reflex(
     compact DOM snapshot of interactive elements so the agent can
     immediately see what selectors are available and continue.
     """
+    if observation_policy is not None:
+        observation = await observation_policy.observe(browser_session)
+        await observation_policy.require_fresh(browser_session, observation)
     page = await browser_session.must_get_current_page()
 
     # Navigate to entry_url if we're on a blank page
@@ -209,6 +214,8 @@ async def _repair_reflex(
     browser_session,
     llm,
     max_attempts: int = 2,
+    *,
+    observation_policy=None,
 ) -> tuple[bool, str, str | None]:
     """Use a lightweight LLM call to fix a broken reflex script.
 
@@ -222,6 +229,9 @@ async def _repair_reflex(
     trace("repair_reflex.call", broken_script=broken_script, error_msg=error_msg, inputs=inputs, entry_url=entry_url)
 
     for attempt in range(max_attempts):
+        if observation_policy is not None:
+            observation = await observation_policy.observe(browser_session)
+            await observation_policy.require_fresh(browser_session, observation)
         # Get fresh DOM state for the repair prompt
         try:
             state = await browser_session.get_browser_state_summary(include_screenshot=False, cached=False)
@@ -269,6 +279,7 @@ async def _repair_reflex(
             inputs=inputs,
             entry_url=entry_url,
             browser_session=browser_session,
+            **({'observation_policy': observation_policy} if observation_policy is not None else {}),
         )
 
         if success:

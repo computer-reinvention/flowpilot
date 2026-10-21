@@ -15,7 +15,7 @@ def tool(name, description, properties, required=(), human=False):
 
 async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                         run_reflex, save_reflex, exploration_tools=None, on_event=None,
-                        interaction_tools=None):
+                        interaction_tools=None, observation_policy=None):
     from .runner import _DUMP_ELEMENTS_JS, _execute_reflex
     string = {"type": "string"}
     definitions = [
@@ -34,6 +34,7 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
     completion = None
     needs_observation = False
     observed_identity = None
+    observation = None
     dispatch_lock = asyncio.Lock()
 
     async def page_identity():
@@ -60,7 +61,7 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
         definitions.append(tool("finish_exploration", "Finish after mapping and saving all discovered stages.", {}, []))
 
     async def dispatch_inner(name, args):
-        nonlocal completion
+        nonlocal completion, observation
         if completion is not None:
             raise ValueError("Task already completed")
         if interaction_tools and name in interaction_tools:
@@ -71,6 +72,9 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
             completion = "Exploration finished"
             return {"finished": True}
         if name == "observe":
+            if observation_policy is not None:
+                observation = await observation_policy.observe(browser)
+                return observation.model_dump(mode='json')
             # Trigger DOMWatchdog's network/page stability wait rather than
             # evaluating immediately against a still-changing document.
             state = await browser.get_browser_state_summary(include_screenshot=False, cached=False)
@@ -86,7 +90,8 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
             await page.goto(args["url"])
             return {"url": await page.get_url()}
         if name == "execute":
-            ok, value = await _execute_reflex(args["script"], inputs, entry_url, browser)
+            ok, value = await _execute_reflex(args["script"], inputs, entry_url, browser,
+                                            **({'observation_policy': observation_policy} if observation_policy is not None else {}))
             return {"success": ok, "result": value}
         if name == "human_help":
             await human_help(args["reason"], args.get("category", "other"))
@@ -97,7 +102,8 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
             return (await save_reflex(**args)).model_dump()
         if name == "complete":
             script = "async (inputs, entryUrl) => { if (await (" + args["verify"] + ")(inputs, entryUrl) !== true) throw new Error('Completion check failed'); return true; }"
-            ok, value = await _execute_reflex(script, inputs, entry_url, browser)
+            ok, value = await _execute_reflex(script, inputs, entry_url, browser,
+                                            **({'observation_policy': observation_policy} if observation_policy is not None else {}))
             if not ok:
                 raise ValueError(value)
             completion = args["summary"]
@@ -120,8 +126,14 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
             if guarded and observed_identity is not None and before != observed_identity:
                 needs_observation = True
                 raise RuntimeError('Page changed since observation; call observe before further browser actions')
+            if guarded and observation_policy is not None:
+                if observation is None:
+                    raise RuntimeError('Call observe before browser actions')
+                await observation_policy.require_fresh(browser, observation)
             try:
                 result = await dispatch_inner(name, args)
+                if guarded and observation_policy is not None:
+                    await observation_policy.after_action(browser, observation, name)
             finally:
                 if name in ('navigate', 'human_help', 'request_input_values', 'request_confirmation'):
                     needs_observation = True

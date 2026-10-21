@@ -1,0 +1,17 @@
+{
+  "protocol_version": "1",
+  "state": {"interaction": {"interaction_id": "browser_demo", "generation": 3, "kind": "browser", "message": "Resolve the synthetic sign-in", "expires_at": "2030-01-01T00:10:00Z"}, "url": "https://example.test/form", "viewport_width": 1280, "viewport_height": 720},
+  "transport": {"screen": {"content_type": "image/png", "body": "binary PNG"}, "stream": {"content_type": "image/jpeg", "frame": "binary JPEG", "viewport": "same dimensions as the screenshot; client derives dimensions from decoded image"}, "input_acknowledgement": {"accepted": true}, "resume_response_model": "TaskView", "cancel_response_model": "TaskView"},
+  "commands": [
+    {"kind": "move", "x": 10, "y": 20},
+    {"kind": "down", "x": 10, "y": 20, "button": "left"},
+    {"kind": "move", "x": 30, "y": 40},
+    {"kind": "up", "x": 30, "y": 40, "button": "left"},
+    {"kind": "scroll", "dx": 0, "dy": 500},
+    {"kind": "keydown", "key": "Tab"},
+    {"kind": "keyup", "key": "Tab"},
+    {"kind": "type", "text": "synthetic text, not a credential"},
+    {"kind": "release"}
+  ],
+  "resume": {"generation": 3, "idempotency_key": "browser-resume-demo-001", "kind": "browser", "browser_resolved": true}
+}

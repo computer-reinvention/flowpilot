@@ -68,7 +68,8 @@ class BrowserSession:
     The local OS account owns all these files and the subscription credentials.
     """
     def __init__(self, user, state_dir=Path('.repl-state'), headless=True, human_help=None, verbose=True,
-                 on_handoff=None, on_question=None, browser_mode='sandbox'):
+                 on_handoff=None, on_question=None, browser_mode='sandbox', *,
+                 handoff_factory=None, sandbox_factory=None, browser_factory=None, observation_policy=None):
         self.user = user
         self.store = UserStore(Path(state_dir), user)
         self.headless = headless
@@ -82,6 +83,10 @@ class BrowserSession:
         self.handoff = None
         self.on_handoff = on_handoff
         self.on_question = on_question
+        self.handoff_factory = handoff_factory
+        self.sandbox_factory = sandbox_factory
+        self.browser_factory = browser_factory
+        self.observation_policy = observation_policy
         self._asking = False
         if browser_mode not in ('sandbox', 'native'):
             self.store.close()
@@ -98,7 +103,7 @@ class BrowserSession:
             self.playwright = await async_playwright().start()
             if self.browser_mode == 'sandbox':
                 from .repl_sandbox import ChatSandbox
-                self.sandbox = ChatSandbox(self.store.path, self.user)
+                self.sandbox = (self.sandbox_factory or ChatSandbox)(self.store.path, self.user)
                 self.cdp_url, self.cdp_websocket_url = await self.sandbox.start()
                 self.remote_browser = await self.playwright.chromium.connect_over_cdp(self.cdp_websocket_url)
                 self.context = self.remote_browser.contexts[0]
@@ -110,10 +115,10 @@ class BrowserSession:
                 port, websocket_path = (profile / 'DevToolsActivePort').read_text().splitlines()[:2]
                 self.cdp_url = f'http://127.0.0.1:{port}'
                 self.cdp_websocket_url = f'ws://127.0.0.1:{port}{websocket_path}'
-            self.browser = Browser(cdp_url=self.cdp_websocket_url, keep_alive=True)
+            self.browser = (self.browser_factory or Browser)(cdp_url=self.cdp_websocket_url, keep_alive=True)
             await self.browser.start()
             from .handoff import HandoffServer
-            self.handoff = HandoffServer(self.context, self.cdp_websocket_url, self.user, self.on_handoff)
+            self.handoff = (self.handoff_factory or HandoffServer)(self.context, self.cdp_websocket_url, self.user, self.on_handoff)
             await self.handoff.start()
             return self
         except BaseException:
@@ -206,7 +211,8 @@ class BrowserSession:
             row = self.store.db.execute('SELECT script,pause_after FROM reflexes WHERE domain=? AND name=?', (site, name)).fetchone()
             if not row:
                 return ActionResult(error='No script with that name for this user and current site')
-            ok, detail = await _execute_reflex(row['script'], inputs, '', self.browser)
+            ok, detail = await _execute_reflex(row['script'], inputs, '', self.browser,
+                                             **({'observation_policy': self.observation_policy} if self.observation_policy is not None else {}))
             column = 'successes' if ok else 'failures'
             self.store.db.execute(f'UPDATE reflexes SET {column}={column}+1 WHERE domain=? AND name=?', (site, name))
             self.store.db.commit()
@@ -217,7 +223,8 @@ class BrowserSession:
                 metrics['repair_attempts'] = metrics.get('repair_attempts', 0) + 1
                 ok, detail, fixed = await _repair_reflex(
                     broken_script=row['script'], error_msg=detail, inputs=inputs,
-                    entry_url='', browser_session=self.browser, llm=get_llm('fast'))
+                    entry_url='', browser_session=self.browser, llm=get_llm('fast'),
+                    **({'observation_policy': self.observation_policy} if self.observation_policy is not None else {}))
                 if ok and fixed:
                     # Keep scope captured before execution: submission may have
                     # navigated to another site. Preserve tags/pause metadata.
@@ -307,8 +314,9 @@ class BrowserSession:
         try:
             self._asking = True
             result = await drive_browser(self.browser, task, inputs, '', RunControl([False]), human, replay, save, on_event=event,
-                                         interaction_tools={'request_input_values': request_input_values,
-                                                            'request_confirmation': request_confirmation})
+                                          interaction_tools={'request_input_values': request_input_values,
+                                                             'request_confirmation': request_confirmation},
+                                          **({'observation_policy': self.observation_policy} if self.observation_policy is not None else {}))
             return_value = {'answer': result, 'metrics': metrics}
         except asyncio.CancelledError:
             error = 'Human cancelled the request' if human_cancelled else 'Request cancelled'
