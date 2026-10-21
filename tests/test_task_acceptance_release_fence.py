@@ -195,6 +195,30 @@ async def test_input_gate_holds_the_actual_delegated_operation_until_owned_permi
         await pending
 
 
+async def test_input_gate_cancellation_does_not_falsely_report_outstanding_io_drained():
+    gate = InputOperationGate('task-acceptance-cancel-gate', 'consumer_peer')
+    effects = []
+    async def operation():
+        effects.append('finished-io')
+    pending = asyncio.create_task(gate.invoke(operation))
+    try:
+        await wait_event(gate.entered)
+        pending.cancel()
+        await asyncio.sleep(.02)
+        assert not pending.done() and not gate.finished.is_set() and effects == []
+        gate.permit.set()
+        with pytest.raises(asyncio.CancelledError):
+            await pending
+        assert gate.finished.is_set() and effects == ['finished-io']
+    finally:
+        gate.permit.set()
+        if not pending.done():
+            try:
+                await pending
+            except asyncio.CancelledError:
+                pass
+
+
 async def test_missing_assembled_constructor_adapter_is_explicitly_blocked(monkeypatch):
     # Simulate absence even after the parent eventually supplies a real adapter;
     # offline tests must never accidentally launch the assembled service.

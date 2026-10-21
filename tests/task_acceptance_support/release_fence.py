@@ -29,11 +29,23 @@ class InputOperationGate:
         self.finished = threading.Event()
 
     async def invoke(self, operation):
-        """Call from the owned injected low-level input transport, while tracked."""
+        """Call from the owned injected low-level input transport, while tracked.
+
+        Model an already-entered I/O operation: cancelling its waiter cannot make
+        the underlying operation disappear. Keep it tracked until the owned gate
+        is released, then preserve cancellation. This is not a production fence.
+        """
         self.entered.set()
-        try:
+        async def run():
             await wait_event(self.permit, self.max_hold)
             return await operation()
+        pending = asyncio.create_task(run())
+        try:
+            try:
+                return await asyncio.shield(pending)
+            except asyncio.CancelledError:
+                await asyncio.shield(pending)
+                raise
         finally:
             self.finished.set()
 
