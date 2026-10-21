@@ -212,3 +212,27 @@ async def test_recover_refuses_a_profile_opened_by_another_process(tmp_path):
         task.stop.assert_not_called()
     finally:
         store.close()
+
+
+@pytest.mark.asyncio
+async def test_metadata_reads_live_authorized_document_and_rejects_resume(tmp_path):
+    from backend.task_contracts import Interaction, TaskFault
+    from backend.tasks.runtime import HumanBrowser
+    runtime = ConversationRuntime(TaskSettings(state_dir=tmp_path), execution(), bindings_double())
+    now = datetime.now(timezone.utc)
+    interaction = Interaction(interaction_id='help', generation=1, kind='browser', message='Help',
+                              expires_at=now + timedelta(seconds=60))
+    runtime.pause = interaction
+    runtime.control.get.side_effect = None
+    runtime.control.get.return_value = SimpleNamespace(state=TaskState.WAITING_FOR_BROWSER, interaction=interaction)
+    page = SimpleNamespace(evaluate=AsyncMock(return_value={
+        'url': 'https://example.test/live', 'viewport_width': 731, 'viewport_height': 419}))
+    runtime.page = lambda: page
+    handle = HumanBrowser(runtime, interaction)
+    metadata = await handle.metadata()
+    assert str(metadata.url) == 'https://example.test/live'
+    assert (metadata.viewport_width, metadata.viewport_height) == (731, 419)
+    await runtime.resume()
+    with pytest.raises(TaskFault):
+        await handle.metadata()
+    page.evaluate.assert_awaited_once()

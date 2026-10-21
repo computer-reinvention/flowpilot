@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from ..repl import BrowserSession
 from ..task_contracts import (
-    ErrorCode, InputField, Interaction, InteractionKind, PollRequest, TaskFault,
+    BrowserMetadata, ErrorCode, InputField, Interaction, InteractionKind, PollRequest, TaskFault,
     TaskState, task_error,
 )
 from .browser_adapter import create_browser
@@ -34,7 +34,20 @@ class HumanBrowser:
     async def screenshot(self):
         async with self.runtime.writer:
             await self._check()
-            return await self.runtime.page().screenshot(type='png')
+            image = await self.runtime.page().screenshot(type='png')
+            await self._check()
+            return image
+
+    async def metadata(self):
+        async with self.runtime.writer:
+            await self._check()
+            # Read together from the live selected document, not another task's
+            # cached state or an invented fallback URL/desktop resolution.
+            metadata = await self.runtime.page().evaluate('''() => ({
+                url: location.href, viewport_width: window.innerWidth,
+                viewport_height: window.innerHeight})''')
+            await self._check()
+            return BrowserMetadata(**metadata)
 
     async def frames(self):
         while True:

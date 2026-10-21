@@ -13,6 +13,7 @@ import threading
 import sys
 import os
 import signal
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from backend.task_contracts import Principal
@@ -41,6 +42,8 @@ async def conversation_smoke(settings):
                 answer = await dispatch('execute', {'script': script})
                 assert answer['success'] and answer['result'] == '1'
                 await dispatch('save_reflex', {'name': 'increment', 'description': 'Synthetic mutation', 'script': script})
+                await dispatch('human_help', {'reason': 'Synthetic viewport metadata check'})
+                await dispatch('observe', {})
             else:
                 answer = await dispatch('run_reflex', {'name': 'increment'})
                 assert not answer.get('error')
@@ -54,6 +57,21 @@ async def conversation_smoke(settings):
                               idempotency_key=f'conversation-{turn}'), admitted_at=now,
                               deadline=now + timedelta(seconds=120))
         runtime = ConversationRuntime(settings, execution, bindings)
+        async def assist(lease, interaction):
+            from backend.task_contracts import InteractionResponse, TaskState
+            bindings.control.get.side_effect = None
+            bindings.control.get.return_value = SimpleNamespace(state=TaskState.WAITING_FOR_BROWSER,
+                                                                 interaction=interaction)
+            await runtime._human_page.set_viewport_size({'width': 831, 'height': 617})
+            handle = await runtime.browser(interaction.interaction_id, interaction.generation)
+            metadata = await handle.metadata()
+            assert str(metadata.url) == 'http://lane002-smoke:8765/'
+            assert (metadata.viewport_width, metadata.viewport_height) == (831, 617)
+            assert await handle.screenshot()
+            print('LANE002_METADATA_EVIDENCE=' + metadata.model_dump_json(), flush=True)
+            return InteractionResponse(kind='browser', generation=interaction.generation,
+                                       idempotency_key='synthetic-help1', browser_resolved=True)
+        bindings.control.wait_for_interaction.side_effect = assist
         try:
             with patch('backend.pi_browser.run_pi', inference):
                 result = await runtime.run()
