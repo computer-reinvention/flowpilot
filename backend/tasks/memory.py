@@ -6,6 +6,17 @@ import shutil
 from ..repl import UserStore
 
 
+def input_atoms(value):
+    if isinstance(value, dict):
+        for item in value.values():
+            yield from input_atoms(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            yield from input_atoms(item)
+    elif value is not None and str(value):
+        yield str(value)
+
+
 def storage_key(principal, profile_id):
     return hashlib.sha256(json.dumps([principal.account_id, profile_id], separators=(',', ':')).encode()).hexdigest()
 
@@ -20,9 +31,8 @@ class ProfileStore(UserStore):
         # redacted, bounded context; never store inputs or full tool transcripts.
         def safe(text):
             text = str(text or '')
-            for value in inputs.values():
-                if value is not None and str(value):
-                    text = text.replace(str(value), '[redacted]')
+            for value in sorted(set(input_atoms(inputs)), key=len, reverse=True):
+                text = text.replace(value, '[redacted]')
             return text[:4000]
         self.db.execute('INSERT INTO turns(task,inputs,result,metrics) VALUES(?,?,?,?)',
                         (safe(task), '{}', safe(result), json.dumps(metrics)))

@@ -105,11 +105,18 @@ class ConversationRuntime:
 
     async def open(self):
         store = ProfileStore(self.settings, self.lease.principal, self.lease.profile_id)
-        self.session = self.session_factory(
-            store.path.name, store=store, hosted=True, verbose=False,
-            sandbox_factory=create_browser(self.settings, self.lease),
-            handoff_factory=lambda *args: HostedChannel(self),
-            on_question=self.question, observation_policy=self.bindings.observation)
+        if (store.path / 'recovery-required').exists():
+            store.close()
+            raise TaskFault(task_error(ErrorCode.PROFILE_RECOVERY_REQUIRED, 'Profile requires recovery'))
+        try:
+            self.session = self.session_factory(
+                store.path.name, store=store, hosted=True, verbose=False,
+                sandbox_factory=create_browser(self.settings, self.lease),
+                handoff_factory=lambda *args: HostedChannel(self),
+                on_question=self.question, observation_policy=self.bindings.observation)
+        except BaseException:
+            store.close()
+            raise
         await self.session.__aenter__()
 
     def page(self):
@@ -222,6 +229,10 @@ class ConversationRuntime:
         await self.resume()
         if self.session:
             await self.session.__aexit__(None, None, None)
+
+    def quarantine(self):
+        if self.session:
+            (self.session.store.path / 'recovery-required').touch(mode=0o600)
 
 
 def create_runtime(settings, execution, bindings):

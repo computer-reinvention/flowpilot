@@ -1,12 +1,16 @@
 """Docker-network-only browser transport. No host CDP ports or help listener."""
 import asyncio
+import ipaddress
+import tarfile
 
 from ..repl_sandbox import ChatSandbox
+from ..sandbox import CDP_CONTAINER_PORT, SANDBOX_NETWORK
 
 
 class TaskSandbox(ChatSandbox):
     def __init__(self, directory, user, *, settings, lease):
         super().__init__(directory, user)
+        self.private_logs = True
         self.settings, self.lease = settings, lease
 
     async def start(self):
@@ -25,19 +29,46 @@ class TaskSandbox(ChatSandbox):
     def _start(self):
         if (self.directory / 'recovery-required').exists():
             raise RuntimeError('Profile requires recovery')
+        if self.archive.exists():
+            if self.archive.stat().st_size > 256 * 1024 * 1024:
+                raise ValueError('Profile archive exceeds recovery budget')
+            with tarfile.open(self.archive) as archive:
+                total = 0
+                for member in archive:
+                    from pathlib import PurePosixPath
+                    path = PurePosixPath(member.name)
+                    total += member.size
+                    if (not member.isfile() or path.is_absolute() or '..' in path.parts
+                            or path.parts[0] != 'chrome-profile' or total > 256 * 1024 * 1024):
+                        raise ValueError('Unsafe profile archive')
         self.info = self.manager.start(
             user_id=self.user, settings=self.settings,
             task_labels={'flowpilot-task': '1', 'task-id': self.lease.task_id,
                          'session-id': self.lease.session_id, 'profile-key': self.user,
                          'lease-generation': str(self.lease.generation)},
             profile_archive=str(self.archive) if self.archive.exists() else None)
-        return self.info['cdp_url'].replace('ws:', 'http:')
+        container = self.manager.client.containers.get(self.info['container_id'])
+        container.reload()
+        # Chromium also rejects DNS Host headers on the websocket upgrade. Use
+        # Docker's authoritative bridge address, not the advertised loopback or
+        # an untrusted discovery host. No host port needs publishing.
+        address = ipaddress.ip_address(container.attrs['NetworkSettings']['Networks'][SANDBOX_NETWORK]['IPAddress'])
+        return f'http://{address}:{CDP_CONTAINER_PORT}'
 
     def _close(self):
         try:
             super()._close()
         except Exception:
             (self.directory / 'recovery-required').touch(mode=0o600)
+            raise
+
+    async def close(self):
+        close = asyncio.create_task(super().close())
+        try:
+            await asyncio.shield(close)
+        except asyncio.CancelledError:
+            # Keep the profile lock held until the archive writer really exits.
+            await close
             raise
 
     async def stop_writers(self):

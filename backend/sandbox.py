@@ -151,7 +151,7 @@ class SandboxManager:
             **({"local_cdp_url": f"http://127.0.0.1:{local_port}"} if publish_local_cdp else {}),
         }
 
-    def stop(self, sandbox_id: str) -> None:
+    def stop(self, sandbox_id: str, *, capture_logs: bool = True) -> None:
         """Stop and remove a sandbox container."""
         info = self._sandboxes.get(sandbox_id)
         if not info:
@@ -161,7 +161,7 @@ class SandboxManager:
             container = self.client.containers.get(info.container_id)
             # Capture logs before destroying the container
             try:
-                logs = container.logs(tail=80, stdout=True, stderr=True).decode(errors="replace")
+                logs = container.logs(tail=80, stdout=True, stderr=True).decode(errors="replace") if capture_logs else ''
                 if logs.strip():
                     logger.info("Sandbox %s logs:\n%s", sandbox_id, logs)
             except Exception as log_err:

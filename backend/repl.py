@@ -204,12 +204,13 @@ class BrowserSession:
             if len(script) > 60000 or not script.lstrip().startswith('async'):
                 return ActionResult(error='Expected a bounded async arrow function')
             if self.hosted:
+                from .tasks.memory import input_atoms
                 # Known task/interaction inputs must remain parameterized, not
                 # become credentials embedded in durable personal scripts.
                 metadata = json.dumps([name, description, script, tags])
-                if any(len(str(v)) >= 3 and str(v) in metadata for v in inputs.values() if v is not None):
+                if any(v in metadata for v in input_atoms(inputs)):
                     return ActionResult(error='Parameterize input values before saving scripts')
-                if len(name) > 128 or len(description) > 2000 or len(tags or []) > 32:
+                if len(name) > 128 or len(description) > 2000 or len(tags or []) > 32 or len(json.dumps(tags)) > 4000:
                     return ActionResult(error='Script metadata exceeds persistence bounds')
             self.store.db.execute('''INSERT INTO reflexes(domain,name,description,script,pause_after,tags) VALUES(?,?,?,?,?,?)
                 ON CONFLICT(domain,name) DO UPDATE SET description=excluded.description,script=excluded.script,
@@ -239,6 +240,12 @@ class BrowserSession:
                     entry_url='', browser_session=self.browser, llm=get_llm('fast'),
                     **({'observation_policy': self.observation_policy} if self.observation_policy is not None else {}))
                 if ok and fixed:
+                    if self.hosted:
+                        from .tasks.memory import input_atoms
+                        if any(v in fixed for v in input_atoms(inputs)):
+                            # The repaired script already ran, but it is not safe
+                            # to persist credential-bearing generated source.
+                            return ActionResult(extracted_content=detail)
                     # Keep scope captured before execution: submission may have
                     # navigated to another site. Preserve tags/pause metadata.
                     self.store.db.execute('UPDATE reflexes SET script=?,successes=successes+1 WHERE domain=? AND name=?',

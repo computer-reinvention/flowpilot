@@ -1,6 +1,6 @@
 """Single-host task execution. Claimed executions are never replayed on restart."""
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from ..sandbox import SandboxManager
@@ -17,6 +17,7 @@ class Active:
     runtime: object
     worker: object = None
     cancelled: bool = False
+    settled: asyncio.Event = field(default_factory=asyncio.Event)
 
 
 class Executor:
@@ -36,6 +37,9 @@ class Executor:
     async def startup(self):
         if self.bindings is None:
             raise RuntimeError('Executor must be bound')
+        from ..trace import ENABLED
+        if ENABLED:
+            raise RuntimeError('Raw reflex tracing must be disabled for hosted tasks')
         self.settings.state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.ready = True
 
@@ -69,6 +73,8 @@ class Executor:
                 state = TaskState.CANCELLED
             else:
                 await self.bindings.control.progress(lease, view.revision, 'Starting private browser')
+                if active.cancelled:
+                    raise asyncio.CancelledError
                 remaining = (execution.deadline - datetime.now(timezone.utc)).total_seconds()
                 if remaining <= 0:
                     raise TimeoutError
@@ -91,6 +97,8 @@ class Executor:
         except TimeoutError:
             state = TaskState.INTERRUPTED
             error = task_error(ErrorCode.INTERRUPTED, 'Execution deadline exceeded; website effects may be partial')
+        except TaskFault as exc:
+            state, error = TaskState.FAILED, exc.error
         except Exception:
             state = TaskState.FAILED
             error = task_error(ErrorCode.PROVIDER_FAILURE, 'Execution failed; inspect website state before a new task')
@@ -112,11 +120,15 @@ class Executor:
                 stopped = True
                 await runtime.close()
                 saved = True
+                if error and error.code == ErrorCode.PROFILE_RECOVERY_REQUIRED:
+                    saved = False
 
             cleanup_task = asyncio.create_task(cleanup())
             done, _ = await asyncio.wait({cleanup_task}, timeout=self.settings.cancellation_seconds)
             if not done:
                 cleanup_task.cancel()
+                if hasattr(runtime, 'quarantine'):
+                    runtime.quarantine()
             elif cleanup_task.exception() is not None:
                 pass
             if not stopped:
@@ -130,10 +142,13 @@ class Executor:
                 if view.state not in TERMINAL_STATES:
                     if view.state == TaskState.CANCELLING and stopped and saved:
                         state, result, error = TaskState.CANCELLED, None, None
+                    elif view.state == TaskState.CANCELLING:
+                        state, result = TaskState.INTERRUPTED, None
                     await self.bindings.control.finish(lease, view.revision, state, result=result, error=error)
                 await self.bindings.control.release_browser(lease, profile_saved=saved)
             finally:
                 self.active.pop(key, None)
+                active.settled.set()
 
     async def cancel(self, lease):
         active = self.active.get(self._key(lease))
@@ -151,6 +166,7 @@ class Executor:
                 stop.cancel()
             else:
                 stop.result()
+        await asyncio.wait_for(active.settled.wait(), timeout=self.settings.shutdown_seconds)
 
     async def browser(self, lease, interaction_id, generation):
         active = self.active.get(self._key(lease))
