@@ -23,12 +23,25 @@ import { useWebhooks } from "@/hooks/useWebhooks";
 import { useProfiles } from "@/hooks/useProfiles";
 import { ProfileList } from "@/components/profiles/ProfileList";
 import type { Flow, Run } from "@/lib/types";
+import { BrowserTasks } from "@/components/tasks/BrowserTasks";
 
 type AuthView = "login" | "signup";
 type FlowSubView = "grid" | "detail" | "create";
 
 export default function App() {
   const auth = useAuth();
+  const [authView, setAuthView] = useState<AuthView>("login");
+  useEffect(() => { if (auth.user) setAuthView("login"); }, [auth.user?.id]);
+  if (auth.loading) return <div className="flex min-h-svh items-center justify-center"><Loader2 className="size-8 animate-spin" /></div>;
+  if (!auth.user) return <div className="flex min-h-svh items-center justify-center px-4"><div className="w-full space-y-6">
+    <h1 className="text-center text-2xl font-bold">FlowPilot</h1>
+    {authView === "login" ? <LoginForm onLogin={auth.login} onSwitchToSignup={() => setAuthView("signup")} error={auth.error} />
+      : <SignupForm onSignup={auth.signup} onSwitchToLogin={() => setAuthView("login")} error={auth.error} />}
+  </div></div>;
+  return <AccountDashboard key={auth.user.id} auth={auth} />;
+}
+
+function AccountDashboard({ auth }: { auth: ReturnType<typeof useAuth> }) {
   const authed = !!auth.user;
   const flows = useFlows(authed);
   const run = useRun();
@@ -38,8 +51,7 @@ export default function App() {
   const webhooks = useWebhooks(authed);
   const profiles = useProfiles(authed);
 
-  const [authView, setAuthView] = useState<AuthView>("login");
-  const [activeSection, setActiveSection] = useState<ActiveSection>("flows");
+  const [activeSection, setActiveSection] = useState<ActiveSection>("browser-tasks");
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [selectedFlow, setSelectedFlow] = useState<Flow | null>(null);
   const [flowSubView, setFlowSubView] = useState<FlowSubView>("grid");
@@ -57,43 +69,6 @@ export default function App() {
       run.reconnectToRun(firstActive.id);
     }
   }, [auth.user, runs.loading]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Loading state
-  if (auth.loading) {
-    return (
-      <div className="flex min-h-svh items-center justify-center">
-        <Loader2 className="size-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  // Not authenticated — show login/signup
-  if (!auth.user) {
-    return (
-      <div className="flex min-h-svh items-center justify-center px-4">
-        <div className="w-full space-y-6">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-balance">
-              Flow<span className="text-muted-foreground font-normal">Pilot</span>
-            </h1>
-          </div>
-          {authView === "login" ? (
-            <LoginForm
-              onLogin={auth.login}
-              onSwitchToSignup={() => setAuthView("signup")}
-              error={auth.error}
-            />
-          ) : (
-            <SignupForm
-              onSignup={auth.signup}
-              onSwitchToLogin={() => setAuthView("login")}
-              error={auth.error}
-            />
-          )}
-        </div>
-      </div>
-    );
-  }
 
   // --- Handlers ---
 
@@ -197,6 +172,8 @@ export default function App() {
 
     // Otherwise render based on section
     switch (activeSection) {
+      case "browser-tasks":
+        return <BrowserTasks onKeys={() => setActiveSection("api-keys")} />;
       case "flows":
         if (flowSubView === "create") {
           return (
@@ -281,6 +258,7 @@ export default function App() {
             <ApiKeySettings
               apiKeys={apiKeys.apiKeys}
               loading={apiKeys.loading}
+              error={apiKeys.error}
               onCreate={apiKeys.createApiKey}
               onDelete={apiKeys.deleteApiKey}
             />
@@ -313,7 +291,7 @@ export default function App() {
       flows={flows.flows}
       onSelectRun={handleSelectRun}
       onLogout={auth.logout}
-      userName={auth.user.name}
+      userName={auth.user?.name}
       activeRunId={activeRunId}
       selectedFlowName={flowSubView === "detail" && selectedFlow ? selectedFlow.name : undefined}
     >

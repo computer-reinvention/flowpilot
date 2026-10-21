@@ -1,15 +1,25 @@
 const TOKEN_KEY = "flowpilot_token";
+let accountRequests = new AbortController();
+
+function invalidateRequests() {
+  accountRequests.abort();
+  accountRequests = new AbortController();
+}
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
 
 export function setToken(token: string): void {
+  invalidateRequests();
   localStorage.setItem(TOKEN_KEY, token);
+  window.dispatchEvent(new Event("flowpilot-auth-changed"));
 }
 
 export function clearToken(): void {
+  invalidateRequests();
   localStorage.removeItem(TOKEN_KEY);
+  window.dispatchEvent(new Event("flowpilot-auth-changed"));
 }
 
 export class ApiError extends Error {
@@ -35,20 +45,25 @@ export async function apiFetch<T>(
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch(path, { ...options, headers });
+  const accountSignal = accountRequests.signal;
+  const signal = options.signal ? AbortSignal.any([accountSignal, options.signal]) : accountSignal;
+  const res = await fetch(path, { ...options, headers, signal, cache: "no-store", redirect: "error" });
+  signal.throwIfAborted();
+  if (getToken() !== token) throw new DOMException("Account changed", "AbortError");
   if (!res.ok) {
     let detail = res.statusText;
     try {
       const json = await res.json();
-      detail = json.detail ?? detail;
+      detail = typeof json.detail === "string" ? json.detail : json.error?.code ?? detail;
     } catch {
       // ignore parse errors
     }
     if (res.status === 401) {
       clearToken();
-      window.location.reload();
     }
     throw new ApiError(res.status, detail);
   }
-  return res.json() as Promise<T>;
+  const data = res.status === 204 ? undefined : await res.json();
+  signal.throwIfAborted();
+  return data as T;
 }

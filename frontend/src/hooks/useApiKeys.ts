@@ -22,7 +22,7 @@ export function useApiKeys(enabled = true) {
 
   useEffect(() => {
     if (enabled) fetchApiKeys();
-    else setLoading(false);
+    else { setApiKeys([]); setError(null); setLoading(false); }
   }, [enabled, fetchApiKeys]);
 
   const createApiKey = useCallback(async (name: string): Promise<ApiKey> => {
@@ -30,7 +30,8 @@ export function useApiKeys(enabled = true) {
       method: "POST",
       body: JSON.stringify({ name }),
     });
-    setApiKeys((prev) => [data, ...prev]);
+    const { key: _secret, ...metadata } = data;
+    setApiKeys((prev) => [metadata, ...prev]);
     return data;
   }, []);
 

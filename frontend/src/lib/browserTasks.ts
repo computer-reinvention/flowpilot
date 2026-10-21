@@ -39,7 +39,8 @@ export class BrowserTaskClient {
   async request<T>(path: string, method = "GET", body?: unknown): Promise<T> {
     if (!path.startsWith(TASKS) || path.includes(":") || path.includes("..")) throw new Error("Invalid task path");
     this.controller.signal.throwIfAborted();
-    const response = await this.transport(path, {
+    const transport = this.transport;
+    const response = await transport(path, {
       method, signal: this.controller.signal, cache: "no-store", redirect: "error",
       headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),

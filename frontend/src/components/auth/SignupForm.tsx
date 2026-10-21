@@ -35,6 +35,7 @@ export function SignupForm({
     } catch {
       // error handled by parent
     } finally {
+      setPassword("");
       setSubmitting(false);
     }
   }

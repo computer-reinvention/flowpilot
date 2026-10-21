@@ -20,6 +20,7 @@ interface AppShellProps {
 }
 
 const SECTION_LABELS: Record<ActiveSection, string> = {
+  "browser-tasks": "Browser tasks",
   flows: "Flows",
   runs: "Runs",
   sessions: "Auth Sessions",

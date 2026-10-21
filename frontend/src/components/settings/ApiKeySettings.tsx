@@ -27,6 +27,7 @@ import type { ApiKey } from "@/lib/types";
 interface ApiKeySettingsProps {
   apiKeys: ApiKey[];
   loading: boolean;
+  error?: string | null;
   onCreate: (name: string) => Promise<ApiKey>;
   onDelete: (id: string) => Promise<void>;
 }
@@ -37,11 +38,11 @@ function formatDate(iso: string) {
 
 function RevealKeyDialog({ apiKey, onClose }: { apiKey: ApiKey; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState("");
 
-  function handleCopy() {
-    navigator.clipboard.writeText(apiKey.key ?? "");
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  async function handleCopy() {
+    try { await navigator.clipboard.writeText(apiKey.key ?? ""); setCopied(true); setCopyError(""); }
+    catch { setCopyError("Clipboard unavailable. Select and copy the key manually."); }
   }
 
   return (
@@ -66,10 +67,12 @@ function RevealKeyDialog({ apiKey, onClose }: { apiKey: ApiKey; onClose: () => v
               variant="ghost"
               className="absolute right-1 top-1 h-7 w-7"
               onClick={handleCopy}
+              aria-label="Copy newly created API key"
             >
               {copied ? <Check className="size-3.5 text-green-500" /> : <Copy className="size-3.5" />}
             </Button>
           </div>
+          {copyError && <p role="alert">{copyError}</p>}
           <p className="text-xs text-muted-foreground">
             Store it in an environment variable. Never commit it to source control.
           </p>
@@ -82,12 +85,21 @@ function RevealKeyDialog({ apiKey, onClose }: { apiKey: ApiKey; onClose: () => v
   );
 }
 
-export function ApiKeySettings({ apiKeys, loading, onCreate, onDelete }: ApiKeySettingsProps) {
+export function ApiKeySettings({ apiKeys, loading, error, onCreate, onDelete }: ApiKeySettingsProps) {
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [revealKey, setRevealKey] = useState<ApiKey | null>(null);
+  const [revokeError, setRevokeError] = useState("");
+  const [revoking, setRevoking] = useState<string | null>(null);
+
+  async function revoke(id: string) {
+    setRevokeError(""); setRevoking(id);
+    try { await onDelete(id); if (revealKey?.id === id) setRevealKey(null); }
+    catch { setRevokeError("Revocation failed. The key may still be active; refresh and retry."); }
+    finally { setRevoking(null); }
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -108,6 +120,9 @@ export function ApiKeySettings({ apiKeys, loading, onCreate, onDelete }: ApiKeyS
 
   return (
     <div className="space-y-4">
+      <h1 className="text-lg font-semibold">Account API keys</h1>
+      <p className="text-sm">All keys have this account's authority, not separate tenant identities. Revocation prevents future requests; it does not implicitly cancel admitted tasks. Newly created plaintext is shown once, only here.</p>
+      {(error || revokeError) && <p role="alert" className="text-destructive">{error || revokeError}</p>}
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-muted-foreground">
@@ -198,7 +213,7 @@ export function ApiKeySettings({ apiKeys, loading, onCreate, onDelete }: ApiKeyS
               </div>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0">
+                  <Button aria-label={`Revoke ${key.name}`} disabled={revoking !== null} size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0">
                     <Trash2 className="size-3.5" />
                   </Button>
                 </AlertDialogTrigger>
@@ -212,7 +227,7 @@ export function ApiKeySettings({ apiKeys, loading, onCreate, onDelete }: ApiKeyS
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction
-                      onClick={() => onDelete(key.id)}
+                      onClick={() => void revoke(key.id)}
                       className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                     >
                       Delete
