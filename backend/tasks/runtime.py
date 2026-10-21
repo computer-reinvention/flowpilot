@@ -124,6 +124,7 @@ class ConversationRuntime:
         self.handles = []
         self.fenced = False
         self.declined = False
+        self.interruption_error = None
         self.owner = None
 
     async def open(self):
@@ -215,11 +216,30 @@ class ConversationRuntime:
             if kind == InteractionKind.INPUT:
                 return {'values': response.values}
             return {'browser_resolved': True}
+        except TimeoutError:
+            self.abort(task_error(ErrorCode.INTERRUPTED, 'Human wait expired; inspect website state before a new task'))
+            raise TaskFault(self.interruption_error) from None
+        except TaskFault as exc:
+            self.abort(exc.error)
+            raise
         finally:
-            await self.resume()
-            if kind == InteractionKind.BROWSER and not self.fenced:
-                # Inspection is delegated to the frozen policy, never a local hash.
-                await self.bindings.observation.observe(self.session.browser)
+            try:
+                await self.resume()
+                if kind == InteractionKind.BROWSER and not self.fenced:
+                    # Inspection is delegated to the frozen policy, never a local hash.
+                    await self.bindings.observation.observe(self.session.browser)
+            except TaskFault as exc:
+                self.abort(exc.error)
+                raise
+            except Exception:
+                self.abort(task_error(ErrorCode.INTERRUPTED, 'Browser writer drain or inspection failed'))
+                raise TaskFault(self.interruption_error) from None
+
+    def abort(self, error):
+        self.interruption_error = error
+        self.fenced = True
+        if self.owner:
+            self.owner.cancel()
 
     async def _release_inputs(self):
         if not (self.keys or self.buttons):
@@ -253,6 +273,8 @@ class ConversationRuntime:
             if self.fenced or self.pause != interaction:
                 raise stale()
             await self._release_inputs()
+            if self.fenced or self.pause != interaction:
+                raise stale()
             for handle in self.handles:
                 handle.released = True
             self.handles.clear()
@@ -270,7 +292,12 @@ class ConversationRuntime:
         self.owner = asyncio.current_task()
         await self.open()
         inputs = dict(self.execution.request.inputs)
-        result = await self.session.ask(self.execution.request.task, inputs)
+        try:
+            result = await self.session.ask(self.execution.request.task, inputs)
+        except asyncio.CancelledError:
+            if self.interruption_error is not None:
+                raise TaskFault(self.interruption_error) from None
+            raise
         result['answer'] = self.session.store.redact(result['answer'], inputs, limit=32000)
         return result
 

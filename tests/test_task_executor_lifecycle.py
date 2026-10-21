@@ -375,3 +375,29 @@ async def test_release_failure_cannot_authorize_resume(tmp_path):
     assert runtime.human_fenced and runtime.pause and runtime.keys == {'Shift'}
     with pytest.raises(TaskFault):
         await runtime.browser('pause', 1)
+
+
+@pytest.mark.asyncio
+async def test_human_timeout_cancels_owning_model_even_if_tool_errors_are_caught(tmp_path):
+    from backend.task_contracts import TaskFault
+    settings = TaskSettings(state_dir=tmp_path, human_wait_seconds=1, assistance_ttl_seconds=1)
+    runtime = ConversationRuntime(settings, execution(), bindings_double())
+    runtime.open = AsyncMock()
+    async def wait_forever(*args):
+        await asyncio.Event().wait()
+    runtime.control.wait_for_interaction.side_effect = wait_forever
+    async def ask(*args):
+        async def dispatch():
+            try:
+                await runtime.interact('Input', 'inputs', [{'name': 'otp', 'label': 'Code'}])
+            except TaskFault:
+                # Pi's bridge can catch ordinary tool errors. The owner must
+                # still be cancelled, not continue doing browser work.
+                await asyncio.Event().wait()
+        await asyncio.create_task(dispatch())
+        pytest.fail('Expired human wait continued model work')
+    runtime.session = SimpleNamespace(ask=ask)
+    with pytest.raises(TaskFault) as raised:
+        await asyncio.wait_for(runtime.run(), 2)
+    assert raised.value.error.code == 'interrupted'
+    assert runtime.fenced and runtime.pause is None

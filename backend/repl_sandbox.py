@@ -73,6 +73,8 @@ class ChatSandbox:
                             if total > 256 * 1024 * 1024:
                                 raise ValueError('Browser profile exceeds the 256 MiB archive budget')
                             saved.addfile(member, original.extractfile(member))
+                if temporary.stat().st_size > 256 * 1024 * 1024:
+                    raise ValueError('Serialized profile exceeds the archive budget')
                 os.chmod(temporary, 0o600)
                 os.replace(temporary, self.archive)
         except Exception as exc:
