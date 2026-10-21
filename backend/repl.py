@@ -16,7 +16,8 @@ from browser_use import ActionResult, Browser
 
 from .pi_browser import drive_browser
 from .replay import RunControl
-from .runner import _execute_reflex
+from .reflex_inputs import ReflexInputError, bind_inputs, catalog_entry, normalize_fields
+from .runner import PARTIAL_EFFECTS, _execute_reflex
 
 
 class UserStore:
@@ -48,10 +49,22 @@ class UserStore:
             self.db.execute('ALTER TABLE reflexes ADD COLUMN pause_after TEXT')
         if 'tags' not in columns:
             self.db.execute("ALTER TABLE reflexes ADD COLUMN tags TEXT DEFAULT '[]'")
+        if 'inputs' not in columns:
+            # JSON declared-input schema; NULL for legacy undeclared reflexes.
+            self.db.execute('ALTER TABLE reflexes ADD COLUMN inputs TEXT')
         self.db.commit()
 
     def scripts(self):
-        return [dict(r) for r in self.db.execute('SELECT domain,name,description,successes,failures FROM reflexes ORDER BY successes DESC LIMIT 50')]
+        """Catalog for the model: metadata plus each script's input parameters."""
+        rows = self.db.execute('SELECT domain,name,description,successes,failures,inputs,script '
+                               'FROM reflexes ORDER BY successes DESC LIMIT 50')
+        result = []
+        for row in rows:
+            item = dict(row)
+            fields, script = item.pop('inputs'), item.pop('script')
+            item.update(catalog_entry(json.loads(fields) if fields else None, script))
+            result.append(item)
+        return result
 
     def history(self, limit=6):
         return [dict(r) for r in self.db.execute('SELECT task,inputs,result,metrics FROM turns ORDER BY id DESC LIMIT ?', (limit,))][::-1]
@@ -166,6 +179,7 @@ class BrowserSession:
         if self._asking:
             raise RuntimeError('This session already has an active request')
         inputs = {} if inputs is None else inputs
+        task_inputs = inputs  # callbacks below take their own `inputs` arguments
         stored_inputs = json.dumps(inputs)
         started = time.monotonic()
         metrics = {'model_turns': 0, 'tool_calls': 0, 'reused': 0, 'saved': 0,
@@ -204,27 +218,32 @@ class BrowserSession:
                 return host + (f':{parsed.port}' if parsed.port else '')
             return parsed.netloc.lower()
 
-        async def save(name, description, script, tags=None, pause_after_auth=False):
+        async def save(name, description, script, tags=None, pause_after_auth=False, inputs=None):
             site = await domain()
             if not site:
                 return ActionResult(error='Navigate to the website before saving its script')
             if len(script) > 60000 or not script.lstrip().startswith('async'):
                 return ActionResult(error='Expected a bounded async arrow function')
+            try:
+                fields = normalize_fields(inputs)
+            except (TypeError, ValueError) as exc:
+                return ActionResult(error=f'Invalid declared inputs: {exc}')
             if self.hosted:
                 from .tasks.memory import input_atoms
                 if private_inputs:
                     return ActionResult(error='Save parameterized scripts before collecting private transient inputs')
                 # Known task/interaction inputs must remain parameterized, not
                 # become credentials embedded in durable personal scripts.
-                metadata = json.dumps([name, description, script, tags])
-                if any(v in metadata for v in input_atoms(inputs)):
+                metadata = json.dumps([name, description, script, tags, fields])
+                if any(v in metadata for v in input_atoms(task_inputs)):
                     return ActionResult(error='Parameterize input values before saving scripts')
                 if len(name) > 128 or len(description) > 2000 or len(tags or []) > 32 or len(json.dumps(tags)) > 4000:
                     return ActionResult(error='Script metadata exceeds persistence bounds')
-            self.store.db.execute('''INSERT INTO reflexes(domain,name,description,script,pause_after,tags) VALUES(?,?,?,?,?,?)
+            self.store.db.execute('''INSERT INTO reflexes(domain,name,description,script,pause_after,tags,inputs) VALUES(?,?,?,?,?,?,?)
                 ON CONFLICT(domain,name) DO UPDATE SET description=excluded.description,script=excluded.script,
-                pause_after=excluded.pause_after,tags=excluded.tags''',
-                (site, name, description, script, 'auth' if pause_after_auth else None, json.dumps(tags or [])))
+                pause_after=excluded.pause_after,tags=excluded.tags,inputs=excluded.inputs''',
+                (site, name, description, script, 'auth' if pause_after_auth else None, json.dumps(tags or []),
+                 None if fields is None else json.dumps(fields)))
             self.store.db.commit()
             if self.hosted:
                 self.store.db.execute('DELETE FROM reflexes WHERE rowid NOT IN (SELECT rowid FROM reflexes ORDER BY rowid DESC LIMIT 100)')
@@ -232,33 +251,66 @@ class BrowserSession:
             metrics['saved'] += 1
             return ActionResult(extracted_content=f'Saved {site}/{name}')
 
-        async def replay(name):
+        def lookup(site, name):
+            return self.store.db.execute('SELECT script,pause_after,inputs FROM reflexes WHERE domain=? AND name=?',
+                                         (site, name)).fetchone()
+
+        def bound_inputs(name, row, call_inputs):
+            # Declared reflexes receive exactly their declared inputs: call values,
+            # then task/interaction values, then documented defaults.
+            return bind_inputs(name, json.loads(row['inputs']) if row['inputs'] else None, call_inputs, task_inputs)
+
+        async def bind(name, call_inputs=None):
+            row = lookup(await domain(), name)
+            if not row:
+                # Unknown script: replay reports it; nothing to validate here.
+                return call_inputs or {}
+            try:
+                return bound_inputs(name, row, call_inputs)
+            except ReflexInputError:
+                metrics['input_errors'] = metrics.get('input_errors', 0) + 1
+                raise
+
+        async def replay(name, inputs=None):
+            call_inputs = inputs
             site = await domain()
-            row = self.store.db.execute('SELECT script,pause_after FROM reflexes WHERE domain=? AND name=?', (site, name)).fetchone()
+            row = lookup(site, name)
             if not row:
                 return ActionResult(error='No script with that name for this user and current site')
-            ok, detail = await _execute_reflex(row['script'], inputs, '', self.browser,
+            try:
+                stage_inputs = bound_inputs(name, row, call_inputs)
+            except ReflexInputError as exc:
+                # A caller error, not a broken script: no execution, no failure
+                # count and never the repair pipeline.
+                metrics['input_errors'] = metrics.get('input_errors', 0) + 1
+                return ActionResult(error=exc.to_text())
+            ok, detail = await _execute_reflex(row['script'], stage_inputs, '', self.browser,
                                              **({'observation_policy': self.observation_policy} if self.observation_policy is not None else {}))
             column = 'successes' if ok else 'failures'
             self.store.db.execute(f'UPDATE reflexes SET {column}={column}+1 WHERE domain=? AND name=?', (site, name))
             self.store.db.commit()
             metrics['reused' if ok else 'replay_failures'] += 1
-            if self.hosted and not ok and 'NEEDS_HUMAN' not in detail and 'NEEDS_AUTH' not in detail:
+            partial = not ok and PARTIAL_EFFECTS in detail
+            if partial:
+                metrics['partial_effects'] = metrics.get('partial_effects', 0) + 1
+            if (self.hosted or partial) and not ok and 'NEEDS_HUMAN' not in detail and 'NEEDS_AUTH' not in detail:
                 # A failed script may already have submitted or mutated state.
-                # Automatic full-script repair/retry is not safe in a hosted task.
+                # Automatic full-script repair/retry is not safe in a hosted task,
+                # nor anywhere once the page visibly changed before the failure.
                 return ActionResult(error=detail + '\nEffects may be partial. Observe current state; repair only remaining work and save the corrected script for a future explicit task. Do not replay this stage automatically.')
             if not ok and 'NEEDS_HUMAN' not in detail and 'NEEDS_AUTH' not in detail:
                 from .runner import _repair_reflex
                 from .llm import get_llm
                 metrics['repair_attempts'] = metrics.get('repair_attempts', 0) + 1
                 ok, detail, fixed = await _repair_reflex(
-                    broken_script=row['script'], error_msg=detail, inputs=inputs,
+                    broken_script=row['script'], error_msg=detail, inputs=stage_inputs,
                     entry_url='', browser_session=self.browser, llm=get_llm('fast'),
                     **({'observation_policy': self.observation_policy} if self.observation_policy is not None else {}))
                 if ok and fixed:
                     if self.hosted:
                         from .tasks.memory import input_atoms
-                        if private_inputs or any(v in fixed for v in input_atoms(inputs)):
+                        if private_inputs or any(v in fixed for v in input_atoms(task_inputs)) or any(
+                                v in fixed for v in input_atoms(stage_inputs)):
                             # The repaired script already ran, but it is not safe
                             # to persist credential-bearing generated source.
                             return ActionResult(extracted_content=detail)
@@ -345,7 +397,8 @@ class BrowserSession:
                 'Navigate to the requested site before using its scripts. Reuse applicable saved scripts via run_reflex, '
                 'but inspect current state first to avoid duplicating cart items, posts, or submissions. '
                 'If a script fails, inspect partial state, finish remaining work, and save the repaired script. '
-                'Save reusable scripts with inputs for variable values and observable completion checks. '
+                'Save reusable scripts with declared inputs for variable values and observable completion checks. '
+                'Each available script lists its inputs; pass the values resolved from this request as run_reflex inputs. '
                 'For shopping, stop at cart review unless explicitly asked to purchase. '
                 'For research, return the answer with source URLs in the completion summary. '
                 f'Context JSON:\n{context}')
@@ -353,6 +406,9 @@ class BrowserSession:
         error = None
         try:
             self._asking = True
+            # Pre-execution input binding travels with the callback so existing
+            # drive_browser-compatible drivers keep their call signature.
+            replay.bind_inputs = bind
             result = await drive_browser(self.browser, task, inputs, '', RunControl([False]), human, replay, save, on_event=event,
                                           interaction_tools={'request_input_values': request_input_values,
                                                              'request_confirmation': request_confirmation},

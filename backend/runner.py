@@ -4,7 +4,7 @@ Architecture
 ------------
 The agent uses browser-use's full toolkit plus custom tools:
 
-  run_reflex(name)           — execute a saved JS script on the browser (no LLM calls)
+  run_reflex(name, inputs)   — execute a saved JS script on the browser (no LLM calls)
   save_reflex(name, ...)     — save a JS script after solving a repeatable interaction
   request_human_help(...)    — pause for HITL (auth walls, CAPTCHAs, etc.)
 
@@ -130,6 +130,17 @@ _DUMP_ELEMENTS_JS = """
 """
 
 
+# Marker in a failed reflex result: the page changed before the failure, so the
+# stage partially acted. Repair must not re-run the whole stage automatically.
+PARTIAL_EFFECTS = "PARTIAL_EFFECTS"
+
+
+def _repairable(msg: str) -> bool:
+    """A failure is eligible for automatic whole-script repair only when it is a
+    script failure with no observed partial effect and no human boundary."""
+    return not any(marker in msg for marker in ("NEEDS_HUMAN", "NEEDS_AUTH", PARTIAL_EFFECTS))
+
+
 async def _execute_reflex(
     script: str,
     inputs: dict,
@@ -217,10 +228,23 @@ async def _execute_reflex(
             raise TaskFault(task_error(ErrorCode.INTERRUPTED, 'Script timed out; website effects are unknown; inspect before retrying')) from None
         # A changed URL does not establish that the script's remaining work ran.
         # Dump page state so the agent can pick up where the script stopped
+        effects = ''
         try:
             if observation_policy is not None:
                 failure_observation = await observation_policy.observe(browser_session)
                 fail_url, elements = failure_observation.url, failure_observation.elements
+                # Compare against the checked entry snapshot (same keyed policy).
+                # Any meaningful page change means the stage partially acted:
+                # automatic whole-script repair/replay could double-apply it.
+                if (failure_observation.progress_fingerprint != observation.progress_fingerprint
+                        or failure_observation.document_id != observation.document_id
+                        or failure_observation.target_id != observation.target_id
+                        or failure_observation.url != observation.url):
+                    effects = (f'\nEFFECTS: {PARTIAL_EFFECTS} - page state changed before the failure. '
+                               'Do not replay the whole stage; inspect and complete only the remaining work.')
+                else:
+                    effects = ('\nEFFECTS: no page change observed before the failure '
+                               '(effects outside the page cannot be ruled out).')
             else:
                 fail_url = await page.get_url()
                 elements = await page.evaluate(_DUMP_ELEMENTS_JS)
@@ -228,8 +252,8 @@ async def _execute_reflex(
         except Exception:
             context = "Could not read page state"
         err_str = str(e) or type(e).__name__
-        result_msg = f"SCRIPT EXECUTION FAILED\nError: {err_str}\n{context}"
-        trace("execute_reflex.fail", error_type=type(e).__name__)
+        result_msg = f"SCRIPT EXECUTION FAILED\nError: {err_str}{effects}\n{context}"
+        trace("execute_reflex.fail", error_type=type(e).__name__, partial_effects=PARTIAL_EFFECTS in effects)
         return False, result_msg
 
 
@@ -314,7 +338,9 @@ async def _repair_reflex(
 
         if success:
             return True, msg, fixed_script
-        if "NEEDS_HUMAN" in msg or "NEEDS_AUTH" in msg:
+        if not _repairable(msg):
+            # Human boundary, or the repaired attempt itself changed the page:
+            # another automatic attempt could double-apply its effects.
             return False, msg, None
 
         # Update error for next attempt
@@ -612,7 +638,9 @@ class FlowRunner:
                         # A failed stage may have partially acted. Let the agent inspect
                         # the resumed state instead of automatically repeating it.
                         break
-                    if not success:
+                    if not success and PARTIAL_EFFECTS not in msg:
+                        # A partially applied stage is handed to the agent below,
+                        # never re-run whole by automatic repair.
                         llm = llm or _get_fast_llm()
                         success, msg, fixed_script = await _repair_reflex(
                             broken_script=reflex["script"], error_msg=msg,
@@ -708,6 +736,7 @@ class FlowRunner:
                 asyncio.create_task(_send())
 
             tools = Tools()
+            flow_inputs = inputs  # run_reflex's own `inputs` parameter shadows this
 
             # ----------------------------------------------------------
             # run_reflex: execute saved JS directly on the browser
@@ -718,11 +747,13 @@ class FlowRunner:
                     "page — fills forms, clicks buttons, handles the interaction instantly. "
                     "Call this FIRST if a reflex exists for what you need to do. "
                     "On failure you get the current URL, error, and a list of interactive "
-                    "elements on the page so you can continue immediately."
+                    "elements on the page so you can continue immediately. "
+                    "Optional inputs override flow input values for this call."
                 )
             )
-            async def run_reflex(name: str) -> ActionResult:
+            async def run_reflex(name: str, inputs: dict | None = None) -> ActionResult:
                 await control.checkpoint()
+                call_inputs = inputs
                 if name in completed_names:
                     return ActionResult(error=f"Stage '{name}' already completed; do not repeat it.")
                 reflex = await _get_db().get_reflex(flow.domain, name, flow_id=flow.id)
@@ -732,11 +763,18 @@ class FlowRunner:
                     return ActionResult(
                         error=f"No reflex '{name}' for '{flow.domain}'."
                     )
+                from .reflex_inputs import ReflexInputError, bind_inputs
+                try:
+                    # Flow reflexes have no declared schema: flow inputs overlaid
+                    # with values the model resolved for this call.
+                    stage_inputs = bind_inputs(name, None, call_inputs, flow_inputs)
+                except ReflexInputError as exc:
+                    return ActionResult(error=exc.to_text())
 
                 await _update(RunStatus.RUNNING, f"Executing reflex '{name}'...")
                 success, msg = await _execute_reflex(
                     script=reflex["script"],
-                    inputs=inputs,
+                    inputs=stage_inputs,
                     entry_url=flow.entry_url or "",
                     browser_session=browser,
                 )
@@ -753,6 +791,9 @@ class FlowRunner:
                 if "NEEDS_HUMAN" in msg or "NEEDS_AUTH" in msg:
                     await human_help(msg[:2000])
                     return ActionResult(extracted_content="Human assisted; inspect current state before retrying the partial stage.")
+                if PARTIAL_EFFECTS in msg:
+                    return ActionResult(error=msg + "\nNo automatic repair: the stage partially acted. "
+                                        "Complete only the remaining work from the current page.")
                 # This keeps the DOM dump + repair loop out of the main agent context.
                 await _update(
                     RunStatus.RUNNING,
@@ -761,7 +802,7 @@ class FlowRunner:
                 repaired, repair_msg, fixed_script = await _repair_reflex(
                     broken_script=reflex["script"],
                     error_msg=msg,
-                    inputs=inputs,
+                    inputs=stage_inputs,
                     entry_url=flow.entry_url or "",
                     browser_session=browser,
                     llm=llm,
