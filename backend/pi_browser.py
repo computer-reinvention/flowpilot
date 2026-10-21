@@ -84,6 +84,9 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
     if exploration_tools:
         import inspect
         from pydantic import create_model
+        # browser-use 0.13 normalizes @tools.action into a params/**kwargs
+        # wrapper. Pi needs the original typed callback, not that Agent adapter.
+        exploration_tools = {name: inspect.unwrap(callback) for name, callback in exploration_tools.items()}
         definitions = [d for d in definitions if d["name"] in ("observe", "navigate", "execute")]
         for name, callback in exploration_tools.items():
             signature = inspect.signature(callback)
@@ -177,7 +180,8 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                 raise fatal_fault
             await control.checkpoint()
             guarded = name in ('execute', 'run_reflex') or (
-                exploration_tools and name in exploration_tools and name.startswith('test_'))
+                exploration_tools and name in exploration_tools and
+                (name.startswith('test_') or name == 'generate_and_save_reflex'))
             if guarded and needs_observation:
                 raise RuntimeError('Page changed; call observe before further browser actions')
             before = await page_identity() if guarded else None
