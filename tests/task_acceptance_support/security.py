@@ -24,7 +24,7 @@ def verify_key_hashes(database, plaintext_keys):
     assert all(isinstance(value, str) and value.startswith(('$2a$', '$2b$', '$2y$')) for value in hashes)
     for key in plaintext_keys:
         assert any(bcrypt.checkpw(key.encode(), value.encode()) for value in hashes), 'expected key hash missing'
-    artifacts = scan_artifacts(database.parent, plaintext_keys)
+    artifacts = scan_artifacts(database.parent, plaintext_keys, max_bytes=4 * 1024 ** 3)
     assert not artifacts['findings'] and not artifacts['gaps'], 'plaintext key leak or incomplete snapshot scan'
     return {'verified_synthetic_keys': len(plaintext_keys), 'snapshot_files_scanned': artifacts['files_scanned']}
 

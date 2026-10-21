@@ -4,6 +4,7 @@ This is a fixture website, NOT a task executor. Driving it directly only validat
 the fixture and the actual browser; it cannot satisfy integrated service gates.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -24,6 +25,8 @@ class Site:
         with sqlite3.connect(self.database) as db:
             db.execute("CREATE TABLE effects (sequence INTEGER PRIMARY KEY, action TEXT NOT NULL)")
         self.selector = "add-original"
+        # Digests only: the website verifies a transient OTP without storing it.
+        self.otp_digests = set()
         self.after_effect = threading.Event()
         self.release_response = threading.Event()
         self.hold_response = False
@@ -34,7 +37,8 @@ class Site:
             return dict(db.execute("SELECT action, COUNT(*) FROM effects GROUP BY action"))
 
     def effect(self, action):
-        assert action in {"login", "prerequisite", "cart", "submit", "drag", "frame", "input", "agent"}
+        assert action in {"login", "prerequisite", "cart", "submit", "drag", "frame", "input", "agent",
+                          "otp", "otp_mismatch", "otp_held", "longjs", "late"}
         with sqlite3.connect(self.database) as db:
             db.execute("INSERT INTO effects(action) VALUES (?)", (action,))
         self.after_effect.set()
@@ -111,6 +115,14 @@ def synthetic_site(directory, browser_host='127.0.0.1', listen_host='127.0.0.1')
 
         def do_POST(self):
             length = int(self.headers.get("Content-Length", 0))
+            if self.path == "/otp" and 0 < length <= 1024:
+                try:
+                    value = json.loads(self.rfile.read(length))["value"]
+                    matched = hashlib.sha256(value.encode()).hexdigest() in site.otp_digests
+                except (KeyError, ValueError, TypeError, AttributeError):
+                    return self.send(422, b"{}", "application/json")
+                site.effect("otp" if matched else "otp_mismatch")
+                return self.send(200, b'{"accepted":true}', "application/json")
             if self.path != "/effects" or not 0 < length <= 1024:
                 return self.send(422, b"{}", "application/json")
             try:
