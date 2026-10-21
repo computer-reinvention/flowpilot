@@ -196,7 +196,13 @@ class BrowserSession:
 
         async def domain():
             page = await self.browser.must_get_current_page()
-            return urlparse(await page.get_url()).netloc.lower()
+            parsed = urlparse(await page.get_url())
+            if self.hosted:
+                host = (parsed.hostname or '').lower()
+                if ':' in host:
+                    host = '[' + host + ']'
+                return host + (f':{parsed.port}' if parsed.port else '')
+            return parsed.netloc.lower()
 
         async def save(name, description, script, tags=None, pause_after_auth=False):
             site = await domain()
@@ -237,6 +243,10 @@ class BrowserSession:
             self.store.db.execute(f'UPDATE reflexes SET {column}={column}+1 WHERE domain=? AND name=?', (site, name))
             self.store.db.commit()
             metrics['reused' if ok else 'replay_failures'] += 1
+            if self.hosted and not ok and 'NEEDS_HUMAN' not in detail and 'NEEDS_AUTH' not in detail:
+                # A failed script may already have submitted or mutated state.
+                # Automatic full-script repair/retry is not safe in a hosted task.
+                return ActionResult(error=detail + '\nEffects may be partial. Observe current state; repair only remaining work and save the corrected script for a future explicit task. Do not replay this stage automatically.')
             if not ok and 'NEEDS_HUMAN' not in detail and 'NEEDS_AUTH' not in detail:
                 from .runner import _repair_reflex
                 from .llm import get_llm

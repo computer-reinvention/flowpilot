@@ -60,3 +60,31 @@ async def test_missing_completion_never_becomes_success(tmp_path, monkeypatch):
         await drive_browser(object(), 'Synthetic task', {}, '', RunControl([False]),
                             AsyncMock(), AsyncMock(), AsyncMock(),
                             observation_policy=bindings_double().observation)
+
+
+@pytest.mark.asyncio
+async def test_hosted_failed_replay_does_not_automatically_retry_uncertain_effects(tmp_path, monkeypatch):
+    store = ProfileStore(TaskSettings(state_dir=tmp_path), Principal(account_id='alice'), 'p')
+    session = repl.BrowserSession(store.path.name, store=store, hosted=True, verbose=False,
+                                  handoff_factory=lambda *args: channel_double(), on_question=AsyncMock(),
+                                  observation_policy=bindings_double().observation)
+    session.browser = SimpleNamespace(must_get_current_page=AsyncMock(return_value=SimpleNamespace(
+        get_url=AsyncMock(return_value='https://example.test/cart'))))
+    store.db.execute('INSERT INTO reflexes(domain,name,script) VALUES(?,?,?)',
+                     ('example.test', 'add', 'async () => { /* synthetic mutation */ }'))
+    store.db.commit()
+    execute = AsyncMock(return_value=(False, 'Script mutated then failed'))
+    repair = AsyncMock()
+    monkeypatch.setattr(repl, '_execute_reflex', execute)
+    monkeypatch.setattr('backend.runner._repair_reflex', repair)
+    async def inference(*args, **kwargs):
+        result = await args[6]('add')
+        assert 'Effects may be partial' in result.error
+        return 'Inspected partial effects; no retry authorized'
+    monkeypatch.setattr(repl, 'drive_browser', inference)
+    try:
+        await session.ask('Synthetic mutation')
+        execute.assert_awaited_once()
+        repair.assert_not_awaited()
+    finally:
+        store.close()

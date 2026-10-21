@@ -39,7 +39,9 @@ async def conversation_smoke(settings):
             await dispatch('navigate', {'url': 'http://lane002-smoke:8765'})
             await dispatch('observe', {})
             if turn == 1:
-                answer = await dispatch('execute', {'script': script})
+                answer = await dispatch('execute', {'script': script,
+                    'precondition': 'async () => localStorage.getItem("counter") === null',
+                    'postcondition': 'async () => localStorage.getItem("counter") === "1"'})
                 assert answer['success'] and answer['result'] == '1'
                 await dispatch('save_reflex', {'name': 'increment', 'description': 'Synthetic mutation', 'script': script})
                 await dispatch('human_help', {'reason': 'Synthetic viewport metadata check'})
@@ -68,6 +70,10 @@ async def conversation_smoke(settings):
             assert str(metadata.url) == 'http://lane002-smoke:8765/'
             assert (metadata.viewport_width, metadata.viewport_height) == (831, 617)
             assert await handle.screenshot()
+            frames = handle.frames()
+            frame = await anext(frames)
+            assert frame.startswith(b'\xff\xd8')
+            await frames.aclose()
             print('LANE002_METADATA_EVIDENCE=' + metadata.model_dump_json(), flush=True)
             return InteractionResponse(kind='browser', generation=interaction.generation,
                                        idempotency_key='synthetic-help1', browser_resolved=True)
@@ -102,7 +108,9 @@ async def cancellation_smoke(settings):
         await dispatch('navigate', {'url': 'http://lane002-smoke:8765'})
         await dispatch('observe', {})
         started.set()
-        await dispatch('execute', {'script': 'async () => { localStorage.setItem("cancelCounter","1"); await new Promise(r => setTimeout(r,60000)); localStorage.setItem("cancelCounter","2"); }'})
+        await dispatch('execute', {'script': 'async () => { localStorage.setItem("cancelCounter","1"); await new Promise(r => setTimeout(r,60000)); localStorage.setItem("cancelCounter","2"); }',
+            'precondition': 'async () => localStorage.getItem("cancelCounter") === null',
+            'postcondition': 'async () => localStorage.getItem("cancelCounter") === "2"'})
         raise AssertionError('Cancelled model/script continued')
     now = datetime.now(timezone.utc)
     lease = Lease(principal=Principal(account_id='cancel'), task_id='cancel', session_id='s', profile_id='p', generation=1)
@@ -197,6 +205,8 @@ async def pid_benchmark():
 
 async def crash_smoke(recover=False):
     """Two separate containers/processes share ONLY the dedicated /state mount."""
+    if not recover and os.getpid() == 1:
+        raise RuntimeError('Crash harness requires docker run --init so SIGKILL is not ignored by namespace PID 1')
     from playwright.async_api import async_playwright
     from backend.task_contracts import TaskFault
     from backend.tasks.executor import Executor
@@ -225,7 +235,9 @@ async def crash_smoke(recover=False):
             async def inference(task, system, definitions, dispatch, **kwargs):
                 await dispatch('navigate', {'url': 'http://lane002-smoke:8765'})
                 await dispatch('observe', {})
-                result = await dispatch('execute', {'script': 'async () => { localStorage.setItem("mutationCount", "1"); return 1; }'})
+                result = await dispatch('execute', {'script': 'async () => { localStorage.setItem("mutationCount", "1"); return 1; }',
+                    'precondition': 'async () => localStorage.getItem("mutationCount") === null',
+                    'postcondition': 'async () => localStorage.getItem("mutationCount") === "1"'})
                 assert result['success']
                 runtime = next(iter(executor.active.values())).runtime
                 sandbox = runtime.session.sandbox

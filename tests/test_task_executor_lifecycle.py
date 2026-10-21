@@ -267,3 +267,40 @@ async def test_metadata_reads_live_authorized_document_and_rejects_resume(tmp_pa
     with pytest.raises(TaskFault):
         await handle.metadata()
     page.evaluate.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_task_deadline_interrupts_without_replay(tmp_path):
+    class Waiting(Runtime):
+        async def run(self):
+            await asyncio.Event().wait()
+    executor, bindings, runtimes, _ = await setup_executor(tmp_path, Waiting)
+    request = execution().model_copy(update={'deadline': datetime.now(timezone.utc) + timedelta(seconds=.03)})
+    await asyncio.wait_for(executor.execute(request), 1)
+    assert len(runtimes) == 1
+    runtimes[0].stop_writers.assert_awaited()
+    assert bindings.control.finish.call_args.args[2] == TaskState.INTERRUPTED
+
+
+@pytest.mark.asyncio
+async def test_failed_stop_never_claims_cancelled_or_releases_saved_profile(tmp_path):
+    class BrokenStop(Runtime):
+        def __init__(self, *args):
+            super().__init__(*args)
+            self.stop_writers.side_effect = RuntimeError('Docker unavailable')
+        async def run(self):
+            raise asyncio.CancelledError
+    executor, bindings, _, view = await setup_executor(tmp_path, BrokenStop)
+    request = execution()
+    # The run starts under a running view; subsequent settlement sees cancel intent.
+    calls = 0
+    async def get(*args):
+        nonlocal calls
+        calls += 1
+        if calls > 1:
+            view.state = TaskState.CANCELLING
+        return view
+    bindings.control.get.side_effect = get
+    await executor.execute(request)
+    assert bindings.control.finish.call_args.args[2] == TaskState.INTERRUPTED
+    assert bindings.control.release_browser.call_args.kwargs == {'profile_saved': False}

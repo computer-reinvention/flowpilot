@@ -32,9 +32,13 @@ class HumanBrowser:
             raise stale()
 
     async def screenshot(self):
+        return await self._capture('png')
+
+    async def _capture(self, image_type):
         async with self.runtime.writer:
             await self._check()
-            image = await self.runtime.page().screenshot(type='png')
+            image = await self.runtime.page().screenshot(type=image_type,
+                **({'quality': 70} if image_type == 'jpeg' else {}))
             await self._check()
             return image
 
@@ -51,7 +55,7 @@ class HumanBrowser:
 
     async def frames(self):
         while True:
-            yield await self.screenshot()
+            yield await self._capture('jpeg')
             await asyncio.sleep(.2)
 
     async def send_input(self, command):
