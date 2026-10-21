@@ -39,6 +39,7 @@ class Repository:
         self.path = settings.state_dir / 'tasks.sqlite3'
         self.secret = receipt_secret
         self._requests = {}
+        self._history_cursor = None
 
     async def initialize(self):
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -48,6 +49,52 @@ class Repository:
                 db.executescript(SCHEMA)
         await asyncio.to_thread(initialize)
         self.path.chmod(0o600)
+
+    async def prune_history(self, *, batch_size=100):
+        """Bounded, lease-aware terminal history maintenance; never erase dedup.
+
+        Select at most 100 age-indexed candidates before checking profile leases,
+        so a busy profile cannot cause an unbounded scan within one transaction.
+        Sessions, profiles, archives/scripts and admission tombstones are retained.
+        """
+        if type(batch_size) is not int or not 1 <= batch_size <= 100:
+            raise ValueError('History maintenance batch must be between 1 and 100')
+        cutoff = now() - timedelta(days=self.settings.history_retention_days)
+        def operation():
+            with self.transaction() as db:
+                def select(cursor):
+                    continuation = "AND (julianday(json_extract(view,'$.updated_at')),id) > (?,?)" if cursor else ''
+                    parameters = (cutoff.isoformat(), *(cursor or ()), batch_size)
+                    return db.execute(f"""
+                        SELECT id,profile,julianday(json_extract(view,'$.updated_at')) AS age FROM bt_tasks
+                        WHERE reserved=0 AND state IN ('completed','failed','cancelled','interrupted')
+                        AND julianday(json_extract(view,'$.updated_at')) < julianday(?)
+                        {continuation}
+                        ORDER BY julianday(json_extract(view,'$.updated_at')),id LIMIT ?
+                    """, parameters).fetchall()
+                candidates = select(self._history_cursor)
+                if not candidates and self._history_cursor is not None:
+                    candidates = select(None)
+                next_cursor = (candidates[-1]['age'], candidates[-1]['id']) if candidates else None
+                identifiers = []
+                for candidate in candidates:
+                    leased = db.execute("""
+                        SELECT 1 FROM bt_tasks WHERE profile=?
+                        AND (reserved=1 OR state NOT IN ('completed','failed','cancelled','interrupted')) LIMIT 1
+                    """, (candidate['profile'],)).fetchone()
+                    if leased is None:
+                        identifiers.append(candidate['id'])
+                if identifiers:
+                    placeholders = ','.join('?' for _ in identifiers)
+                    db.execute(f'DELETE FROM bt_interactions WHERE task IN ({placeholders})', identifiers)
+                    db.execute(f'DELETE FROM bt_capabilities WHERE task IN ({placeholders})', identifiers)
+                    db.execute(f"DELETE FROM bt_idempotency WHERE operation='respond' AND json_extract(receipt,'$.task_id') IN ({placeholders})", identifiers)
+                    db.execute(f'DELETE FROM bt_tasks WHERE id IN ({placeholders})', identifiers)
+            # Advance only after successful commit. Skip leased history on the
+            # next batch so busy profiles cannot starve unrelated old records.
+            self._history_cursor = next_cursor
+            return len(identifiers)
+        return await self._run(operation)
 
     @contextmanager
     def transaction(self):
