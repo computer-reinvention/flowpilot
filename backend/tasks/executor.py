@@ -100,7 +100,8 @@ class Executor:
             state = TaskState.INTERRUPTED
             error = task_error(ErrorCode.INTERRUPTED, 'Execution deadline exceeded; website effects may be partial')
         except TaskFault as exc:
-            state, error = TaskState.FAILED, exc.error
+            state = TaskState.INTERRUPTED if exc.error.code == ErrorCode.INTERRUPTED else TaskState.FAILED
+            error = exc.error
         except Exception:
             state = TaskState.FAILED
             error = task_error(ErrorCode.PROVIDER_FAILURE, 'Execution failed; inspect website state before a new task')

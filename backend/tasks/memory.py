@@ -1,6 +1,7 @@
 """Account/profile keyed private memory; never use caller supplied filesystem names."""
 import hashlib
 import json
+import re
 import shutil
 
 from ..repl import UserStore
@@ -32,8 +33,11 @@ class ProfileStore(UserStore):
     @staticmethod
     def redact(text, inputs, limit=4000):
         text = str(text or '')
-        for value in sorted(set(input_atoms(inputs)), key=len, reverse=True):
-            text = text.replace(value, '[redacted]')
+        values = sorted(set(input_atoms(inputs)), key=len, reverse=True)
+        if values:
+            # Single pass: short inputs must not repeatedly expand the redaction
+            # marker or redact an earlier replacement into exponential output.
+            text = re.sub('|'.join(re.escape(value) for value in values), '[redacted]', text)
         return text[:limit]
 
     def record_turn(self, task, inputs, result, metrics, *, private_inputs=False):

@@ -123,13 +123,36 @@ async def cancellation_smoke(settings):
         else:
             raise AssertionError('Synthetic script did not start')
         view.state = TaskState.CANCELLING
+        cancelled_at = asyncio.get_running_loop().time()
         await executor.cancel(lease)
         await asyncio.wait_for(task, 40)
+        elapsed = asyncio.get_running_loop().time() - cancelled_at
     state = bindings.control.finish.call_args.args[2]
     assert state == TaskState.CANCELLED, bindings.control.finish.call_args
     assert bindings.control.release_browser.call_args.kwargs['profile_saved']
     assert not executor.active
-    print('LANE002_CANCEL_EVIDENCE=script-terminated,container-stopped,profile-saved,cancelled', flush=True)
+    assert elapsed <= settings.cancellation_seconds + 1
+    from playwright.async_api import async_playwright
+    store = ProfileStore(settings, lease.principal, lease.profile_id)
+    sandbox = TaskSandbox(store.path, store.path.name, settings=settings, lease=lease)
+    try:
+        _, websocket = await sandbox.start()
+        async with async_playwright() as playwright:
+            browser = await playwright.chromium.connect_over_cdp(websocket)
+            page = await browser.contexts[0].new_page()
+            await page.goto('http://lane002-smoke:8765')
+            assert await page.evaluate('localStorage.getItem("cancelCounter")') == '1'
+            client = await browser.new_browser_cdp_session()
+            try:
+                await client.send('Browser.close')
+            except Exception:
+                assert not browser.is_connected()
+    finally:
+        try:
+            await sandbox.close()
+        finally:
+            store.close()
+    print(f'LANE002_CANCEL_EVIDENCE=script-terminated,container-stopped,profile-saved,cancelled,counter-restored-1,seconds={elapsed:.2f}', flush=True)
 
 
 async def pid_benchmark():
@@ -180,7 +203,7 @@ async def crash_smoke(recover=False):
     from backend.tasks.runtime import ConversationRuntime
     from backend.task_ports import Execution
     from backend.task_contracts import TaskStart
-    from tests.fixtures.browser_tasks.doubles import bindings_double
+    from tests.fixtures.browser_tasks.doubles import bindings_double, observation_fixture
     settings = TaskSettings(state_dir=Path('/state'))
     lease = Lease(principal=Principal(account_id='crash'), profile_id='crash', task_id='crash', session_id='s', generation=1)
     metadata = settings.state_dir / 'crash.json'
@@ -188,17 +211,34 @@ async def crash_smoke(recover=False):
         if not recover:
             site = ThreadingHTTPServer(('0.0.0.0', 8765), Site)
             threading.Thread(target=site.serve_forever, daemon=True).start()
-            store = ProfileStore(settings, lease.principal, lease.profile_id)
-            sandbox = TaskSandbox(store.path, store.path.name, settings=settings, lease=lease)
-            _, websocket = await sandbox.start()
-            browser = await playwright.chromium.connect_over_cdp(websocket)
-            page = await browser.contexts[0].new_page()
-            await page.goto('http://lane002-smoke:8765')
-            await page.evaluate('localStorage.setItem("mutationCount", "1")')
-            metadata.write_text(json.dumps({'websocket': websocket, 'container_id': sandbox.info['container_id'],
-                                             'profile': store.path.name}))
-            print('LANE002_CRASH_MUTATION=1; SIGKILL before cleanup', flush=True)
-            os.kill(os.getpid(), signal.SIGKILL)
+            bindings = bindings_double()
+            for method in ('get', 'progress'):
+                getattr(bindings.control, method).side_effect = None
+                from backend.task_contracts import TaskState
+                getattr(bindings.control, method).return_value = SimpleNamespace(state=TaskState.RUNNING, revision=2)
+            for method in ('observe', 'require_fresh', 'after_action'):
+                getattr(bindings.observation, method).side_effect = None
+            bindings.observation.observe.return_value = observation_fixture()
+            executor = Executor(settings)
+            executor.bind(bindings)
+            await executor.startup()
+            async def inference(task, system, definitions, dispatch, **kwargs):
+                await dispatch('navigate', {'url': 'http://lane002-smoke:8765'})
+                await dispatch('observe', {})
+                result = await dispatch('execute', {'script': 'async () => { localStorage.setItem("mutationCount", "1"); return 1; }'})
+                assert result['success']
+                runtime = next(iter(executor.active.values())).runtime
+                sandbox = runtime.session.sandbox
+                metadata.write_text(json.dumps({'websocket': runtime.session.cdp_websocket_url,
+                                                 'container_id': sandbox.info['container_id'],
+                                                 'profile': runtime.session.store.path.name}))
+                print('LANE002_CRASH_MUTATION=1; SIGKILL actual executor before completion/cleanup', flush=True)
+                os.kill(os.getpid(), signal.SIGKILL)
+            now = datetime.now(timezone.utc)
+            execution = Execution(lease=lease, revision=2, admitted_at=now, deadline=now+timedelta(seconds=60),
+                                  request=TaskStart(task='Synthetic crash mutation', idempotency_key='crash123'))
+            with patch('backend.pi_browser.run_pi', inference):
+                await executor.execute(execution)
         else:
             info = json.loads(metadata.read_text())
             browser = await playwright.chromium.connect_over_cdp(info['websocket'])

@@ -83,3 +83,7 @@ def test_archive_restore_rejects_links_before_container_launch(tmp_path):
     with pytest.raises(ValueError, match='Unsafe profile archive'):
         sandbox._start()
     sandbox.manager.client.containers.create.assert_not_called()
+
+
+def test_redaction_is_single_pass_for_adversarial_short_inputs():
+    assert ProfileStore.redact('secret', {letter: letter for letter in 'redacts'}) == '[redacted]' * 6

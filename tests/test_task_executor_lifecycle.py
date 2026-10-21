@@ -113,6 +113,25 @@ async def test_cancelled_cleanup_still_settles_recovery_failure(tmp_path):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('code', ['stale_generation', 'readiness_timeout', 'no_progress', 'interrupted'])
+async def test_observation_fault_keeps_typed_reason_and_stops_before_settlement(tmp_path, code):
+    from backend.task_contracts import ErrorCode, TaskFault, task_error
+    class Guarded(Runtime):
+        async def run(self):
+            raise TaskFault(task_error(ErrorCode(code), 'Synthetic observation guard blocked task'))
+    executor, bindings, runtimes, _ = await setup_executor(tmp_path, Guarded)
+    async def finish(lease, revision, state, **kwargs):
+        runtimes[0].stop_writers.assert_awaited()
+        runtimes[0].close.assert_awaited()
+    bindings.control.finish.side_effect = finish
+    await executor.execute(execution())
+    call = bindings.control.finish.call_args
+    assert call.kwargs['error'].code == code
+    assert call.args[2] == (TaskState.INTERRUPTED if code == 'interrupted' else TaskState.FAILED)
+    assert len(runtimes) == 1
+
+
+@pytest.mark.asyncio
 async def test_interaction_uses_frozen_ports_and_fresh_inspection(tmp_path):
     bindings = bindings_double()
     runtime = ConversationRuntime(TaskSettings(state_dir=tmp_path), execution(), bindings)

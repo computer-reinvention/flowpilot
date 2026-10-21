@@ -9,7 +9,7 @@ from ..sandbox import CDP_CONTAINER_PORT, SANDBOX_NETWORK
 
 
 def host_key(settings):
-    return hashlib.sha256(str(settings.state_dir.resolve()).encode()).hexdigest()
+    return hashlib.sha256((str(settings.state_dir.resolve()) + '\0' + SANDBOX_NETWORK).encode()).hexdigest()
 
 
 class TaskSandbox(ChatSandbox):
@@ -80,7 +80,10 @@ class TaskSandbox(ChatSandbox):
     async def stop_writers(self):
         if self.info:
             container = await asyncio.to_thread(self.manager.client.containers.get, self.info['container_id'])
-            await asyncio.to_thread(container.stop, timeout=1)
+            await asyncio.to_thread(container.stop, timeout=5)
+            await asyncio.to_thread(container.reload)
+            if container.status in ('running', 'restarting', 'paused'):
+                raise RuntimeError('Browser container did not stop')
 
 
 def create_browser(settings, lease):

@@ -111,6 +111,8 @@ class ConversationRuntime:
         self.pause = None
         self.pause_generation = 0
         self.writer = asyncio.Lock()
+        self.stop_lock = asyncio.Lock()
+        self.writers_stopped = False
         self.keys, self.buttons = set(), set()
         self.handles = []
         self.fenced = False
@@ -249,14 +251,36 @@ class ConversationRuntime:
 
     async def stop_writers(self):
         self.fenced = True
-        # Container stop terminates running JS, including timed-out evaluate calls.
-        if self.session and self.session.sandbox:
-            await self.session.sandbox.stop_writers()
-            async with self.writer:
-                # Chromium has exited, so no physical held input survives. Drain
-                # any in-flight transport before forgetting its bookkeeping.
-                self.keys.clear()
-                self.buttons.clear()
+        async with self.stop_lock:
+            if self.writers_stopped:
+                return
+            # Detach browser-use's watchdogs while CDP is alive. Otherwise its
+            # storage watchdog attempts long reconnects after container shutdown.
+            async def bounded(operation):
+                task = asyncio.create_task(operation)
+                done, _ = await asyncio.wait({task}, timeout=2)
+                if not done:
+                    task.cancel()
+                elif not task.cancelled():
+                    try:
+                        task.result()
+                    except Exception:
+                        pass
+            if self.session and self.session.browser:
+                await bounded(self.session.browser.stop())
+                self.session.browser = None
+            if self.session and self.session.remote_browser and self.session.remote_browser.is_connected():
+                async def flush():
+                    client = await self.session.remote_browser.new_browser_cdp_session()
+                    await client.send('Browser.close')
+                await bounded(flush())
+            # Docker is the final enforcement boundary if CDP or JS did not stop.
+            if self.session and self.session.sandbox:
+                await self.session.sandbox.stop_writers()
+                async with self.writer:
+                    self.keys.clear()
+                    self.buttons.clear()
+            self.writers_stopped = True
 
     async def close(self):
         self.fenced = True
