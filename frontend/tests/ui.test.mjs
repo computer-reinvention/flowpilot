@@ -11,7 +11,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 const { cases } = JSON.parse(await readFile(new URL('../../tests/fixtures/browser_tasks/exchanges.json', import.meta.url)));
 const fixture = name => structuredClone(cases.find(c => c.name === name).response);
 test('account/key/profile/task DOM experience against local frozen HTTP fixtures', { timeout: 90000 }, async () => {
-  let account = 'a', key = null, revokeFails = true, listFails = false, stale = false;
+  let account = 'a', key = null, revokeFails = true, listFails = false, stale = false, profileBusy = true, shortGrant = false;
   let task = fixture('question'), lastStart, lastResponse, admissions = 0, uncertain = true, uncertainStart;
   const profiles = [];
   const server = createServer(async (req, res) => {
@@ -35,6 +35,10 @@ test('account/key/profile/task DOM experience against local frozen HTTP fixtures
       if (req.method === 'POST') { profiles.push({ ...fixture('create_profile'), profile_id: `profile_${profiles.length}`, label: data.label }); return send(201, profiles.at(-1)); }
       return send(200, { items: account === 'a' ? profiles : [] });
     }
+    if (path === '/api/v1/browser-tasks/profiles/profile_0' && req.method === 'DELETE') {
+      if (profileBusy) return send(409, { error: { code: 'conflict', message: 'Profile leased', retryable: false } });
+      profiles.splice(profiles.findIndex(p => p.profile_id === 'profile_0'), 1); return send(204);
+    }
     if (path === '/api/v1/browser-tasks') {
       admissions++; lastStart = data;
       if (uncertain) { uncertain = false; uncertainStart = data; return send(503, { error: { code: 'unavailable', message: 'Unavailable', retryable: true } }); }
@@ -48,7 +52,7 @@ test('account/key/profile/task DOM experience against local frozen HTTP fixtures
       task.task_id = 'task_demo'; task.session_id = 'session_demo'; task.profile_id = 'profile_demo'; task.revision = data.generation + 10;
       return send(202, task);
     }
-    if (path.endsWith('/assistance')) return send(201, fixture('mint_assistance'));
+    if (path.endsWith('/assistance')) return send(201, { ...fixture('mint_assistance'), ...(shortGrant ? { expires_at: new Date(Date.now() + 200).toISOString() } : {}) });
     if (path.endsWith('/cancel')) { task = fixture('cancel'); return send(202, task); }
     if (path.startsWith('/api/v1/browser-tasks/help/')) { res.writeHead(200, { 'Content-Type': 'text/html', 'Content-Security-Policy': "frame-ancestors 'none'" }); return res.end('<h1>Synthetic private viewer</h1>'); }
     if (path.startsWith('/api/')) return send(200, []);
@@ -99,6 +103,8 @@ test('account/key/profile/task DOM experience against local frozen HTTP fixtures
     await click('Browser tasks');
     await fill('input[aria-label="New profile label"]', 'Isolated one'); await click('Create isolated profile'); await contains('profile_0');
     await fill('input[aria-label="New profile label"]', 'Isolated two'); await click('Create isolated profile'); await contains('profile_1');
+    await evaluate('window.confirm = () => true'); await click('Delete'); await contains('Profile is busy or changed');
+    profileBusy = false; await click('Delete'); await wait('!document.body.innerText.includes("Isolated one")');
     await fill('textarea', 'Read the synthetic catalogue'); await click('Start task'); await contains('Admission may have succeeded');
     await click('Retry same admission'); await contains('Choose a date'); assert.deepEqual(lastStart, uncertainStart);
     assert.equal(lastStart.profile_id, undefined); assert.equal(lastStart.session_id, undefined); assert.ok(lastStart.idempotency_key);
@@ -106,6 +112,9 @@ test('account/key/profile/task DOM experience against local frozen HTTP fixtures
     await fill('section form input', 'synthetic-private-value'); await click('Send answer privately'); await contains('Submit the synthetic form?');
     assert.equal(lastResponse.values.date, 'synthetic-private-value'); assert.ok(!(await text()).includes('synthetic-private-value'));
     await click('Decline'); await contains('Resolve the synthetic sign-in'); assert.equal(lastResponse.confirmed, false);
+    shortGrant = true; await click('Prepare private browser assistance'); await contains('Open private viewer window');
+    await wait('![...document.querySelectorAll("button")].some(b => b.textContent === "Open private viewer window")');
+    shortGrant = false;
     await click('Prepare private browser assistance'); await contains('Open private viewer window');
     assert.ok(!(await text()).includes('synthetic_capability')); await click('Open private viewer window');
     await delay(100);
@@ -117,12 +126,15 @@ test('account/key/profile/task DOM experience against local frozen HTTP fixtures
     assert.equal(await evaluate('document.querySelector("section form input").value'), ''); stale = false;
     await click('Cancel task'); await contains('Cancellation requested'); task = fixture('cancelled'); await click('Refresh status / profiles'); await contains('cancelled');
     await fill('select', 'profile'); await fill('select[required]', 'profile_1'); await fill('textarea', 'Read in explicitly reused profile'); await click('Start task'); await contains('Choose a date'); assert.equal(lastStart.profile_id, 'profile_1');
+    task.interaction = { ...task.interaction, expires_at: new Date(Date.now() + 300).toISOString() }; task.revision++;
+    await click('Refresh status / profiles'); await fill('section form input', 'expires-unsubmitted');
+    await contains('This pause expired'); assert.equal(await evaluate('document.querySelector("section form input").value'), '');
     await click('Flows'); await contains('Create'); // Existing dashboard remains reachable.
     await click('Browser tasks');
     await evaluate(`document.querySelector('button[aria-label="Log out"]').click()`); await contains('Log in');
     assert.ok(!(await text()).includes('task_demo')); assert.equal(await evaluate('localStorage.getItem("flowpilot_token")'), null);
     listFails = false; await fill('#login-email', 'b@example.test'); await fill('#login-password', 'synthetic-password'); await click('Log in'); await contains('Start a task / follow-up');
-    assert.ok(!(await text()).includes('Isolated one'));
+    assert.ok(!(await text()).includes('Isolated two'));
     await fill('form.flex input', 'task_demo'); await click('Reattach'); await contains('not_found');
     assert.ok(!(await text()).includes('Choose a date')); assert.equal(admissions, 4);
   } finally {

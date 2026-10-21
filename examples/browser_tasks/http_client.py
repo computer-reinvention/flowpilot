@@ -10,9 +10,19 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+import warnings
 
 PREFIX = "/api/v1/browser-tasks"
 TERMINAL = {"completed", "failed", "cancelled", "interrupted"}
+
+
+def private_input(prompt):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", getpass.GetPassWarning)
+        try:
+            return getpass.getpass(prompt)
+        except getpass.GetPassWarning:
+            raise RuntimeError("Private terminal required; use a configured API key or programmatic client") from None
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -111,11 +121,11 @@ def main():
     client = Client(base, os.environ.get("FLOWPILOT_API_KEY", ""))
     try:
         if args.bootstrap:
-            email = getpass.getpass("Account email (hidden; terminal input): ")
-            password = getpass.getpass("Account password: ")
+            email = private_input("Account email (hidden; terminal input): ")
+            password = private_input("Account password: ")
             body = {"email": email, "password": password}
             if args.signup:
-                body["name"] = getpass.getpass("Account name (hidden; terminal input): ")
+                body["name"] = private_input("Account name (hidden; terminal input): ")
             auth = client.request("POST", "/api/auth/signup" if args.signup else "/api/auth/login", body)
             password = None
             dashboard = Client(base, auth["token"])
@@ -123,7 +133,7 @@ def main():
             temporary_key = created["id"]
             client.token = created.pop("key")
         elif not client.token:
-            client.token = getpass.getpass("Flowpilot API key: ")
+            client.token = private_input("Flowpilot API key: ")
 
         command, task_id = args.command, args.object_id
         if command in {"start", "followup", "profile-create"}:
@@ -159,7 +169,7 @@ def main():
                 response = {"idempotency_key": str(uuid.uuid4())}
                 print(pause["message"], file=sys.stderr)
                 if pause["kind"] == "input":
-                    response["values"] = {field["name"]: getpass.getpass(field["label"] + ": ") for field in pause["fields"]}
+                    response["values"] = {field["name"]: private_input(field["label"] + ": ") for field in pause["fields"]}
                 elif pause["kind"] == "confirmation":
                     decision = input("Type approve or decline for this exact proposed action: ")
                     if decision not in {"approve", "decline"}:

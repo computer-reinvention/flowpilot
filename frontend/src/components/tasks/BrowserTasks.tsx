@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useBrowserTasks } from "@/hooks/useBrowserTasks";
 import { pauseKey, terminal } from "@/lib/browserTasks";
 import type { TaskView } from "@/lib/browserTasks";
@@ -12,6 +12,10 @@ function PendingInteraction({ task, busy, respond, help }: {
   const [values, setValues] = useState<Record<string, string>>({});
   const pause = task.interaction!;
   const expired = Date.parse(pause.expires_at) <= Date.now();
+  useEffect(() => {
+    const timer = setTimeout(() => setValues({}), Math.min(2147483647, Math.max(0, Date.parse(pause.expires_at) - Date.now())));
+    return () => clearTimeout(timer);
+  }, [pause.expires_at]);
   return <section className="space-y-3 rounded border p-4">
     <h3 className="font-semibold">{pause.message}</h3>
     <p className="text-xs">Pause {pause.interaction_id} · generation {pause.generation} · expires {new Date(pause.expires_at).toLocaleString()}</p>
@@ -22,9 +26,9 @@ function PendingInteraction({ task, busy, respond, help }: {
     }}>
       {pause.fields?.map(field => <label className="block space-y-1" key={field.name}>
         <span>{field.label}</span>
-        {field.kind === "select" ? <select className="block border p-2" required value={values[field.name] ?? ""} onChange={e => setValues(v => ({ ...v, [field.name]: e.target.value }))}>
+        {field.kind === "select" ? <select className="block border p-2" disabled={busy || expired} required value={values[field.name] ?? ""} onChange={e => setValues(v => ({ ...v, [field.name]: e.target.value }))}>
           <option value="">Choose…</option>{field.options?.map(option => <option key={option}>{option}</option>)}
-        </select> : <Input type={field.kind === "secret" ? "password" : "text"} autoComplete="off" value={values[field.name] ?? ""} onChange={e => setValues(v => ({ ...v, [field.name]: e.target.value }))} />}
+        </select> : <Input disabled={busy || expired} type={field.kind === "secret" ? "password" : "text"} autoComplete="off" value={values[field.name] ?? ""} onChange={e => setValues(v => ({ ...v, [field.name]: e.target.value }))} />}
       </label>)}
       <Button disabled={busy || expired}>Send answer privately</Button>
       <p className="text-xs">Values are cleared on submission, even if it fails. Refresh status before entering them again.</p>

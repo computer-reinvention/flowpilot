@@ -23,11 +23,13 @@ export function clearToken(): void {
 }
 
 export class ApiError extends Error {
+  status: number;
   constructor(
-    public status: number,
+    status: number,
     message: string,
   ) {
     super(message);
+    this.status = status;
     this.name = "ApiError";
   }
 }
@@ -58,6 +60,8 @@ export async function apiFetch<T>(
     } catch {
       // ignore parse errors
     }
+    signal.throwIfAborted();
+    if (getToken() !== token) throw new DOMException("Account changed", "AbortError");
     if (res.status === 401) {
       clearToken();
     }

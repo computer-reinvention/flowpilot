@@ -68,7 +68,7 @@ export function useBrowserTasks() {
 
   useEffect(() => {
     if (!grant) { closeWindow(); return; }
-    const timer = setTimeout(() => setGrant(null), Math.max(0, Date.parse(grant.expires_at) - Date.now()));
+    const timer = setTimeout(() => setGrant(null), Math.min(2147483647, Math.max(0, Date.parse(grant.expires_at) - Date.now())));
     return () => { clearTimeout(timer); closeWindow(); };
   }, [grant]);
 
