@@ -10,14 +10,17 @@ is reviewed; `--local` validates only configuration and cannot waive those block
 
 ## Artifacts and non-secret checks
 
-- `Dockerfile.backend`: digest-pinned Node 22.22 (meets >=22.19), Python 3.12.12,
-  uv 0.9.5; npm lock installs and frozen uv lock; non-root uid 10001, fixed single
+- `Dockerfile.backend`: digest-pinned Debian 13 trixie bases, Node 22.23.4 (meets
+  >=22.19; latest 22.x security release), Python 3.12.15, uv 0.9.5; in-suite
+  `apt-get upgrade` before Playwright `--with-deps`; npm lock installs and frozen uv lock; non-root uid 10001, fixed single
   worker, no HTTP access logs, init through Compose, 45s application / 55s server /
   65s container shutdown budgets. `ops_start.sh` fails before serving on invalid
   settings, missing provider/JWT authentication, unwritable/low disk, or unavailable proxy.
-- `Dockerfile.sandbox`: digest-pinned Python and exact Playwright 1.64.0.
-  OS packages and browser download are upstream repository resolved, **not bit-for-bit
-  reproducible**. Refresh pins/lockfiles through their owners; do not silently accept
+- `Dockerfile.sandbox`: digest-pinned Python 3.12.15 trixie, sha256-pinned Chrome for
+  Testing 156.0.8078.47 (current stable) instead of Playwright's pre-stable bundle,
+  hash-pinned supervisor; Playwright is used only for `install-deps` and removed.
+  OS packages are upstream repository resolved, **not bit-for-bit reproducible**,
+  so `scripts/ops_image_audit.py` must gate every rebuild (see the image audit section). Refresh pins/lockfiles through their owners; do not silently accept
   a digest pin as a vulnerability clearance.
 - Compose: backend 3GiB / 2 CPU / 256 PIDs; socket proxy 128MiB / .25 CPU / 64 PIDs;
   restart unless-stopped, logs <=3 x 10MiB per service; backend loopback publication
@@ -46,6 +49,8 @@ python scripts/ops_asgi_rehearsal.py
 # Built, uniquely labelled fixtures only; no Compose/deploy operations:
 python scripts/ops_backend_rehearsal.py
 python scripts/ops_sandbox_smoke.py
+# OS-package + bundled-runtime gate (pinned Trivy container; exit 1 = unaccepted HIGH/CRITICAL):
+python scripts/ops_image_audit.py --image backend=<backend-tag> --image sandbox=<sandbox-tag>
 ```
 
 `ops_context_check.py` builds synthetic canaries and scans saved image contents/layers;
@@ -248,7 +253,7 @@ It installs the auditor **only inside a disposable container**, never the host o
 production image. `--disable-pip --no-deps` audits the complete frozen lock export;
 it does not re-resolve production dependencies or claim package hash verification.
 Dependency-owner compatibility review, lock updates and repeat audits are a release
-gate. OS/Chromium CVE inventory remains unverified. Image pins and successful builds
+gate. OS/Chromium inventory now exists (image audit section below) with accepted findings. Image pins and successful builds
 must not be described as a clean security scan.
 
 All four Linux/amd64 production build stages (frontend, agent, complete backend,
@@ -300,6 +305,87 @@ Required remaining gates include assembled lane006 acceptance, crash/reboot/grac
 stop semantics, resource/ENOSPC tests, real sandbox topology/policy probes, TLS/viewer
 authorization and all dependency vulnerabilities reviewed by their owners. Do not
 promote this branch based on its documentation or an HTTP 200 alone.
+
+## OS and bundled-runtime image audit — 2026-10-22
+
+Closes the "OS/Chromium inventory unverified" gap for the **backend** and **sandbox**
+runtime images; it does **not** clear the hosted `DEPENDENCY_SECURITY_UNRESOLVED`
+blocker (the Python advisories stay with their owners). Machine-readable evidence:
+`scripts/ops_image_triage.json`; accepted findings with per-finding justification:
+`scripts/ops_image_allowlist.json`.
+
+**How it works.** `scripts/ops_image_audit.py` saves each local image with `docker save`
+and scans the archive with digest-pinned `aquasec/trivy:0.75.0` (released 2026-10-01;
+we skipped the days-old 0.76.x tags, and 0.75.0 is outside the early-2026 compromised
+Docker Hub tag range). The scanner gets a read-only archive, not the Docker socket. Package
+scanners cannot see runtimes that arrive as copied binaries. The script therefore runs each image
+offline and reads the exact Chromium, Node and CPython versions. It compares them with Google's
+Linux stable channel, nodejs.org security-flagged releases and python.org patch releases.
+It exits 1 when any HIGH/CRITICAL OS-package or runtime finding is not covered by an
+allowlist entry. Each entry must have a justification and a `review_by` date that has not passed.
+An OS finding with an available distro fix can never be accepted: rebuild instead.
+A runtime acceptance applies only to the exact version it names. Exit 2 means the audit
+infrastructure failed. Trivy also reports Python venv packages for context, but they are
+gated by `ops_dependency_audit.py`, not here.
+
+| Image | Before (main `0b5d115`) | After | Fix-available, all severities |
+| --- | --- | --- | --- |
+| sandbox | 11 CRITICAL / 153 HIGH, Debian 12.13 | 1 CRITICAL / 69 HIGH, Debian 13.7 | 117 -> 0 |
+| backend | 11 CRITICAL / 130 HIGH, Debian 12.13 | 1 CRITICAL / 70 HIGH, Debian 13.7 | 118 -> 3 (the accepted runtimes below) |
+
+Advisory DB snapshot: 2026-10-21T19:18Z. Counts include runtime findings: before, both
+images had Chromium 156.0.8078.4, Playwright's Node 24.21.0 driver and Python 3.12.12,
+and the backend also had Node 22.22.0. An intermediate patched-bookworm build reached
+4 CRITICAL / 100 HIGH (sandbox) and 4 / 98 (backend), with no fixes left in that suite.
+That remaining gap is why both images moved to trixie.
+
+Remediated (commits `b938943`, `07adc26`):
+- Bases bumped from Python 3.12.12 to 3.12.15 and Node 22.22.0 to 22.23.4. Node 22.22.0
+  had missed four security releases. Both images moved from Debian 12 (now LTS) to 13,
+  with an in-suite `apt-get upgrade`.
+- The sandbox now ships **Chrome for Testing 156.0.8078.47**, the current stable, pinned
+  by sha256 and verified at build. Playwright 1.64.0, the newest release, bundles the
+  pre-stable `156.0.8078.4`. The entrypoint fails closed if the pinned binary is missing.
+- Removed from the sandbox: curl, Debian supervisor with its second interpreter
+  (python3.11), x11-utils, and the unused Playwright package with its unscanned Node
+  driver. dbus-x11 is kept on purpose: without it, apt pulls full systemd (+4 HIGH).
+  Xvfb now runs with `-nolisten tcp`, and `/root` is no longer world-readable.
+
+Accepted (none has a fix in Debian 13 at audit time; OS entries are reviewed by 2026-11-22):
+- util-linux/login family (36 entries), ncurses (4) and other base packages (4). These are
+  essential packages of the official image, and their admin paths are never fed untrusted input.
+- The X server (10 entries), which needs a malicious X client and listens only on a local
+  unix socket; it is not started in the backend. X client libraries (4), which trust only
+  the same-uid Xvfb.
+- libcups (2), which has no cupsd and no configured printer.
+- libxml2/libtiff (10, including the one remaining CRITICAL, libxml2 CVE-2026-6653).
+  `ldd` shows Chrome for Testing does not link them; only Mesa, shared-mime-info and
+  gdk-pixbuf use them, on local data.
+- **Backend runtimes until 2026-11-15:** Chromium 156.0.8078.4 and Node 24.21.0. Both are
+  bundled by the `uv.lock`-pinned Playwright 1.64.0, and the dependency lane owns that pin.
+  Hosted browsing runs in the sandbox's stable build. The backend browser serves only
+  native/REPL mode, which must not browse untrusted sites on a hosted deployment.
+
+Verification on the final images (linux/amd64, emulated on an arm64 Docker Desktop host):
+- `ops_sandbox_smoke.py` with `FLOWPILOT_BACKEND_IMAGE` set passed: CDP answered on 9222
+  and on socat 9223, a new target opened, and the backend image's own Playwright
+  `connect_over_cdp` rendered a page and took a screenshot.
+- Docker health reported healthy, and `ldd` shows no missing libraries.
+- A native Playwright launch inside the backend image works.
+- The ASGI rehearsal passed.
+- The agent-host tests passed 4/4 on Node 22.23.4.
+- `ops_tests.py` passed: 13 tests, including the new gate test.
+- `ops_backend_rehearsal.py` behaves the same as on the unmodified baseline image. Its
+  older enabled-composition 503 expectation fails on both images, so the failure predates
+  this change. That expectation was left unchanged.
+- The gate passes (exit 0) on the final images and fails (exit 1, 186 unaccepted) on the
+  baseline images.
+
+Still open:
+- The Linux "No usable sandbox!" direct-launch gate and network-isolation proof need a
+  real Linux host.
+- Advisories drift. Rerun the gate on every rebuild, and re-review allowlist entries when
+  they expire.
 
 ## Read-only dependency and implementation triage — 2026-10-21
 
@@ -468,6 +554,6 @@ findings, not assertions that all those revisions are merged or deployed.
 | Recovery/orphan scope | Task recovery **host-scoped**, legacy cleanup now skips task containers | Legacy orphan selection remains broad; unnecessary capability drops remain absent |
 
 **No readiness clearance:** kernel/network enforcement blocker is unchanged.
-OS/Chromium advisories remain **unverified**, not included in the zero-findings
+OS/Chromium advisories were inventoried later (2026-10-22 image audit section), not in the zero-findings
 candidate Python/npm experiments. TLS/topology/real assistance and application
 acceptance gates remain in force.
