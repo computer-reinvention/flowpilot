@@ -6,7 +6,7 @@ import urllib.parse
 import pytest
 
 from tests.task_acceptance_support.evidence import Evidence
-from tests.task_acceptance_support.security import network_target, scan_artifacts
+from tests.task_acceptance_support.security import network_target, scan_artifacts, verify_key_hashes
 
 
 CANARY = 'synthetic-OTP-acceptance-"/123456'
@@ -36,6 +36,21 @@ def test_scan_database_wal_and_clean_artifacts(tmp_path):
     other.mkdir()
     (other / 'safe.json').write_text('{"state":"completed"}')
     assert not scan_artifacts(other, [CANARY])['findings']
+
+
+def test_independent_key_hash_verification_rejects_plaintext_and_missing_hashes(tmp_path):
+    import bcrypt
+    key = 'fp_live_synthetic_acceptance_key_00000001'
+    database = tmp_path / 'keys.sqlite3'
+    with sqlite3.connect(database) as connection:
+        connection.execute('CREATE TABLE api_keys(key_hash TEXT)')
+        connection.execute('INSERT INTO api_keys VALUES (?)', (bcrypt.hashpw(key.encode(), bcrypt.gensalt(rounds=4)).decode(),))
+    assert verify_key_hashes(database, [key])['verified_synthetic_keys'] == 1
+    with pytest.raises(AssertionError):
+        verify_key_hashes(database, [key + 'missing'])
+    (tmp_path / 'unsafe.log').write_text(key)
+    with pytest.raises(AssertionError):
+        verify_key_hashes(database, [key])
 
 
 def test_empty_bounded_compressed_and_symlink_scans_are_gaps(tmp_path):

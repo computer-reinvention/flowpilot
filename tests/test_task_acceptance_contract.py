@@ -51,6 +51,28 @@ def test_standalone_client_does_not_retry_nonretryable_conflict():
             Client(url).start_retry(CASES[0]["request"])
 
 
+def test_standalone_client_retries_retryable_capacity_with_same_request():
+    admitted = CASES[0]
+    capacity = {**next(case for case in CASES if case['name'] == 'capacity'),
+                'request': admitted['request'], 'headers': {'Retry-After': '1'},
+                'response': {'error': {'code': 'capacity_exhausted', 'message': 'Busy',
+                                       'retryable': True, 'retry_after_seconds': 1}}}
+    with scripted_peer([capacity, admitted]) as url:
+        assert Client(url).start_retry(admitted['request']) == admitted['response']
+
+
+def test_frozen_viewer_commands_are_consumable_without_producer_models():
+    document = fixture('viewer_commands.json')
+    fields = {'move': {'x', 'y'}, 'down': {'x', 'y', 'button'}, 'up': {'x', 'y', 'button'},
+              'scroll': {'dx', 'dy'}, 'keydown': {'key'}, 'keyup': {'key'}, 'type': {'text'}, 'release': set()}
+    for command in document['commands']:
+        assert set(command) - {'kind'} == fields[command['kind']]
+    assert document['resume']['browser_resolved'] is True
+    assert document['resume']['generation'] == document['state']['interaction']['generation']
+    assert document['transport']['screen']['content_type'] == 'image/png'
+    assert document['transport']['stream']['content_type'] == 'image/jpeg'
+
+
 @pytest.mark.parametrize("mutation", ["terminal", "revision", "interaction", "error", "result", "owner"])
 def test_oracle_rejects_broken_state(mutation):
     original = next(case["response"] for case in CASES if case["name"] == "completed")

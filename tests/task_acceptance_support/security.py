@@ -4,10 +4,29 @@ import base64
 import hashlib
 import ipaddress
 import json
+import sqlite3
 import urllib.parse
 from pathlib import Path
 
 from .client import Client, local_url
+
+
+def verify_key_hashes(database, plaintext_keys):
+    """Read-only disposable SQLite snapshot; independent bcrypt verification."""
+    import bcrypt
+    database = Path(database)
+    assert database.is_file() and not database.is_symlink()
+    assert plaintext_keys and all(key.startswith('fp_live_') and len(key) >= 32 for key in plaintext_keys)
+    with sqlite3.connect(database.resolve().as_uri() + '?mode=ro', uri=True) as connection:
+        connection.execute('PRAGMA query_only=ON')
+        hashes = [row[0] for row in connection.execute('SELECT key_hash FROM api_keys LIMIT 5001')]
+    assert 0 < len(hashes) <= 5000, 'key inventory unavailable or exceeds scan bound'
+    assert all(isinstance(value, str) and value.startswith(('$2a$', '$2b$', '$2y$')) for value in hashes)
+    for key in plaintext_keys:
+        assert any(bcrypt.checkpw(key.encode(), value.encode()) for value in hashes), 'expected key hash missing'
+    artifacts = scan_artifacts(database.parent, plaintext_keys)
+    assert not artifacts['findings'] and not artifacts['gaps'], 'plaintext key leak or incomplete snapshot scan'
+    return {'verified_synthetic_keys': len(plaintext_keys), 'snapshot_files_scanned': artifacts['files_scanned']}
 
 
 def canary_variants(secret):

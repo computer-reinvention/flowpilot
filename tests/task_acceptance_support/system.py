@@ -2,6 +2,7 @@
 
 import json
 import secrets
+import urllib.error
 from concurrent.futures import ThreadPoolExecutor
 
 from .client import Client
@@ -151,7 +152,11 @@ def cancel_boundary(owner, profile_id, run_id):
 
 
 def run_service(evidence, base, site, allow_tasks=False):
-    readiness = Client(base).request("GET", "/health/browser-tasks")
+    try:
+        readiness = Client(base).request("GET", "/health/browser-tasks")
+    except (urllib.error.URLError, TimeoutError, ConnectionError):
+        evidence.record('service_readiness', 'blocked', 'explicit local service is not reachable')
+        return
     if (readiness.status != 200 or readiness.body.get("ready") is not True
             or readiness.body.get("enabled") is not True):
         evidence.record("service_readiness", "blocked", "task peers disabled or unavailable",
