@@ -37,7 +37,7 @@ class Runtime:
 
 async def setup_executor(tmp_path, runtime_type=Runtime):
     bindings = bindings_double()
-    view = SimpleNamespace(state=TaskState.RUNNING, revision=2)
+    view = SimpleNamespace(state=TaskState.RUNNING, revision=2, task_id='t', session_id='s', profile_id='p')
     for name in ('get', 'progress', 'finish', 'release_browser'):
         method = getattr(bindings.control, name)
         method.side_effect = None
