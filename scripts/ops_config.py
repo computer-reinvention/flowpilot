@@ -62,6 +62,8 @@ def validate(env, *, hosted=True):
     if hosted:
         errors.append("HOST_NETWORK_POLICY_UNVERIFIED: isolated Linux enforcement/probe evidence required")
         errors.append("ASSEMBLED_ACCEPTANCE_UNVERIFIED: restart, rate limits and runtime resource checks required")
+        errors.append("DEPENDENCY_SECURITY_UNRESOLVED: review Python/frontend advisories and OS/Chromium inventory")
+        errors.append("RETENTION_RUNTIME_UNVERIFIED: terminal history and lease-aware quarantine maintenance required")
     return errors
 
 
