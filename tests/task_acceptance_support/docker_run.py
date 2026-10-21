@@ -7,6 +7,7 @@ import re
 import tempfile
 
 from .wire import ROOT
+from .security import canary_variants
 
 
 def run_assembled_docker(evidence):
@@ -18,6 +19,7 @@ def run_assembled_docker(evidence):
     sandbox = client.images.get('flowpilot-sandbox:latest')
     network = client.networks.create(run, labels=labels, check_duplicate=True)
     backend = None
+    canary = 'synthetic-canary-' + secrets.token_hex(16)
     with tempfile.TemporaryDirectory(prefix=run + '-', dir=ROOT / 'reports/task-acceptance') as directory:
         try:
             backend = client.containers.run(image.id,
@@ -25,6 +27,7 @@ def run_assembled_docker(evidence):
                 name=run + '-backend', labels=labels, network=network.name, init=True, detach=True,
                 environment={'PYTHONPATH': '/lane', 'PROFILES_DIR': '/state', 'SANDBOX_NETWORK': network.name,
                              'JWT_SECRET': secrets.token_hex(32), 'FLOWPILOT_TRACE': '0', 'TASK_ACCEPTANCE_RUN_ID': run,
+                             'TASK_ACCEPTANCE_OTP_CANARY': canary,
                              'FLOWPILOT_TASKS_API_REQUESTS_PER_MINUTE': '10000', 'FLOWPILOT_TASKS_LOGIN_REQUESTS_PER_MINUTE': '100'},
                 volumes={str(ROOT): {'bind': '/lane', 'mode': 'ro'}, directory: {'bind': '/state', 'mode': 'rw'},
                          '/var/run/docker.sock': {'bind': '/var/run/docker.sock', 'mode': 'rw'}},
@@ -33,6 +36,11 @@ def run_assembled_docker(evidence):
             # Logs remain private temporary data; never echo raw exceptions/DOM.
             logs = backend.logs()
             (Path(directory) / 'backend.log').write_bytes(logs)
+            exposed = any(value in logs for value in canary_variants(canary))
+            key_patterns = len(re.findall(rb'fp_live_[a-f0-9]{32}', logs))
+            evidence.record('real_backend_log_canaries', 'failed' if exposed or key_patterns else 'passed',
+                            'actual backend stdout/stderr scanned without retaining raw logs', otp_canary_found=exposed,
+                            plaintext_key_patterns=key_patterns)
             result_path = Path(directory) / 'assembled_evidence.json'
             if result_path.exists():
                 result_data = json.loads(result_path.read_text())
@@ -52,7 +60,8 @@ def run_assembled_docker(evidence):
                             limitations='Existing local images, not proof of lane005 packaged network policy or live-provider quality')
         finally:
             network.reload()
-            containers = list(network.attrs.get('Containers', {}))
+            containers = set(network.attrs.get('Containers', {}))
+            containers.update(container.id for container in client.containers.list(all=True, filters={'network': network.name}))
             for container_id in containers:
                 container = client.containers.get(container_id)
                 container.reload()
