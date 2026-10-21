@@ -187,3 +187,98 @@ safe local gates pass. Assembled browser/profile/runtime/viewer behavior and the
 explicitly skipped live checks remain lane006 integration obligations; no live
 service mutation or deployment was performed. All prior commits and the approved
 assistance amendment are preserved.
+
+### Authorized cross-lane human-drain repair and terminal-history maintenance
+
+The integrator authorized two additional focused implementation passes after the
+assembled checkpoint. Work stayed in this isolated lane001 worktree; no other
+lane's implementation or shared-main snapshot was merged.
+
+Commits:
+
+- `efbcd76`: cherry-pick of **only** approved additive port amendment `561383d`.
+  This adds `TaskExecutor.release_human` and the foundation test-isolation/plan000
+  changes. No public JSON or settings changed.
+- `6b7cd3a`: control-owned pause-scoped human-input drain before browser response
+  resolution/wakeup, plus real-control/SQLite and actual API regressions.
+- `6861a90`: bounded managed terminal-history maintenance using the existing
+  `history_retention_days`, plus SQLite/lifecycle/race regressions.
+
+Human-drain behavior and evidence:
+
+- For an unresolved current browser interaction, control validates owner, current
+  waiter, response kind/generation/expiry and pending response-key availability
+  before touching the human writer. It obtains the independently verified execution
+  lease through `assistance_lease` (never through the pause generation).
+- It awaits `executor.release_human(lease, interaction_id, generation)` within
+  `cancellation_seconds`, with no SQLite transaction spanning that browser I/O.
+  Only after release succeeds does repository resolution commit/revoke capabilities,
+  followed by transient waiter delivery. Resolve revalidates pause state and expiry.
+- Failure/timeout is a sanitized retryable unavailable error: no decision receipt,
+  approval, state transition or agent wake is committed. The task stays paused.
+  Invalid/stale/foreign/expired/orphaned responses and conflicting response keys do
+  not drain a legitimate current writer. Already-consumed receipt retries, including
+  retries while a newer pause is active, never release the newer pause.
+- No-viewer resume calls only the release port, never `executor.browser`. The
+  executor port must fence future human acquisition/input, drain active writes and
+  held controls, and be idempotent for the same valid pause; lane002 owns that real
+  implementation. Viewer and ordinary API responses now share this control path.
+- Original red: **3 failed** (blocked human drain was never called; release failure
+  and timeout incorrectly resolved instead of rejecting). New human-release file:
+  **13 passed**, plus an actual HTTP handler regression for blocked drain and duplicate
+  response ordering. Tests use strict frozen executor doubles and real SQLite.
+- Cancellation/response serialization is explicit: cancellation intent first prevents
+  release/resume; a response already draining serializes cancellation behind the
+  bounded drain, with subsequent cancel intent and terminal cleanup still authoritative.
+
+Terminal-history maintenance behavior and evidence:
+
+- One batch at control startup (after recovery), then one batch every **60 seconds**.
+  A private age index selects at most **100 old terminal, unreserved candidates**
+  per transaction. Profile lease/state lookups are indexed and checked in the same
+  write transaction as deletion. An in-memory keyset cursor skips busy profiles
+  across batches, preventing starvation; restart safely starts scanning again.
+- Only expired completed/failed/cancelled/interrupted tasks with `reserved=0` and
+  no active/reserved task on their profile may be removed. Interaction/capability
+  history and response receipts for those tasks are removed atomically. Transaction
+  failure rolls back the entire batch. Live, paused, cancelling, recent-terminal and
+  completed-but-idle-reserved tasks remain untouched.
+- Sessions and immutable profile mappings remain available for explicit follow-up;
+  archives, script memory and profile rows are not removed by maintenance. This is
+  history retention, not profile/account deletion or a browser eviction policy.
+- Admission tombstones remain: account ID, operation/key, request fingerprint and
+  original admission receipt (opaque task/session/profile IDs, canonical status URL
+  and initial revision). No executable task text, input/OTP values or results are
+  added to that minimal dedup metadata. A retry against removed history returns
+  sanitized not_found and **never creates/dispatches another website task**.
+- Tombstones are deliberately not age-expired: admission tombstone disk usage grows
+  with total admissions. Sessions/profile identity records also remain for continuity;
+  this maintenance does **not** promise bounded total database/disk usage. Deleting
+  the database/tombstones would lose the dedup barrier and is not a supported retry
+  preservation strategy.
+- Shutdown closes admission, cancels the periodic loop and drains an in-flight
+  bounded SQLite commit/rollback before returning. Maintenance failures emit a static
+  warning without exception details or secret values; a later tick can retry.
+- Original red: missing private `Repository.prune_history` method. Retention file:
+  **13 passed**, including all terminal states, configured age/batch bounds, protected
+  states, explicit continuity/dedup, admission and release races, rollback on injected
+  deletion failure, indexed age lookup, busy-profile fairness, startup/periodic work,
+  sanitized failure observability and shutdown drain.
+
+Final safe-local verification after both changes:
+
+- Shared-venv interpreter, this worktree's modules/cwd: `python -m pytest -q`:
+  **231 passed, 12 explicit live skips**. This is the isolated lane result, **not**
+  a claim to have rerun the integrator's assembled 360-test checkpoint.
+- Focused human-release, retention, HTTP, assistance, repository, recovery, contract
+  and legacy auth files: **122 passed**.
+- `npm --prefix agent-host test`: **4 passed**.
+- Python compile checks and `git diff --check 0ccc06a..HEAD`: passed.
+- Final verification remained read-only for production code after these commits.
+  Scope review shows only assigned files plus the explicitly approved amendment.
+
+Verdict: **conditionally verified**. No remaining locally observed criterion failure
+or shared-interface conflict. The integrator must assemble lane002's exact new
+release port and rerun viewer/API concurrent-write paths with the real runtime;
+lane006's assembled browser/provider/system checks remain required. No deployment,
+external website transaction, live service mutation, credentials or Harp work occurred.
