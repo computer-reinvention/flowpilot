@@ -157,3 +157,88 @@ retry succeeded with no daemon repair, reset or shared pruning. The trace-retent
 test additionally covers existing `NNNN_function.name.json` traces while preserving
 arbitrary JSON/profile files. The reproducible dependency-audit helper returned the
 same 28 Python / 7 high frontend / 0 agent findings (expected nonzero audit exit).
+
+## New bounded read-only triage checkpoint — 2026-10-21
+
+Integrator explicitly authorized dependency/implementation triage after accepting
+the packaging checkpoint, **not remediation or deployment**. New machine report:
+`scripts/ops_dependency_triage.json`; narrative/action table appended to
+`docs/hosting-readiness.md`. No `pyproject.toml`, `uv.lock`, frontend manifest/lock,
+shared contract or production application file changed. Baseline SHA256 values are
+recorded in the machine report and rechecked against the unchanged checkout.
+
+### Actual dependency evidence and disposable proposals
+
+- Enumerated **all 28 Python advisory IDs/aliases/individual fixed versions** across
+  six exact locked packages; matched every entry against prior sanitized pip-audit
+  output. Verified all recorded dependency paths against `uv.lock` and read installed
+  distribution METADATA in the existing non-secret backend image.
+- **Important correction:** browser-use 0.13.11 pins aiohttp, AnyIO, MCP, Pillow and
+  pypdf exactly; browser-harness 0.1.13 repeats the Pillow pin. A targeted aiohttp
+  3.14.4 lock request failed resolution against that pin. An ordinary lock refresh
+  cannot silently fix those packages without a coordinated metadata override or
+  upstream compatible release. No browser-use upgrade was attempted.
+- Certifi is independently unpinned by HTTPX/HTTPcore/Requests: disposable
+  `uv lock --upgrade-package certifi==2026.10.19` changed **only certifi**. Proposed
+  smallest first shared amendment is **uv.lock only**, not pyproject changes.
+- Disposable five-override experiment (aiohttp 3.14.4, AnyIO 4.14.2, MCP 2.2.0,
+  Pillow 13.0.0, pypdf 6.19.0) plus certifi resolved with uv 0.9.5: **exactly seven
+  changed packages** including mcp-types 2.2.0, none removed, browser-use stayed
+  **0.13.11**. Candidate frozen no-dev export pip-audit returned **0 findings**.
+  This was resolution/advisory triage, **not runtime compatibility testing**; no
+  candidate package replacement occurred in an app environment. Pillow major 13
+  and deliberate upstream-pin bypass require explicit owner acceptance and gates.
+- Seven frontend highs are **one root braces advisory propagated to seven dev
+  package entries**, not seven independent CVEs. All exact versions/parent edges
+  are in the report. Npm registry has braces latest **3.0.3**, still affected;
+  no published 3.0.4 patch override was established. A breaking shadcn 1.0.0
+  downgrade or unreviewed parser alias is not a compatible remediation proposal.
+- **Important correction:** CLI JS is unused by app/build commands, but package
+  CSS is used at `frontend/src/index.css:3`. Removing shadcn alone in a disposable
+  image cleared audit but **failed build** due to the missing CSS import.
+- Preserving the exact 16,340-byte shadcn 4.22.0 stylesheet and redirecting its one
+  import before removing the CLI in a second disposable image: **0 npm findings,
+  build PASS, entire dist byte-identical, all TSX sources byte-identical, runtime
+  dependency map unchanged, zero surviving lock versions changed**, 291 unnecessary
+  lock entries removed. Proposed coordinated frontend files: package.json,
+  package-lock.json, index.css, added shadcn-tailwind.css and verified upstream
+  license/attribution file. No such files were changed in the checkout. Licensing
+  provenance review and merged-lane004 clean build/UI smoke remain prerequisites.
+
+### Corrected missing-app versus proof-only requirements
+
+Read immutable **Git objects**, not peer checkout files: lane002 `c90556f`, lane001
+`efbcd76`; main was `d3301fe` at start. This is evidence at named owner revisions,
+not a claim those revisions are all merged/deployed. Exact file/line references
+and owner actions are in the machine report.
+
+- **Implemented, assembled proof pending:** all four sandbox resource settings
+  reach Docker create; repository global/account reservation caps; terminal browsers
+  close eagerly rather than accumulating in a warm-idle pool; profile turns prune
+  by configured age on open/write and last 100 on write; failed-save prior-archive
+  preservation, byte budget, recovery marker and stopped-container retention;
+  task startup recovery scoped by task-host and profile lock. Legacy orphan cleanup
+  now skips task-labelled containers. Do not reassign these as wholly missing code.
+- **Actual missing implementations:** age-based **control/task DB** terminal history
+  retention (distinct from profile turns); explicit **sandbox Docker log_config**
+  (Compose rotation does not apply); global quarantine age/count/byte retention;
+  bounded in-memory executor `seen` dispatch receipt set. Idle timeout is unused,
+  but eager terminal close is a stricter normal-path resource policy, not proof of
+  an idle-browser leak. Inactive profile turn stores are not continuously swept.
+- **Partial hardening:** task recovery is scoped, but legacy orphan cleanup is still
+  broad and explicit unnecessary capability drops remain absent. Cleanup fixes must
+  preserve lease/generation checks, idempotency and the last recovery source. No
+  generic age-based profile/container janitor was introduced.
+
+### Bounded verification and unchanged blockers
+
+Machine report validation passed: four baseline file hashes unchanged; six Python
+locked versions and all graph paths correct; **28 exact advisory IDs/aliases/fixes**
+match recorded audit; seven exact frontend entries are dev-only. All experiments
+ran in disposable labelled containers with CPU/memory/PID caps, without host mounts,
+secret files, Docker socket, provider calls or daemon/firewall changes. Package and
+advisory registries were read publicly; auditor installed only into disposable tools.
+No candidates were committed to shared manifests/locks. Network bridge conntrack
+**Protocol error remains a readiness blocker**; OS/Chromium inventories remain
+**unverified**, outside the zero-findings candidate package audit. No release or
+hosted-isolation clearance is granted by this triage checkpoint.

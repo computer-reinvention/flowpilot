@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-21",
+  "scope": "Read-only triage; candidate manifest/lock/CSS experiments ran only in discarded container copies. No repository dependency or production application changes.",
+  "baseline": {
+    "lane005_revision": "5d27d2f",
+    "foundation_revision": "0ccc06a",
+    "owner_revisions_reviewed_as_git_objects_not_peer_worktrees": {"lane001": "efbcd76", "lane002": "c90556f", "integration_main_at_start": "d3301fe"},
+    "sha256": {
+      "pyproject.toml": "08d1894fc0396807251ae9a4d3beb65ad7d4b0007cc45cff869c3d37c21d3cf8",
+      "uv.lock": "b2c96e5cff7f155bc1018361ff5cd8f4813843e1b5c8c74d9f1363a11afee2da",
+      "frontend/package.json": "952098b8bcb33fc57361d7952322146e49216cb2fe02c7d01e9c15f55d3989d8",
+      "frontend/package-lock.json": "3dfd95237b6a80b511226a837a0f7d6ef7aa27181d5dac1ea3b4a40fec00dc32"
+    },
+    "audit_tools": {"python": "pip-audit 2.9.0 against frozen production lock export", "frontend": "npm 10.9.4 audit against lock", "node": "22.22.0", "uv": "0.9.5", "target": "Linux/amd64 Python 3.12.12"},
+    "counts": {"python_advisories": 28, "python_packages": 6, "frontend_high_package_findings": 7, "frontend_independent_root_advisories": 1, "agent_production_findings": 0},
+    "limits": ["Advisory listings are not proof every vulnerable API is reachable", "No risk acceptance or dependency remediation authorized", "OS and Chromium advisory inventories remain unverified", "Host network isolation remains blocked by bridge conntrack Protocol error; no host rules or modules changed"]
+  },
+  "python": [
+    {
+      "package": "aiohttp", "locked_version": "3.14.3", "installed_scope": "production runtime transitive", "path": ["flowpilot", "browser-use==0.13.11", "aiohttp==3.14.3"],
+      "constraint_evidence": "Installed browser-use 0.13.11 METADATA Requires-Dist: aiohttp==3.14.3; targeted lock upgrade without override experimentally conflicts.",
+      "reachability": "browser_use/browser/watchdogs/local_browser_watchdog.py:419 imports aiohttp for client transport. Flowpilot serves FastAPI/Uvicorn, not an aiohttp server. Server-only findings below are installed exposure, not demonstrated ingress vulnerabilities; cookie/client findings require review of actual HTTP client use.",
+      "proposal": "Coordinated uv override aiohttp==3.14.4 plus lock regeneration; no browser-use version change. Upstream exact-pin compatibility still requires tests.",
+      "advisories": [
+        {"id": "GHSA-5wr8-gcqf-gqf3", "aliases": ["CVE-2026-111064"], "fixed_version": "3.14.4", "summary": "Unbounded initial idle request time", "exposure": "aiohttp server; no such Flowpilot listener observed"},
+        {"id": "GHSA-2g87-pp6c-29x5", "aliases": [], "fixed_version": "3.14.4", "summary": "Request-driven CPU/memory exhaustion", "exposure": "aiohttp request processing; affected path not demonstrated in app"},
+        {"id": "GHSA-494j-54xm-rwp3", "aliases": ["CVE-2026-111063"], "fixed_version": "3.14.4", "summary": "Shared cookie Secure attribute not enforced", "exposure": "client cookie handling; conditional"},
+        {"id": "GHSA-pqxq-w44r-73xw", "aliases": ["CVE-2026-111750"], "fixed_version": "3.14.4", "summary": "Pure-Python HTTP parser request smuggling", "exposure": "aiohttp Python-parser server configuration; not the Uvicorn ASGI parser"},
+        {"id": "GHSA-9xw5-w5jj-pvcg", "aliases": ["CVE-2026-111066"], "fixed_version": "3.14.4", "summary": "Multipart Request.post file-descriptor exhaustion", "exposure": "aiohttp server Request.post; not observed in app"},
+        {"id": "GHSA-gx76-c99x-2c96", "aliases": ["CVE-2026-111749"], "fixed_version": "3.14.4", "summary": "Subdomain strips Host-Only cookie protection", "exposure": "client cookie handling; conditional"},
+        {"id": "GHSA-6cjc-53gc-5rqm", "aliases": ["CVE-2026-111065"], "fixed_version": "3.14.4", "summary": "Max-Age overflow temporarily exhausts connection pool", "exposure": "client connection/cookie handling; conditional"},
+        {"id": "GHSA-f9xw-jh8m-3mwq", "aliases": ["CVE-2026-111748"], "fixed_version": "3.14.4", "summary": "Absolute-form request spoofs aiohttp Request.scheme", "exposure": "aiohttp server scheme checks; not the ASGI assistance Origin implementation"}
+      ]
+    },
+    {
+      "package": "anyio", "locked_version": "4.12.1", "installed_scope": "production runtime transitive; shared HTTP/ASGI infrastructure",
+      "paths": [["flowpilot", "browser-use==0.13.11", "anyio==4.12.1"], ["flowpilot", "fastapi", "starlette==1.8.0", "anyio"], ["flowpilot", "httpx==0.28.1", "anyio"]],
+      "constraint_evidence": "browser-use pins AnyIO ==4.12.1; Starlette requires AnyIO <5,>=4.0.0; anthropic <5,>=4.1.0; openai <5,>=3.5.0; google-genai <5,>=4.8.0. These other AnyIO requirements permit 4.14.2. browser-use eval extra repeats the old pin.",
+      "reachability": "HTTP client/provider SDK and Starlette paths use AnyIO. No application AnyIO process-pool call was observed; installed pool vulnerability is conditional, not a confirmed active worker path.",
+      "proposal": "Coordinated global override anyio==4.14.2, preserving major 4 and browser-use version. Verify cancellation, HTTP/TLS IDN handling, waits and shutdown.",
+      "advisories": [
+        {"id": "PYSEC-2026-4025", "aliases": ["CVE-2026-63374", "GHSA-82r6-8w77-94w6"], "fixed_version": "4.14.2", "summary": "IDN TLS hostname verification confusion under connection redirection", "exposure": "outgoing TLS; condition-dependent runtime path"},
+        {"id": "PYSEC-2026-4024", "aliases": ["CVE-2026-64847", "GHSA-5p39-cfhj-2xmp"], "fixed_version": "4.14.2", "summary": "Undrained AnyIO process-pool stderr can stall workers", "exposure": "process-pool API; no call observed in app"}
+      ]
+    },
+    {
+      "package": "certifi", "locked_version": "2026.7.22", "installed_scope": "production runtime transitive trust store",
+      "paths": [["flowpilot", "httpx==0.28.1", "certifi"], ["flowpilot", "httpx", "httpcore==1.0.9", "certifi"], ["flowpilot", "docker", "requests==2.33.0", "certifi"]],
+      "constraint_evidence": "httpx/httpcore unbounded certifi requirement; requests requires certifi>=2023.5.7. No exact old pin found.",
+      "reachability": "Shared outgoing TLS trust material. Highest-confidence small independent remediation; no provider call needed to audit lock.",
+      "proposal": "uv.lock ONLY: uv lock --upgrade-package certifi==2026.10.19. Disposable resolver experiment must confirm only certifi changes. Do not hand-edit lock hashes.",
+      "advisories": [{"id": "PYSEC-2026-4320", "aliases": ["GHSA-6q48-6c7w-9gw2"], "fixed_version": "2026.10.19", "summary": "Bundled root trusts revoked compromised CA intermediates", "exposure": "outgoing TLS certificate verification"}]
+    },
+    {
+      "package": "mcp", "locked_version": "2.1.1", "installed_scope": "production runtime transitive but excluded service feature",
+      "path": ["flowpilot", "browser-use==0.13.11", "mcp==2.1.1"],
+      "constraint_evidence": "browser-use Requires-Dist mcp==2.1.1. browser-harness only pins mcp under its unselected mcp extra. Target mcp 2.2.0 requires mcp-types==2.2.0.",
+      "reachability": "browser_use/mcp contains stdio client/server integrations. No backend MCP import or stateful Streamable HTTP listener observed; MCP is explicitly out of service scope. Installed dependency is not proof the vulnerable server is exposed.",
+      "proposal": "Override mcp==2.2.0 (stay on major 2), lock mcp-types 2.1.1->2.2.0 too. Do not downgrade to alternate listed 1.30.0 or delete a required distribution ad hoc.",
+      "advisories": [{"id": "GHSA-84m7-p3x7-pcfv", "aliases": ["CVE-2026-59951"], "fixed_version": "2.2.0", "other_fixed_major": "1.30.0", "summary": "Stateful Streamable HTTP server retains sessions/tasks after closure", "exposure": "MCP HTTP server; no active app listener observed"}]
+    },
+    {
+      "package": "pillow", "locked_version": "12.3.0", "installed_scope": "production runtime transitive native image library",
+      "paths": [["flowpilot", "browser-use==0.13.11", "pillow==12.3.0"], ["flowpilot", "browser-use", "browser-harness==0.1.13", "pillow==12.3.0"], ["flowpilot", "browser-use", "reportlab==4.4.9", "pillow>=9.0.0"]],
+      "constraint_evidence": "Both browser-use and browser-harness pin pillow==12.3.0. A global override must replace both pins. Target 13.0.0 is a major change, not a compatible patch assumption.",
+      "reachability": "Browser-use screenshot/highlight/GIF/video and browser-harness image helpers import PIL and call Image.open. Browser CDP screenshots are normally PNG/JPEG; the specific TIFF/GIF/EPS/PDF/morphology paths below are not all established as attacker-reachable. Installed native decoder risk remains relevant.",
+      "proposal": "Conditional coordinated override pillow==13.0.0 only after image/video/screenshot API and codec compatibility tests. PyPI lists 12.0.0, 12.1.0, 12.1.1, 12.2.0, 12.3.0 as published 12.x releases; no 12.3.1 patch target exists at this check. If 13 is incompatible, request an upstream supported backport or separately reviewed native-wheel backport with provenance; neither is implemented or automatically audit-cleared. Do not pretend this is a patch upgrade.",
+      "advisories": [
+        {"id": "GHSA-p4wg-p73j-c528", "aliases": ["CVE-2026-112895"], "fixed_version": "13.0.0", "summary": "Unbounded PDF append recursive parsing", "exposure": "Image.save PDF append on untrusted existing PDF; not observed"},
+        {"id": "GHSA-65qm-jvmh-6pqg", "aliases": ["CVE-2026-112400"], "fixed_version": "13.0.0", "summary": "GIF seek retains rejected dimensions after decompression-bomb error", "exposure": "specific GIF seek/error recovery; not demonstrated"},
+        {"id": "GHSA-58r4-6rv3-gfh8", "aliases": ["CVE-2026-112397"], "fixed_version": "13.0.0", "summary": "Zero-width PPM/PGM morphology native crash", "exposure": "ImageMorph on malformed image; not observed"},
+        {"id": "GHSA-pchr-8j38-3x4p", "aliases": ["CVE-2026-112896"], "fixed_version": "13.0.0", "summary": "TIFF save with retained malformed metadata reads out of bounds", "exposure": "TIFF decode and re-save; not demonstrated"},
+        {"id": "GHSA-q45j-58j2-45rg", "aliases": ["CVE-2026-112897"], "fixed_version": "13.0.0", "summary": "Short JPEG TIFF strips disclose uninitialized pixel memory", "exposure": "untrusted TIFF decoding; generic image opens exist"},
+        {"id": "GHSA-462x-pgg6-55fp", "aliases": ["CVE-2026-112395"], "fixed_version": "13.0.0", "summary": "Tiled TIFF undersized decoder buffer out-of-bounds read", "exposure": "untrusted TIFF decoding; generic image opens exist"},
+        {"id": "GHSA-c6hw-5grf-ff96", "aliases": ["CVE-2026-112404"], "fixed_version": "13.0.0", "summary": "TIFF tile/RGBA parser disagreement leaks heap pixels or crashes", "exposure": "untrusted TIFF decoding; generic image opens exist"},
+        {"id": "GHSA-vx6w-vv9f-6gvg", "aliases": ["CVE-2026-112899"], "fixed_version": "13.0.0", "summary": "Scaled EPS Ghostscript rendering exceeds image bomb bound", "exposure": "EPS scale>1 with Ghostscript; not observed"}
+      ]
+    },
+    {
+      "package": "pypdf", "locked_version": "6.16.2", "installed_scope": "production runtime transitive document parser", "path": ["flowpilot", "browser-use==0.13.11", "pypdf==6.16.2"],
+      "constraint_evidence": "browser-use exact pin; 6.19.0 stays in major 6 and covers the recorded set, but requires an override or compatible upstream metadata release.",
+      "reachability": "browser_use/filesystem/file_system.py:702-704 imports pypdf and constructs PdfReader when reading PDF files. Untrusted downloaded PDF/text-extraction resource exhaustion is plausible. Page-label, embedded-file and form-flattening APIs are not demonstrated by this call alone.",
+      "proposal": "Coordinated override pypdf==6.19.0; verify PDF extraction, malformed-file resource bounds and cancellation in isolated fixtures.",
+      "advisories": [
+        {"id": "PYSEC-2026-4153", "aliases": ["CVE-2026-102994", "GHSA-5jq2-8x83-x246"], "fixed_version": "6.18.0", "summary": "Long unterminated indirect-object headers cause long parse time", "exposure": "PdfReader parser"},
+        {"id": "PYSEC-2026-4154", "aliases": ["CVE-2026-102995", "GHSA-fp3h-c4fm-7vvf"], "fixed_version": "6.18.1", "summary": "Oversized font ToUnicode mapping memory exhaustion", "exposure": "text extraction"},
+        {"id": "PYSEC-2026-4160", "aliases": ["CVE-2026-103000", "GHSA-w23x-9jrw-r45c"], "fixed_version": "6.19.0", "summary": "Large alphabetical page labels exhaust memory", "exposure": "page-label API, not observed"},
+        {"id": "PYSEC-2026-4159", "aliases": ["CVE-2026-102999", "GHSA-v247-6f48-mgcj"], "fixed_version": "6.19.0", "summary": "Embedded-file dictionary access causes long runtimes", "exposure": "embedded-file API, not observed"},
+        {"id": "PYSEC-2026-4156", "aliases": ["CVE-2026-102997", "GHSA-jw7q-gvrg-4vj3"], "fixed_version": "6.18.1", "summary": "Malformed FlateDecode bytewise decompression causes long runtimes", "exposure": "PDF stream parsing/extraction"},
+        {"id": "PYSEC-2026-4155", "aliases": ["CVE-2026-102996", "GHSA-g9cg-prrw-2r8q"], "fixed_version": "6.18.1", "summary": "Oversized font Widths array memory exhaustion", "exposure": "text extraction"},
+        {"id": "PYSEC-2026-4158", "aliases": ["CVE-2026-102993", "GHSA-qv6h-rv94-w285"], "fixed_version": "6.17.0", "summary": "Large Roman-numeral page labels exhaust memory", "exposure": "page-label API, not observed"},
+        {"id": "PYSEC-2026-4157", "aliases": ["CVE-2026-102998", "GHSA-php9-fj8v-98fj"], "fixed_version": "6.19.0", "summary": "Form flattening appearance generation causes long runtimes", "exposure": "form-write/flatten API, not observed"}
+      ]
+    }
+  ],
+  "frontend": {
+    "root_advisory": "GHSA-vfj7-8cjw-p6xm",
+    "summary": "braces deeply nested pattern stack-exhaustion DoS. Seven npm package findings are one root advisory propagated through dev CLI dependency paths, not seven independent CVEs.",
+    "runtime_exposure": "All seven lock entries have dev=true. CLI/glob/parser JavaScript is not imported by application source or copied as node_modules into the runtime image. shadcn's CSS DOES contribute to runtime CSS through frontend/src/index.css:3; the package is not wholly unused.",
+    "findings": [
+      {"package": "shadcn", "locked_version": "4.22.0", "direct": true, "dev": true, "advisory": "GHSA-vfj7-8cjw-p6xm", "via": ["@shadcn/registry", "fast-glob", "ts-morph"], "fixed_version": null},
+      {"package": "@shadcn/registry", "locked_version": "0.2.0", "direct": false, "dev": true, "advisory": "GHSA-vfj7-8cjw-p6xm", "via": ["fast-glob"], "fixed_version": null},
+      {"package": "ts-morph", "locked_version": "26.0.0", "direct": false, "dev": true, "advisory": "GHSA-vfj7-8cjw-p6xm", "via": ["@ts-morph/common"], "fixed_version": null},
+      {"package": "@ts-morph/common", "locked_version": "0.27.0", "direct": false, "dev": true, "advisory": "GHSA-vfj7-8cjw-p6xm", "via": ["fast-glob"], "fixed_version": null},
+      {"package": "fast-glob", "locked_version": "3.3.3", "direct": false, "dev": true, "advisory": "GHSA-vfj7-8cjw-p6xm", "via": ["micromatch"], "fixed_version": null},
+      {"package": "micromatch", "locked_version": "4.0.8", "direct": false, "dev": true, "advisory": "GHSA-vfj7-8cjw-p6xm", "via": ["braces"], "fixed_version": null},
+      {"package": "braces", "locked_version": "3.0.3", "direct": false, "dev": true, "advisory": "GHSA-vfj7-8cjw-p6xm", "via": [], "fixed_version": null, "affected_range": "<=3.0.3"}
+    ],
+    "registry_evidence": {"braces_latest": "3.0.3", "braces_published_3x": ["3.0.0", "3.0.1", "3.0.2", "3.0.3"], "source": "https://registry.npmjs.org/braces", "consequence": "No published fixed 3.0.4 target established; an override to it is not a valid remediation today. npm suggested shadcn 1.0.0 is a breaking downgrade, not evidence of stylesheet/API compatibility."},
+    "disposable_experiments": [
+      {"change": "Remove dev-only shadcn alone", "audit_findings_after": 0, "build": "FAIL: unresolved shadcn/tailwind.css import", "surviving_lock_versions_changed": 0, "lock_entries_removed": 291, "component_sources_unchanged": true, "conclusion": "Two-manifest-only removal is NOT compatible."},
+      {"change": "Copy exact installed shadcn stylesheet to local CSS, redirect CSS import, remove dev CLI", "audit_findings_after": 0, "build": "PASS", "dist_files_byte_identical": true, "tsx_components_byte_identical": true, "runtime_dependencies_identical": true, "surviving_lock_versions_changed": 0, "lock_entries_removed": 291, "source_css_bytes": 16340, "source_css_sha256": "4c371f7a1ff5d219ae2f7ff28bd256b4346fd546fe46fbae22092e57db2f0fae"}
+    ],
+    "proposed_smallest_behavior_preserving_changes": [
+      {"path": "frontend/package.json", "change": "Remove devDependencies.shadcn only; leave runtime dependency map unchanged."},
+      {"path": "frontend/package-lock.json", "change": "Regenerate by removing shadcn; require no changed surviving versions and review the expected 291 removed lock entries."},
+      {"path": "frontend/src/index.css", "change": "Replace import shadcn/tailwind.css with ./shadcn-tailwind.css only."},
+      {"path": "frontend/src/shadcn-tailwind.css", "change": "Add the byte-identical 16340-byte stylesheet from pinned shadcn 4.22.0; do not copy CLI JS or trim utilities speculatively."},
+      {"path": "frontend/src/shadcn-tailwind.LICENSE", "change": "Preserve verified upstream release licensing/copyright attribution; license provenance review still required before amendment."}
+    ],
+    "verification_after_authorization": ["Clean npm ci with committed candidate lock", "npm audit and npm run build", "Compare complete dist hashes and TSX source hashes", "Check component interaction/animation visual smoke and CLI generation workflow documentation", "Repeat on merged lane004 source, not only foundation source", "No component runtime or browser-use upgrade required"]
+  },
+  "python_remediation": {
+    "certifi_first": {"files": ["uv.lock"], "command": "uv lock --upgrade-package certifi==2026.10.19", "status": "Disposable uv 0.9.5 lock experiment PASS: certifi is the only changed package; no checkout change"},
+    "remaining_five_conditional_override_amendment": {
+      "files": ["pyproject.toml", "uv.lock"],
+      "pyproject_addition": {"tool.uv.override-dependencies": ["aiohttp==3.14.4", "anyio==4.14.2", "mcp==2.2.0", "pillow==13.0.0", "pypdf==6.19.0"]},
+      "observed_candidate_lock_changes": {"aiohttp": ["3.14.3", "3.14.4"], "anyio": ["4.12.1", "4.14.2"], "certifi": ["2026.7.22", "2026.10.19"], "mcp": ["2.1.1", "2.2.0"], "mcp-types": ["2.1.1", "2.2.0"], "pillow": ["12.3.0", "13.0.0"], "pypdf": ["6.16.2", "6.19.0"]},
+      "resolver_experiment": "PASS with uv 0.9.5, zero removed packages, browser-use remains exactly 0.13.11. Targeted aiohttp patch without override failed against upstream exact pin.",
+      "candidate_audit_experiment": "PASS: frozen no-dev export from disposable seven-package candidate audited by pip-audit 2.9.0 with exit 0 and no reported findings. No candidate runtime installation or compatibility proof.",
+      "compatibility": "NOT PROVEN: overrides replace upstream metadata, not merely constrain it; Pillow crosses a major. No production installation or runtime replacement performed.",
+      "target_availability": "PyPI release metadata confirms Python 3.12-compatible targets and Linux/amd64 cp312 wheels for aiohttp/Pillow; others have pure-Python wheels. Does not prove runtime API compatibility.",
+      "verification_after_authorization": ["Require explicit shared dependency amendment", "Regenerate frozen lock; inspect exactly seven changed packages and artifact hashes", "Audit frozen no-dev export again", "Offline full Python and agent tests plus lane006 assembled suite", "Browser-use 0.13.11 imports, replay/repair, observation, cancellation and graceful shutdown", "Pillow PNG/JPEG screenshot annotations, GIF/video helpers and hostile image bounds in isolated fixtures", "pypdf downloaded-document extraction and malformed-PDF CPU/memory/cancellation limits", "MCP import/schema compatibility without exposing a new MCP listener", "Rebuild backend and verify real ASGI/WS limits after transitive changes", "Do not call a successful resolver/audit a compatibility certification"]
+    }
+  },
+  "application_requirement_adjudication": [
+    {"requirement": "Task sandbox memory/CPU/PID/SHM settings consumed", "status": "IMPLEMENTED_AWAITING_ASSEMBLED_ENFORCEMENT_PROOF", "revision": "c90556f", "evidence": ["backend/tasks/runtime.py:136-140 injects create_browser(settings, lease)", "backend/tasks/browser_adapter.py:49-55 passes settings to SandboxManager.start", "backend/sandbox.py:87-90 derives all four Docker resource arguments", "tests/test_task_executor_storage.py:40-54 asserts custom memory/PIDs and no host publication using mocks"], "remaining": "No implementation request to wire these knobs again. Inspect real assembled sandbox cgroups, CPU quota, shm and PIDs with nondefault limits; perform bounded resource-exhaustion tests."},
+    {"requirement": "Global/account admission capacity", "status": "IMPLEMENTED_AWAITING_ASSEMBLED_PROOF", "revision": "efbcd76", "evidence": ["backend/tasks/repository.py:127-137 checks session/profile leases and global/account reserved counts inside admission transaction"], "remaining": "Verify paused browsers, failed cleanup, concurrent admissions and real Docker count agree under load."},
+    {"requirement": "Idle live browser cleanup", "status": "IMPLEMENTED_BY_EAGER_CLOSE_NOT_WARM_IDLE_POOL", "revision": "c90556f", "evidence": ["backend/tasks/executor.py:64 creates per-execution runtime", "backend/tasks/executor.py:108-155 cleanup closes runtime and releases reservation", "backend/tasks/runtime.py:289-293 closes BrowserSession", "backend/repl_sandbox.py:50-83 saves archive and removes successfully saved container"], "remaining": "idle_session_seconds is not consumed, but no terminal warm browser is retained on the normal path. Prove zero normal terminal live containers and durable follow-up restore. Failed cleanup is quarantine, not idle pooling."},
+    {"requirement": "Conversation/profile turn history retention", "status": "IMPLEMENTED_LAZY_PRUNING_AWAITING_PROOF", "revision": "c90556f", "evidence": ["backend/tasks/memory.py:25-31 sets history_retention_days and deletes aged turns on profile open", "backend/tasks/memory.py:50-52 deletes aged turns and retains last 100 on record_turn"], "remaining": "Not missing wholesale. Test cutoff and last-100 bounds under profile lock; inactive unopened profiles are not continuously swept."},
+    {"requirement": "Durable task/control history time retention", "status": "MISSING_IMPLEMENTATION", "revision": "efbcd76", "evidence": ["git grep history_retention_days in this owner's backend finds setting definition only", "backend/tasks/repository.py:342-355 deletes task/interaction/session records only during owned profile deletion, not age-based terminal pruning"], "remaining": "Lane001: transactional terminal-only retention with leases/generations protected; define response/idempotency receipt/tombstone retention so retries never create duplicate website effects. Add exact cutoff, active/reserved exclusion and retry-after-prune tests."},
+    {"requirement": "Sandbox Docker stdout/stderr log rotation", "status": "MISSING_EXPLICIT_RUNTIME_CONFIGURATION", "revision": "c90556f", "evidence": ["backend/sandbox.py:72-93 creates task containers without log_config/log_driver/log_opt", "docker-compose.yml service logging applies only to Compose backend/proxy, not spawned sandboxes", "sandbox/supervisord.conf maxbytes bounds internal files, not Docker stdout/stderr"], "remaining": "Lane002: set docker.types.LogConfig(type='json-file', config={'max-size':'10m','max-file':'3'}) or reviewed equivalent at container creation and inspect actual LogConfig. No host-daemon-default assumption or daemon mutation."},
+    {"requirement": "Failed-save preservation/quarantine", "status": "IMPLEMENTED_PRESERVATION_BUT_MISSING_GLOBAL_RETENTION", "revision": "c90556f", "evidence": ["backend/repl_sandbox.py:61-79 bounds profile archive bytes, replaces only after save, removes failed temporary archive", "backend/repl_sandbox.py:78-81 retains stopped container on failed save", "backend/tasks/runtime.py:295-297 marks recovery-required", "backend/tasks/executor.py:186-207 scopes startup recovery by task-host and profile-key and stops under profile lock", "backend/tasks/executor.py:211-224 supports explicit owned profile deletion", "efbcd76 backend/tasks/repository.py:275-279 releases reservations and marks recovery, so old quarantines are not globally bounded by active-browser cap"], "remaining": "Lane002: bounded total recovery bytes/count and retention/expiry policy with explicit lease/generation checks and safe recovery export/manual decision. Never silently delete only recovery source or previous good archive. No automatic age/count expiry found."},
+    {"requirement": "Executor in-memory dispatch receipt retention", "status": "MISSING_BOUND", "revision": "c90556f", "evidence": ["backend/tasks/executor.py:31 seen=set()", "backend/tasks/executor.py:60-63 records every execution key", "backend/tasks/executor.py:155 removes active but no seen eviction exists"], "remaining": "Lane002: coordinate bounded dedupe with durable terminal/generation fences; verify duplicate dispatch cannot respawn. Do not simply remove dedupe without preserving semantics."},
+    {"requirement": "Trace retention", "status": "IMPLEMENTED_OFFLINE_OPERATOR_TOOL", "revision": "5d27d2f", "evidence": ["scripts/ops_retention.py dry-run/quiesced known-format deletion", "scripts/ops_tests.py covers NNNN_function.name.json and preserves arbitrary profile JSON", "c90556f backend/tasks/executor.py:42-44 rejects hosted startup with raw tracing enabled"], "remaining": "Operator scheduling and disk monitoring remain manual; no need for an unsafe profile/container janitor."},
+    {"requirement": "Sandbox capability hardening and orphan scope", "status": "PARTIAL_IMPLEMENTATION_WITH_EXPLICIT_GAPS", "revision": "c90556f", "evidence": ["backend/sandbox.py:91 sets no-new-privileges; no cap_drop argument", "backend/sandbox.py:246-248 legacy cleanup excludes task-labelled containers", "backend/tasks/executor.py:191-195 scopes task recovery to task-host", "backend/sandbox.py:241-254 still broadly selects legacy flowpilot=sandbox orphans"], "remaining": "Task recovery is no longer wholly unscoped. Add explicit unnecessary capability drops after image smoke; separately scope legacy orphan deletion. Neither source review nor network splitting proves host isolation."}
+  ]
+}
