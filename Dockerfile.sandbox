@@ -9,7 +9,7 @@
 # Chrome for Testing is the same Google build channel Playwright bundles, but pinned to
 # the current Linux stable patch instead of Playwright's pre-stable 156.0.8078.4 snapshot.
 # Bump CHROME_VERSION + CHROME_SHA256 together; the build fails on a hash mismatch.
-FROM python:3.12.15-slim-bookworm@sha256:6a0e06f5ba0b373d051aabd3fffb9b873f27f9a2a3a14bcbe37dee6f0e3bbc70 AS chrome-download
+FROM python:3.12.15-slim-trixie@sha256:cb33f7f771ecec2ef1225cf39b159591a040391bd73e4c01f00fdfc4c47611d2 AS chrome-download
 ARG CHROME_VERSION=156.0.8078.47
 ARG CHROME_SHA256=e6c94490f0b6b337225aeb2d2a5034858516b7017356980ba94f5176d8774a50
 RUN python - <<'EOF'
@@ -28,7 +28,7 @@ with zipfile.ZipFile("/tmp/chrome.zip") as archive:
             os.chmod(path, mode)
 EOF
 
-FROM python:3.12.15-slim-bookworm@sha256:6a0e06f5ba0b373d051aabd3fffb9b873f27f9a2a3a14bcbe37dee6f0e3bbc70
+FROM python:3.12.15-slim-trixie@sha256:cb33f7f771ecec2ef1225cf39b159591a040391bd73e4c01f00fdfc4c47611d2
 ARG REVISION=unknown
 LABEL org.opencontainers.image.revision=$REVISION
 
@@ -37,9 +37,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
     RESOLUTION=1920x1080x24
 
 # ── System dependencies ──────────────────────────────────────────────
-# `apt-get upgrade` stays within the pinned bookworm suite (point + security updates);
-# it never changes release. curl and Debian's supervisor (which drags in a second,
-# python3.11, interpreter) are intentionally absent: health checks use Python.
+# `apt-get upgrade` stays within the pinned trixie (Debian 13) suite (point + security
+# updates); it never changes release. Intentionally absent: curl (health checks use
+# Python), Debian's supervisor (drags in a second Python interpreter), and the unused
+# x11-utils debugging tools.
 RUN apt-get update && apt-get upgrade -y --no-install-recommends && apt-get install -y --no-install-recommends \
     # Virtual framebuffer (Chromium still needs a display for proper rendering)
     xvfb \
@@ -47,7 +48,8 @@ RUN apt-get update && apt-get upgrade -y --no-install-recommends && apt-get inst
     socat \
     # Utilities
     procps \
-    x11-utils \
+    # Provides the dbus-session-bus virtual; without it apt satisfies that with
+    # dbus-user-session, which pulls in full systemd (+4 HIGH findings, no benefit).
     dbus-x11 \
     # Fonts (Chromium needs at least one font family)
     fonts-liberation \
@@ -55,18 +57,18 @@ RUN apt-get update && apt-get upgrade -y --no-install-recommends && apt-get inst
     fonts-dejavu-core \
     # Libraries Chromium needs
     libnss3 \
-    libatk-bridge2.0-0 \
+    libatk-bridge2.0-0t64 \
     libdrm2 \
     libxcomposite1 \
     libxdamage1 \
     libxrandr2 \
     libgbm1 \
-    libasound2 \
+    libasound2t64 \
     libpango-1.0-0 \
     libcairo2 \
-    libcups2 \
+    libcups2t64 \
     libxkbcommon0 \
-    libgtk-3-0 \
+    libgtk-3-0t64 \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Process manager + Chromium system libraries ──────────────────────
