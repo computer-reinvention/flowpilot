@@ -58,6 +58,9 @@ def test_bind_reports_missing_invalid_and_unknown_without_values():
     with pytest.raises(ReflexInputError):
         bind_inputs('x', FIELDS, ['not', 'an', 'object'], {})
     with pytest.raises(ReflexInputError):
+        bind_inputs('x', FIELDS, 'not json', {})
+    assert bind_inputs('x', None, '{"q": "a"}', {}) == {'q': 'a'}
+    with pytest.raises(ReflexInputError):
         bind_inputs('x', None, {'big': 'v' * 40000}, {})
 
 
@@ -104,11 +107,13 @@ async def test_pi_input_error_returns_typed_result_without_running(monkeypatch):
         results.append(await dispatch('run_reflex', {'name': 'search', 'inputs': {
             'origin': 'Berlin', 'destination': 'London', 'date': '2026-11-02'}}))
         results.append(await dispatch('run_reflex', {'name': 'legacy'}))
+        results.append(await dispatch('run_reflex', {'name': 'legacy', 'inputs': 'not json'}))
         await dispatch('complete', {'verify': 'async()=>true', 'summary': 'ok'})
     monkeypatch.setattr(runner, '_execute_reflex', AsyncMock(return_value=(True, 'true')))
     monkeypatch.setattr(pi_browser, 'run_pi', agent)
     await pi_browser.drive_browser(_browser(), 't', {}, '', SimpleNamespace(checkpoint=AsyncMock()), None, run_reflex, None)
     assert results[0]['error_code'] == 'invalid_input' and results[0]['missing'] == ['destination', 'date']
+    assert results[-1]['error_code'] == 'invalid_input'
     # Callbacks receive the raw call inputs as keywords; the callback rebinds them.
     assert calls == [('search', {'origin': 'Berlin', 'destination': 'London', 'date': '2026-11-02'}),
                      ('legacy', None)]

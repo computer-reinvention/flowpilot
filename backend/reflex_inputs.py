@@ -184,6 +184,11 @@ def bind_inputs(reflex, fields, call_inputs, task_inputs):
     task_inputs = task_inputs or {}
     if call_inputs is None:
         call_inputs = {}
+    if isinstance(call_inputs, str):  # some models serialize object arguments
+        try:
+            call_inputs = json.loads(call_inputs) if call_inputs.strip() else {}
+        except ValueError:
+            pass
     if not isinstance(call_inputs, dict):
         raise ReflexInputError(reflex, 'inputs must be an object keyed by input name', parameters=fields)
     try:

@@ -25,7 +25,7 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
     from .observation import ObservationPolicy, ProgressGuard, action_observation, create_observation
     from .task_contracts import ErrorCode, TaskFault, task_error
     from .task_settings import TaskSettings
-    from .reflex_inputs import CALL_SCHEMA, FIELDS_SCHEMA, ReflexInputError
+    from .reflex_inputs import CALL_SCHEMA, FIELDS_SCHEMA, ReflexInputError, bind_inputs
     if bind_reflex_inputs is None:
         bind_reflex_inputs = getattr(run_reflex, 'bind_inputs', None)
     # Preserve the historical duck-typed test/client seam; real local Browser
@@ -199,13 +199,14 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                 # Input binding precedes freshness/no-progress guards: a rejected
                 # call never entered the script, so it consumes no attempt and
                 # must never be treated as a broken script needing repair.
-                if bind_reflex_inputs is not None:
-                    try:
-                        bound = await bind_reflex_inputs(args['name'], args.get('inputs'))
-                    except ReflexInputError as exc:
-                        return exc.payload()
-                else:
-                    bound = args.get('inputs') or {}
+                try:
+                    if args.get('inputs') is not None:
+                        # Parse/size-bound only; the callback owns the schema.
+                        args = {**args, 'inputs': bind_inputs(args['name'], None, args['inputs'], {})}
+                    bound = (await bind_reflex_inputs(args['name'], args.get('inputs'))
+                             if bind_reflex_inputs is not None else args.get('inputs') or {})
+                except ReflexInputError as exc:
+                    return exc.payload()
                 # Same stage + same effective inputs is the same action; a
                 # different input set is a distinct action.
                 action_args = {'name': args['name'], 'inputs': bound}
