@@ -69,9 +69,14 @@ class BrowserSession:
     """
     def __init__(self, user, state_dir=Path('.repl-state'), headless=True, human_help=None, verbose=True,
                  on_handoff=None, on_question=None, browser_mode='sandbox', *,
-                 handoff_factory=None, sandbox_factory=None, browser_factory=None, observation_policy=None):
+                 handoff_factory=None, sandbox_factory=None, browser_factory=None, observation_policy=None,
+                 store=None, hosted=False):
         self.user = user
-        self.store = UserStore(Path(state_dir), user)
+        self.store = store if store is not None else UserStore(Path(state_dir), user)
+        self.hosted = hosted
+        if hosted and (handoff_factory is None or on_question is None or observation_policy is None):
+            self.store.close()
+            raise ValueError('Hosted sessions require interaction and observation ports')
         self.headless = headless
         self.human_callback = human_help
         self.verbose = verbose
@@ -255,6 +260,8 @@ class BrowserSession:
                 question = {'kind': kind, 'message': reason, 'fields': fields or []}
                 if self.on_question:
                     return await self.on_question(question)
+                if self.hosted:
+                    raise RuntimeError('Hosted execution cannot read stdin')
                 print(f'\nagent> {reason}', flush=True)
                 if kind == 'confirmation':
                     while True:
@@ -331,9 +338,12 @@ class BrowserSession:
             metrics['wall_seconds'] = round(time.monotonic() - started, 2)
             metrics['agent_seconds'] = round(metrics['wall_seconds'] - metrics['human_seconds'], 2)
             metrics['human_seconds'] = round(metrics['human_seconds'], 2)
-            self.store.db.execute('INSERT INTO turns(task,inputs,result,metrics) VALUES(?,?,?,?)',
-                                 (request, stored_inputs, result or error, json.dumps(metrics)))
-            self.store.db.commit()
+            if hasattr(self.store, 'record_turn'):
+                self.store.record_turn(request, inputs, result or error, metrics)
+            else:
+                self.store.db.execute('INSERT INTO turns(task,inputs,result,metrics) VALUES(?,?,?,?)',
+                                     (request, stored_inputs, result or error, json.dumps(metrics)))
+                self.store.db.commit()
         return return_value
 
 
