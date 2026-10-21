@@ -32,7 +32,7 @@ class Site:
             return dict(db.execute("SELECT action, COUNT(*) FROM effects GROUP BY action"))
 
     def effect(self, action):
-        assert action in {"login", "prerequisite", "cart", "submit", "drag", "frame", "input"}
+        assert action in {"login", "prerequisite", "cart", "submit", "drag", "frame", "input", "agent"}
         with sqlite3.connect(self.database) as db:
             db.execute("INSERT INTO effects(action) VALUES (?)", (action,))
         self.after_effect.set()
@@ -43,6 +43,7 @@ class Site:
 <button id='prerequisite'>Complete prerequisite</button>
 <button id='{self.selector}' data-action='cart'>Add synthetic item</button>
 <button id='submit'>Confirm synthetic submission</button>
+<button id='agent'>Agent continuation marker</button>
 <button id='delay'>Delayed update</button><div id='state'>initial</div>
 <div id='drag' draggable='true'>Drag me</div><div id='drop'>Drop here</div>
 <a id='navigate' href='/next'>Next page</a><iframe src='{self.frame_url}/frame'></iframe>
@@ -56,6 +57,7 @@ document.querySelector('#login').onclick = async () => {{
 document.querySelector('#prerequisite').onclick = () => effect('prerequisite');
 document.querySelector('[data-action=cart]').onclick = () => effect('cart');
 document.querySelector('#submit').onclick = () => effect('submit');
+document.querySelector('#agent').onclick = () => effect('agent');
 document.querySelector('#delay').onclick = () => setTimeout(() => {{
   document.querySelector('#state').textContent = 'settled';
   const b = document.createElement('button'); b.id='late'; b.textContent='Late action';

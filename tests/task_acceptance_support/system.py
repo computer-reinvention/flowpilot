@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from .client import Client
 from .assistance import public_assistance_targets
-from .wire import PREFIX, admission, ordinary_safe, view
+from .wire import PREFIX, admission, no_store, ordinary_safe, view
 
 
 def onboard(base, label):
@@ -17,16 +17,54 @@ def onboard(base, label):
     signup = anonymous.request("POST", "/api/auth/signup", {
         "email": email, "password": password, "name": label})
     assert signup.status == 200 and signup.body["token"]
+    no_store(signup.headers)
     login = anonymous.request("POST", "/api/auth/login", {"email": email, "password": password})
     assert login.status == 200 and login.body["token"]
+    no_store(login.headers)
     dashboard = Client(base, login.body["token"])
     created = dashboard.request("POST", "/api/v1/api-keys", {"name": label})
     assert created.status in {200, 201} and created.body["key"].startswith("fp_live_")
+    no_store(created.headers)
     listed = dashboard.request("GET", "/api/v1/api-keys")
     assert listed.status == 200
+    no_store(listed.headers)
     assert created.body["key"] not in json.dumps(listed.body)
     assert all("key" not in item and "key_hash" not in item for item in listed.body)
     return Client(base, created.body["key"]), dashboard, created.body["id"]
+
+
+def same_account_key_scope(owner, dashboard, foreign, profile_ids, run_id):
+    """Keys share account authority; neither key implicitly selects a profile."""
+    created = dashboard.request('POST', '/api/v1/api-keys', {'name': run_id + ':second-key'})
+    assert created.status in {200, 201}
+    no_store(created.headers)
+    second = Client(owner.base_url, created.body['key'])
+    try:
+        listing = second.request('GET', PREFIX + '/profiles')
+        assert listing.status == 200
+        assert set(profile_ids).issubset(item['profile_id'] for item in listing.body['items'])
+        # An idempotency receipt belongs to the account/operation/key, not API key.
+        request = {'label': run_id + ':shared-authority', 'idempotency_key': run_id + ':shared-profile'}
+        first_receipt = owner.request('POST', PREFIX + '/profiles', request)
+        second_receipt = second.request('POST', PREFIX + '/profiles', request)
+        assert first_receipt.status == second_receipt.status == 201
+        assert first_receipt.body == second_receipt.body
+        shared_id = first_receipt.body['profile_id']
+        assert shared_id not in profile_ids
+        foreign.expect_error('DELETE', PREFIX + '/profiles/' + shared_id, None, 'not_found')
+        # Same-account second key can delete an unleased profile created by first.
+        assert second.request('DELETE', PREFIX + '/profiles/' + shared_id).status == 204
+        remaining = owner.request('GET', PREFIX + '/profiles')
+        assert remaining.status == 200
+        assert set(profile_ids).issubset(item['profile_id'] for item in remaining.body['items'])
+        assert shared_id not in {item['profile_id'] for item in remaining.body['items']}
+        return {'same_account_keys': 2, 'distinct_preserved_profiles': len(profile_ids),
+                'limitations': 'HTTP authority/explicit profile namespace only; website cookie/script/history separation is a different gate'}
+    finally:
+        revoked = dashboard.request('DELETE', '/api/v1/api-keys/' + created.body['id'])
+        assert revoked.status == 200
+        no_store(revoked.headers)
+        second.expect_error('GET', PREFIX + '/profiles', None, 'unauthenticated')
 
 
 def profiles(client, label):
@@ -184,6 +222,8 @@ def run_service(evidence, base, site, allow_tasks=False):
     if not evidence.check("explicit_profiles", create_profiles):
         return
     evidence.check("auth_ownership", lambda: ownership(base, owner, foreign, created_profiles))
+    evidence.check('same_account_key_scope', lambda: same_account_key_scope(owner, dashboard, foreign, created_profiles, evidence.run_id),
+                   'same_account_key_scope')
     evidence.check("http_retry_followup", lambda: retry_followup(base, owner, foreign, created_profiles[0], site, evidence.run_id),
                    "http_retry_followup")
     evidence.check("questions_decline_http", lambda: interaction_boundaries(owner, foreign, created_profiles[1], evidence.run_id, site))
@@ -196,7 +236,8 @@ def run_service(evidence, base, site, allow_tasks=False):
     def revoke():
         response = dashboard.request("DELETE", "/api/v1/api-keys/" + key_id)
         assert response.status == 200
+        no_store(response.headers)
         owner.expect_error("GET", f"{PREFIX}/profiles", None, "unauthenticated")
-    evidence.check("revocation", revoke)
+    evidence.check("revocation", revoke, 'auth_key_no_store')
     # Account data are confined to the explicitly disposable service. Never purge a DB.
     # Leased profiles cannot be deleted until the owning executor has stopped.

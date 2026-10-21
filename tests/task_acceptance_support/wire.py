@@ -30,6 +30,12 @@ def identifier(value):
     assert isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,128}", value)
 
 
+def no_store(headers):
+    fields = {name.lower(): value for name, value in headers.items()}
+    directives = {item.strip().lower() for item in fields.get('cache-control', '').split(',')}
+    assert 'no-store' in directives, 'credential-bearing response is cacheable'
+
+
 def admission(body):
     for key in ("task_id", "session_id", "profile_id"):
         identifier(body[key])

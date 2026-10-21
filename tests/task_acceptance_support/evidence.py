@@ -11,6 +11,8 @@ from .wire import ROOT
 # No item defaults to passed. Remaining requirements survive partial invocations.
 REQUIREMENTS = {
     "onboarding_http": "001/004: signup/login, ordinary API-key client and once-only disclosure",
+    "auth_key_no_store": "001 repair: signup/login/key creation/list/revocation responses declare Cache-Control no-store",
+    "same_account_key_scope": "001: same-account keys share authority/idempotency; profiles remain explicit distinct namespaces, not key-scoped identities",
     "auth_ownership": "001: invalid/forged identity, foreign tasks/profiles and revoked keys",
     "http_retry_followup": "001/002: concurrent admission, conflict, fresh-client reattach and website counters",
     "profile_website_isolation": "002: two-account/two-profile cookie, storage, scripts and history isolation",
@@ -20,6 +22,10 @@ REQUIREMENTS = {
     "assistance_generation_metadata": "001/002/003 amendment 2201b5a: public mint/state succeeds across distinct pause generations within one execution; no public lease generation",
     "assistance_wallclock_expiry": "003: active capability rejects after actual elapsed TTL, not only cancel/remint",
     "assistance_atomic_commit": "001/003: deterministic resolve/cancel between assistance_lease lookup and save_capability commit rejects stale binding",
+    "direct_api_resume_drain": "001/002/003 amendment 561383d: direct authenticated respond awaits real pause-wide human drain with active stream and owned in-flight input gate before agent effects",
+    "resume_wrong_generation": "001/002: wrong-generation direct response never releases the legitimate active human handle",
+    "resume_release_failure": "001/002: injected release_human failure leaves pause unresolved, capability current and agent effects absent",
+    "resume_release_timeout": "001/002: injected release_human timeout leaves pause unresolved and never wakes agent effects",
     "capacity_paused": "001/002: global/account/session/profile caps count paused/idle browser leases",
     "cancel_fencing": "001/002/003: stop proof, terminal immutability and late callback/input fencing",
     "crash_after_effect": "001/002: owned process kill after website effect, interrupted state and no replay",
