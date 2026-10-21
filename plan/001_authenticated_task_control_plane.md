@@ -36,3 +36,154 @@ Own `backend/tasks/{control,repository,routes,identity,schema}.py`, auth hardeni
 ## Handoff / definition of done
 
 Export the exact control-service/router factories reserved in 000. Provide fixtures with persisted running/paused/interrupted tasks for other streams, route-level evidence and schema upgrade evidence. No browser implementation or deployment is required to finish this stream. Final system compatibility is checked by 006.
+
+## Lane 001 implementation and verification evidence
+
+Branch: `implementation/lane-001`; isolated worktree: `flowpilot-worktrees/lane-001`.
+Foundation: `0ccc06a`. Approved additive assistance amendment `2201b5a` was
+cherry-picked alone as `f6a5750`; no other lane changes were imported.
+
+Implemented:
+
+- Side-effect-free `create_control(settings)` and `create_router(bindings)` exports;
+  bind-before-startup, durable admission, exclusive claim and database-backed polling.
+- Additive/reapplicable SQLite tables, transactional owner/idempotency/session/profile/
+  capacity checks, terminal/revision/lease fencing, cleanup reservations and profile
+  deletion tombstones. Legacy platform schema/data survive reapplication.
+- Existing account/JWT/bcrypt API-key authority, colliding-prefix verification,
+  create-once key disclosure and revocation; bounded/sanitized auth/key handlers,
+  login/account rate limits and hosted configured-secret validation.
+- Transient executable requests and interaction values; durable descriptors and
+  context-bound keyed receipts. Duplicate decisions do not redeliver values;
+  changed decisions conflict, and declined confirmations cannot pass approval checks.
+- Cancellation intent before bounded executor stopping; unknown outcomes become
+  interrupted, never automatically replayed. Caller disconnect cannot strand the
+  commit-to-dispatch or response-to-wakeup windows.
+- Startup interruption/revocation/fencing, cleanup through executor recovery and
+  admission gating during shutdown. Unattested profile recovery is quarantined.
+- `assistance_lease` atomically checks owner, claimed execution lease, current browser
+  pause ID/generation and expiry. `save_capability` repeats validation in its commit;
+  execution and pause generations remain distinct, with no lease data in TaskView.
+
+Dedicated evidence:
+
+- `tests/test_task_control_repository.py`: temporary SQLite admission/claim races,
+  legacy upgrade/reapplication, side-effect-free factories, profile reuse and recovery.
+- `tests/test_task_control_http.py`: actual handlers + SQLite, and a fresh loopback TCP
+  client against uvicorn for signup/key/admission/poll/cancel. Includes owner isolation,
+  retries, key revocation/collisions, capacity, profiles/deletion, transient OTP canaries,
+  confirmation approval/decline, cancellation races, bounded polling, disconnect,
+  failure sanitization, secret configuration and shutdown gating.
+- `tests/test_task_control_recovery.py`: kills subprocesses at queued/running/paused
+  durable checkpoints; verifies interruption, fencing and zero automatic redispatch.
+  Exports `persisted_control_plane_fixture(root)` for synthetic persisted
+  running/paused/interrupted integration state without editing foundation fixtures.
+- `tests/test_task_control_assistance.py`: real SQLite lookup ownership/expiry,
+  distinct execution/pause generations, mint revalidation after cancel/resolve/restart,
+  concurrent mint/mutation commits and capability rotation.
+
+Verified commands, with this worktree as cwd:
+
+- `/Users/pgwork/Desktop/code/flowpilot/.venv/bin/python -m pytest -q`:
+  **200 passed, 12 explicit live skips**.
+- Same interpreter, `-m pytest tests/test_task_control_repository.py
+  tests/test_task_control_http.py tests/test_task_control_recovery.py
+  tests/test_task_control_assistance.py -q`: **29 passed**.
+- `npm ci --prefix agent-host`: installed worktree-local dependencies; zero audit
+  vulnerabilities. No lockfile/dependency changes.
+- `npm --prefix agent-host test`: **4 passed**.
+- Python compileall, `git diff --check 0ccc06a..HEAD`, and structural port parameter
+  inventory/module-path checks: passed; production modules came from this worktree.
+- Original red: repository test failed with missing `backend.tasks.repository` before
+  implementation. Legacy short-password response regression found by the broad gate
+  was corrected while still in implementation; original auth tests now pass.
+
+### Original adversarial audit: failed criterion, subsequently repaired below
+
+**Criterion:** foreign/missing object IDs use `not_found`, not a different envelope.
+
+**Reproduction:** admit a task for account A; create a profile for account B; admit
+another request as A with A's valid session ID and B's profile ID. The same issue
+applies to an arbitrary nonexistent profile ID paired with the owned session.
+
+**Expected:** `not_found` (HTTP 404).
+
+**Observed:** `conflict` (HTTP 409). No profile/site/task details are disclosed, but
+the error precedence does not satisfy the frozen foreign-object policy.
+
+**Owning seam and proposed correction:** `Repository.admit` compares an explicitly
+supplied profile ID with the owned session's profile before resolving ownership of
+the supplied profile. Resolve any explicit profile via `_profile(db, principal,
+profile_id)` first, then compare two owned IDs and return conflict only for an
+owned-but-incompatible pair. Add HTTP/SQLite foreign-and-missing pair regression
+cases. No shared-contract amendment is required.
+
+The independent-verification workflow forbids silently repairing a discovered
+failure. This criterion was left open until the integrator separately authorized
+the focused repair pass recorded below. The original passing automated checks did
+not supersede this observed failure.
+
+### Integration boundaries and remaining risks
+
+- Executor must terminally settle before releasing a browser reservation. Completed
+  idle browsers remain counted until `release_browser`; executor owns idle eviction.
+- During `recover`, an executor may attest a safely saved profile through
+  `control.release_browser(lease, profile_saved=True)`. Control quarantines only leases
+  not already released; duplicate old releases cannot quarantine a reused profile.
+- Browser storage/script/context isolation, actual provider/browser shutdown and
+  private viewer transport remain peer-owned and require assembled lane006 checks.
+- No real browser/provider credentials, external website effects, deployment,
+  cloud/live mutation, Harp edits, merges or parent-session moves were performed.
+- Original lane verdict before repair: **failed final audit on the single
+  error-precedence criterion above** despite passing automated local gates.
+
+### Authorized focused repairs and final read-only verification
+
+The integrator explicitly authorized a new implementation pass for the paired-ID
+ownership defect, and separately authorized closing legacy auth/key response cache
+gaps. No unrelated production repair or shared-contract change was made.
+
+- `daa5503` — `Repository.admit` ownership-resolves explicit `profile_id` inside
+  the admission transaction before comparing it to an owned session's profile.
+  Foreign and missing IDs now produce byte-identical sanitized HTTP 404 envelopes;
+  two owned incompatible objects still conflict, and a valid matching pair succeeds.
+- `d700ebf` — scoped `auth.SensitiveRoute` preserves existing `no-store` success/
+  validation handling and adds it to HTTP errors, early body/rate-limit errors and
+  sanitized internal errors. Existing status and Retry-After headers are preserved.
+  No frontend, task bootstrap or broad middleware change was needed.
+
+Regression evidence:
+
+- Before the ownership fix: both SQLite parameterizations (busy and settled owned
+  sessions) and the actual HTTP route regression failed with conflict instead of
+  not_found: **3 failed**. After the fix: **3 passed**.
+- Rejected foreign/missing/incompatible admissions leave complete SQLite dumps and
+  transient request maps unchanged: no capacity reservation, idempotency binding,
+  profile generation/lease mutation or new session. The same rejected request key
+  can subsequently admit a valid matching pair exactly once.
+- Before the cache fix: the route regression confirmed signup/login/me/key-create/
+  list/revoke success responses were already no-store, then failed on unauthenticated
+  `/api/auth/me` lacking the header. After repair, coverage includes 200, 400, 401,
+  404, 409, 422, 429 and sanitized 500 responses, including early bounds failures.
+  Key metadata lists contain neither the raw key nor its hash; credential/error
+  canaries are absent from error bodies and captured logs.
+
+Final commands (same isolated worktree and shared virtualenv interpreter):
+
+- `python -m pytest tests/test_task_control_repository.py
+  tests/test_task_control_http.py tests/test_task_control_recovery.py
+  tests/test_task_control_assistance.py tests/test_auth.py -q`:
+  **41 passed** (33 lane tests plus 8 legacy auth tests).
+- `python -m pytest -q`: **204 passed, 12 explicit live skips**.
+- `python -m compileall -q backend/tasks backend/auth.py backend/main.py`:
+  passed.
+- `git diff --check 0ccc06a..HEAD`: passed.
+- Read-only final review of both production commit diffs and changed-path inventory:
+  only the named auth and repository repairs, dedicated tests and this plan's
+  evidence were changed. No newly observed failing criterion or frozen-port conflict.
+
+Final verdict: **conditionally verified**. The named defects are repaired and all
+safe local gates pass. Assembled browser/profile/runtime/viewer behavior and the
+explicitly skipped live checks remain lane006 integration obligations; no live
+service mutation or deployment was performed. All prior commits and the approved
+assistance amendment are preserved.
