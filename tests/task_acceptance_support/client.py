@@ -39,7 +39,7 @@ class Client:
         self.timeout = timeout
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
 
-    def request(self, method, path, body=None, headers=None):
+    def request(self, method, path, body=None, headers=None, raw=False):
         assert path.startswith("/") and not path.startswith("//") and "://" not in path
         fields = {"Accept": "application/json"}
         if self.token:
@@ -56,7 +56,7 @@ class Client:
         with response:
             data = response.read(262145)
             assert len(data) <= 262144, "response exceeds harness bound"
-            return Reply(response.status, json.loads(data) if data else None, dict(response.headers))
+            return Reply(response.status, data if raw else json.loads(data) if data else None, dict(response.headers))
 
     def start(self, body):
         reply = self.request("POST", PREFIX, body)

@@ -5,6 +5,8 @@ the fixture and the actual browser; it cannot satisfy integrated service gates.
 """
 
 import json
+import os
+import re
 import sqlite3
 import threading
 import uuid
@@ -32,20 +34,22 @@ class Site:
             return dict(db.execute("SELECT action, COUNT(*) FROM effects GROUP BY action"))
 
     def effect(self, action):
-        assert action in {"login", "prerequisite", "cart", "submit", "drag", "frame", "input"}
+        assert action in {"login", "prerequisite", "cart", "submit", "drag", "frame", "input", "agent"}
         with sqlite3.connect(self.database) as db:
             db.execute("INSERT INTO effects(action) VALUES (?)", (action,))
         self.after_effect.set()
 
-    def page(self):
+    def page(self, volatile=False, frames=False):
         return f"""<!doctype html><title>Synthetic acceptance site</title>
 <label>Name<input id='name'></label><button id='login'>Sign in</button>
 <button id='prerequisite'>Complete prerequisite</button>
 <button id='{self.selector}' data-action='cart'>Add synthetic item</button>
 <button id='submit'>Confirm synthetic submission</button>
+<button id='agent'>Agent continuation marker</button>
+{('<output data-result id="volatile-tick">0</output>') if volatile else ''}
 <button id='delay'>Delayed update</button><div id='state'>initial</div>
 <div id='drag' draggable='true'>Drag me</div><div id='drop'>Drop here</div>
-<a id='navigate' href='/next'>Next page</a><iframe src='{self.frame_url}/frame'></iframe>
+<a id='navigate' href='/next'>Next page</a>{f"<iframe src='{self.frame_url}/frame'></iframe>" if frames else ''}
 <script>
 const effect = async action => {{ await fetch('/effects', {{method:'POST',body:JSON.stringify({{action}})}}); }};
 document.querySelector('#login').onclick = async () => {{
@@ -56,6 +60,7 @@ document.querySelector('#login').onclick = async () => {{
 document.querySelector('#prerequisite').onclick = () => effect('prerequisite');
 document.querySelector('[data-action=cart]').onclick = () => effect('cart');
 document.querySelector('#submit').onclick = () => effect('submit');
+document.querySelector('#agent').onclick = () => effect('agent');
 document.querySelector('#delay').onclick = () => setTimeout(() => {{
   document.querySelector('#state').textContent = 'settled';
   const b = document.createElement('button'); b.id='late'; b.textContent='Late action';
@@ -65,13 +70,18 @@ document.querySelector('#name').onchange = () => effect('input');
 document.querySelector('#drag').ondragstart = e => e.dataTransfer.setData('text/plain','fixture');
 document.querySelector('#drop').ondragover = e => e.preventDefault();
 document.querySelector('#drop').ondrop = e => {{e.preventDefault(); effect('drag');}};
-setInterval(() => document.body.dataset.volatile = String(Date.now()), 30);
+if ({str(volatile).lower()}) setInterval(() => {{ document.body.dataset.volatile = String(Date.now());
+  document.querySelector('#volatile-tick').textContent = String(Date.now()); }}, 30);
 </script>"""
 
 
 @contextmanager
-def synthetic_site(directory, browser_host='127.0.0.1'):
-    assert browser_host in {'127.0.0.1', 'localhost', 'host.docker.internal'}
+def synthetic_site(directory, browser_host='127.0.0.1', listen_host='127.0.0.1'):
+    run = os.environ.get('TASK_ACCEPTANCE_RUN_ID', '')
+    disposable_container = (re.fullmatch(r'task-acceptance-[a-f0-9]+', run)
+                            and browser_host == run + '-backend')
+    assert browser_host in {'127.0.0.1', 'localhost', 'host.docker.internal'} or disposable_container
+    assert listen_host == '127.0.0.1' or (listen_host == '0.0.0.0' and disposable_container)
     site = Site(directory)
 
     class Handler(BaseHTTPRequestHandler):
@@ -90,8 +100,8 @@ def synthetic_site(directory, browser_host='127.0.0.1'):
                 pass  # Expected at the effect/result fault boundary.
 
         def do_GET(self):
-            if self.path in {"/", "/next"}:
-                self.send(200, site.page().encode(), "text/html")
+            if self.path in {"/", "/next", "/volatile", "/frames"}:
+                self.send(200, site.page(volatile=self.path == '/volatile', frames=self.path == '/frames').encode(), "text/html")
             elif self.path == "/frame":
                 self.send(200, b"<button id='frame' onclick=\"fetch('/effects',{method:'POST',body:JSON.stringify({action:'frame'})})\">Frame effect</button>", "text/html")
             elif self.path == "/counters":
@@ -111,7 +121,7 @@ def synthetic_site(directory, browser_host='127.0.0.1'):
                 site.release_response.wait(5)
             self.send(200, b'{"accepted":true}', "application/json")
 
-    servers = [ThreadingHTTPServer(("127.0.0.1", 0), Handler) for _ in range(2)]
+    servers = [ThreadingHTTPServer((listen_host, 0), Handler) for _ in range(2)]
     site.url = f"http://127.0.0.1:{servers[0].server_port}"
     site.browser_url = f"http://{browser_host}:{servers[0].server_port}"
     site.frame_url = f"http://{browser_host}:{servers[1].server_port}"

@@ -50,7 +50,7 @@ def test_real_browser_selector_delay_frame_drag_keyboard_and_counters(tmp_path):
     with synthetic_site(tmp_path) as site, sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         page = browser.new_page()
-        page.goto(site.url)
+        page.goto(site.url + '/frames')
         page.locator('#prerequisite').click()
         eventually_count(site, 'prerequisite', 1)
         old = page.query_selector('#add-original')

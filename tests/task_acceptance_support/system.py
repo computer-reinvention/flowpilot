@@ -4,10 +4,11 @@ import json
 import secrets
 import urllib.error
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 
 from .client import Client
 from .assistance import public_assistance_targets
-from .wire import PREFIX, admission, ordinary_safe, view
+from .wire import PREFIX, admission, no_store, ordinary_safe, view
 
 
 def onboard(base, label):
@@ -17,16 +18,54 @@ def onboard(base, label):
     signup = anonymous.request("POST", "/api/auth/signup", {
         "email": email, "password": password, "name": label})
     assert signup.status == 200 and signup.body["token"]
+    no_store(signup.headers)
     login = anonymous.request("POST", "/api/auth/login", {"email": email, "password": password})
     assert login.status == 200 and login.body["token"]
+    no_store(login.headers)
     dashboard = Client(base, login.body["token"])
     created = dashboard.request("POST", "/api/v1/api-keys", {"name": label})
     assert created.status in {200, 201} and created.body["key"].startswith("fp_live_")
+    no_store(created.headers)
     listed = dashboard.request("GET", "/api/v1/api-keys")
     assert listed.status == 200
+    no_store(listed.headers)
     assert created.body["key"] not in json.dumps(listed.body)
     assert all("key" not in item and "key_hash" not in item for item in listed.body)
     return Client(base, created.body["key"]), dashboard, created.body["id"]
+
+
+def same_account_key_scope(owner, dashboard, foreign, profile_ids, run_id):
+    """Keys share account authority; neither key implicitly selects a profile."""
+    created = dashboard.request('POST', '/api/v1/api-keys', {'name': run_id + ':second-key'})
+    assert created.status in {200, 201}
+    no_store(created.headers)
+    second = Client(owner.base_url, created.body['key'])
+    try:
+        listing = second.request('GET', PREFIX + '/profiles')
+        assert listing.status == 200
+        assert set(profile_ids).issubset(item['profile_id'] for item in listing.body['items'])
+        # An idempotency receipt belongs to the account/operation/key, not API key.
+        request = {'label': run_id + ':shared-authority', 'idempotency_key': run_id + ':shared-profile'}
+        first_receipt = owner.request('POST', PREFIX + '/profiles', request)
+        second_receipt = second.request('POST', PREFIX + '/profiles', request)
+        assert first_receipt.status == second_receipt.status == 201
+        assert first_receipt.body == second_receipt.body
+        shared_id = first_receipt.body['profile_id']
+        assert shared_id not in profile_ids
+        foreign.expect_error('DELETE', PREFIX + '/profiles/' + shared_id, None, 'not_found')
+        # Same-account second key can delete an unleased profile created by first.
+        assert second.request('DELETE', PREFIX + '/profiles/' + shared_id).status == 204
+        remaining = owner.request('GET', PREFIX + '/profiles')
+        assert remaining.status == 200
+        assert set(profile_ids).issubset(item['profile_id'] for item in remaining.body['items'])
+        assert shared_id not in {item['profile_id'] for item in remaining.body['items']}
+        return {'same_account_keys': 2, 'distinct_preserved_profiles': len(profile_ids),
+                'limitations': 'HTTP authority/explicit profile namespace only; website cookie/script/history separation is a different gate'}
+    finally:
+        revoked = dashboard.request('DELETE', '/api/v1/api-keys/' + created.body['id'])
+        assert revoked.status == 200
+        no_store(revoked.headers)
+        second.expect_error('GET', PREFIX + '/profiles', None, 'unauthenticated')
 
 
 def profiles(client, label):
@@ -54,11 +93,31 @@ def ownership(base, owner, foreign, profile_ids):
     return {"foreign_profiles_checked": len(profile_ids)}
 
 
-def retry_followup(base, owner, foreign, profile_id, site, run_id):
+@contextmanager
+def additional_account_key(dashboard, run_id):
+    created = dashboard.request('POST', '/api/v1/api-keys', {'name': run_id + ':retry-key'})
+    assert created.status in {200, 201}
+    no_store(created.headers)
+    client = Client(dashboard.base_url, created.body['key'])
+    try:
+        yield client
+    finally:
+        revoked = dashboard.request('DELETE', '/api/v1/api-keys/' + created.body['id'])
+        assert revoked.status == 200
+        no_store(revoked.headers)
+        client.expect_error('GET', PREFIX + '/profiles', None, 'unauthenticated')
+
+
+def retry_followup(base, owner, foreign, profile_id, site, run_id, dashboard):
+    with additional_account_key(dashboard, run_id) as second_key:
+        return _retry_followup(base, owner, second_key, foreign, profile_id, site, run_id)
+
+
+def _retry_followup(base, owner, second_key, foreign, profile_id, site, run_id):
     task = {"task": f"Open {site.browser_url}/ . Click Complete prerequisite once, then Add synthetic item once. Stop. Do not submit or sign in.",
             "profile_id": profile_id, "idempotency_key": run_id + ":admit"}
     with ThreadPoolExecutor(max_workers=4) as pool:
-        receipts = list(pool.map(lambda _: owner.start(task), range(4)))
+        receipts = list(pool.map(lambda index: (owner if index % 2 else second_key).start(task), range(4)))
     assert all(r == receipts[0] for r in receipts)
     receipt = receipts[0]
     admission(receipt)
@@ -68,7 +127,7 @@ def retry_followup(base, owner, foreign, profile_id, site, run_id):
     foreign.expect_error("GET", path, None, "not_found")
     foreign.expect_error("POST", path + "/cancel", None, "not_found")
     # New transport instance, not caller process continuity.
-    fresh = Client(base, owner.token)
+    fresh = Client(base, second_key.token)
     settled = fresh.wait(receipt["task_id"], timeout=30)
     assert settled["state"] == "completed"
     assert site.counters() == {"prerequisite": 1, "cart": 1}
@@ -79,7 +138,7 @@ def retry_followup(base, owner, foreign, profile_id, site, run_id):
     assert fresh.wait(follow["task_id"], timeout=30)["state"] == "completed"
     assert site.counters() == {"prerequisite": 1, "cart": 2}
     ordinary_safe(fresh.get(follow["task_id"]))
-    return {"admission_attempts": 4, "distinct_tasks": 1, "effect_counters": site.counters()}
+    return {"admission_attempts": 4, "same_account_keys": 2, "distinct_tasks": 1, "effect_counters": site.counters()}
 
 
 def interaction_boundaries(owner, foreign, profile_id, run_id, site):
@@ -184,7 +243,9 @@ def run_service(evidence, base, site, allow_tasks=False):
     if not evidence.check("explicit_profiles", create_profiles):
         return
     evidence.check("auth_ownership", lambda: ownership(base, owner, foreign, created_profiles))
-    evidence.check("http_retry_followup", lambda: retry_followup(base, owner, foreign, created_profiles[0], site, evidence.run_id),
+    evidence.check('same_account_key_scope', lambda: same_account_key_scope(owner, dashboard, foreign, created_profiles, evidence.run_id),
+                   'same_account_key_scope')
+    evidence.check("http_retry_followup", lambda: retry_followup(base, owner, foreign, created_profiles[0], site, evidence.run_id, dashboard),
                    "http_retry_followup")
     evidence.check("questions_decline_http", lambda: interaction_boundaries(owner, foreign, created_profiles[1], evidence.run_id, site))
     evidence.check("cancel_capability_http", lambda: cancel_boundary(owner, created_profiles[1], evidence.run_id))
@@ -196,7 +257,8 @@ def run_service(evidence, base, site, allow_tasks=False):
     def revoke():
         response = dashboard.request("DELETE", "/api/v1/api-keys/" + key_id)
         assert response.status == 200
+        no_store(response.headers)
         owner.expect_error("GET", f"{PREFIX}/profiles", None, "unauthenticated")
-    evidence.check("revocation", revoke)
+    evidence.check("revocation", revoke, 'auth_key_no_store')
     # Account data are confined to the explicitly disposable service. Never purge a DB.
     # Leased profiles cannot be deleted until the owning executor has stopped.

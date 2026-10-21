@@ -1,0 +1,153 @@
+{
+  "schema_version": 1,
+  "run_id": "task-acceptance-572d81a3a0284a7284373630e5da98d0",
+  "kind": "system",
+  "created_at": "2026-10-21T16:50:53.121804+00:00",
+  "revision": "4693718d1a0477f71ad59b8bafde4b3c6d714109",
+  "working_tree_dirty": true,
+  "foundation_revision": "0ccc06a005c3ff680110de6b66a6606a4e48d3d3",
+  "fixture_sha256": {
+    "exchanges.json": "bd835f7da2a503f9f101c717469d2f2c2a66b9aca8bfbb06781dc7ff4c89d492",
+    "policy.json": "ca892edb4d3600a67b4725e3831b50d57b23c499136901ea814075e6b95f752d",
+    "viewer_commands.json": "44e94766fe88a30575b099636a902ca51bb2c91eefcf9bc87f03cc73a5b5d38c"
+  },
+  "checks": [
+    {
+      "name": "offline_harness",
+      "outcome": "passed",
+      "detail": "independent consumers, real-browser fixture and scanner self-tests only",
+      "exit_code": 0,
+      "counts": {
+        "passed": 90
+      }
+    }
+  ],
+  "requirements": {
+    "onboarding_http": {
+      "outcome": "blocked",
+      "owner_and_gap": "001/004: signup/login, ordinary API-key client and once-only disclosure"
+    },
+    "auth_key_no_store": {
+      "outcome": "blocked",
+      "owner_and_gap": "001 repair: signup/login/key creation/list/revocation responses declare Cache-Control no-store"
+    },
+    "same_account_key_scope": {
+      "outcome": "blocked",
+      "owner_and_gap": "001: same-account keys share authority/idempotency; profiles remain explicit distinct namespaces, not key-scoped identities"
+    },
+    "auth_ownership": {
+      "outcome": "blocked",
+      "owner_and_gap": "001: invalid/forged identity, foreign tasks/profiles and revoked keys"
+    },
+    "http_retry_followup": {
+      "outcome": "blocked",
+      "owner_and_gap": "001/002: concurrent admission, conflict, fresh-client reattach and website counters"
+    },
+    "profile_website_isolation": {
+      "outcome": "blocked",
+      "owner_and_gap": "002: two-account/two-profile cookie, storage, scripts and history isolation"
+    },
+    "questions_secrets": {
+      "outcome": "blocked",
+      "owner_and_gap": "001/002: transient secret delivery and duplicate/conflicting/stale response receipts"
+    },
+    "confirmation_decline": {
+      "outcome": "blocked",
+      "owner_and_gap": "001/002: approve/decline/expired/wrong-owner with actual effect counters"
+    },
+    "assistance_tls": {
+      "outcome": "blocked",
+      "owner_and_gap": "003/005: actual TLS pointer/keyboard/stream/fallback and capability expiry fencing"
+    },
+    "assistance_generation_metadata": {
+      "outcome": "blocked",
+      "owner_and_gap": "001/002/003 amendment 2201b5a: public mint/state succeeds across distinct pause generations within one execution; no public lease generation"
+    },
+    "assistance_wallclock_expiry": {
+      "outcome": "blocked",
+      "owner_and_gap": "003: active capability rejects after actual elapsed TTL, not only cancel/remint"
+    },
+    "assistance_atomic_commit": {
+      "outcome": "blocked",
+      "owner_and_gap": "001/003: deterministic resolve/cancel between assistance_lease lookup and save_capability commit rejects stale binding"
+    },
+    "direct_api_resume_drain": {
+      "outcome": "blocked",
+      "owner_and_gap": "001/002/003 amendment 561383d: direct authenticated respond awaits real pause-wide human drain with active stream and owned in-flight input gate before agent effects"
+    },
+    "resume_wrong_generation": {
+      "outcome": "blocked",
+      "owner_and_gap": "001/002: wrong-generation direct response never releases the legitimate active human handle"
+    },
+    "resume_release_failure": {
+      "outcome": "blocked",
+      "owner_and_gap": "001/002: injected release_human failure leaves pause unresolved, capability current and agent effects absent"
+    },
+    "resume_release_timeout": {
+      "outcome": "blocked",
+      "owner_and_gap": "001/002: injected release_human timeout leaves pause unresolved and never wakes agent effects"
+    },
+    "capacity_paused": {
+      "outcome": "blocked",
+      "owner_and_gap": "001/002: global/account/session/profile caps count paused/idle browser leases"
+    },
+    "cancel_fencing": {
+      "outcome": "blocked",
+      "owner_and_gap": "001/002/003: stop proof, terminal immutability and late callback/input fencing"
+    },
+    "crash_after_effect": {
+      "outcome": "blocked",
+      "owner_and_gap": "001/002: owned process kill after website effect, interrupted state and no replay"
+    },
+    "profile_save_failure": {
+      "outcome": "blocked",
+      "owner_and_gap": "002: failed save retains prior archive and bounded quarantine evidence"
+    },
+    "script_reuse_repair": {
+      "outcome": "blocked",
+      "owner_and_gap": "002/007: replay/repair with no repeated prerequisite, model proof separate"
+    },
+    "pi_readiness": {
+      "outcome": "blocked",
+      "owner_and_gap": "007: real browser same-URL freshness/readiness/no-progress guards"
+    },
+    "packaged_network": {
+      "outcome": "blocked",
+      "owner_and_gap": "005: real packaged-browser private/admin/metadata deny plus positive control"
+    },
+    "artifact_secret_scan": {
+      "outcome": "blocked",
+      "owner_and_gap": "001/002/003/005: DB/history/log/trace/result canaries absent"
+    },
+    "key_hash_at_rest": {
+      "outcome": "blocked",
+      "owner_and_gap": "001: real disposable database stores key hashes, never plaintext"
+    },
+    "operations": {
+      "outcome": "blocked",
+      "owner_and_gap": "005: image IDs, builds, restart, log/disk bounds, backup/restore"
+    },
+    "compatibility": {
+      "outcome": "blocked",
+      "owner_and_gap": "001-007: existing flow/run/UI/chat/Pi regressions and frontend onboarding"
+    },
+    "standalone_example": {
+      "outcome": "blocked",
+      "owner_and_gap": "004: execute published standalone client against real local service"
+    },
+    "provider_backed": {
+      "outcome": "blocked",
+      "owner_and_gap": "002/007: separately authorized bounded synthetic model-backed cases"
+    },
+    "hosted_postdeployment": {
+      "outcome": "blocked",
+      "owner_and_gap": "manual only: hosted TLS, cloud runtime and real provider validation"
+    }
+  },
+  "readiness": "not_established",
+  "limitations": [
+    "Fixture/consumer tests are not service acceptance.",
+    "No deployment or provider calls authorized by this harness.",
+    "No raw bodies, credentials, website state or traces included."
+  ]
+}
