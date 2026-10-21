@@ -234,3 +234,16 @@ async def test_hosted_save_checks_task_values_not_declared_schema(tmp_path, monk
         await session.ask('trains', {'origin': 'Reykjavik'})
     finally:
         session.store.close()
+
+
+async def test_repair_stops_when_repaired_attempt_partially_acted(monkeypatch):
+    generated = AsyncMock(return_value='async()=>{}')
+    monkeypatch.setattr(runner, 'generate_program', generated)
+    monkeypatch.setattr(runner, '_execute_reflex', AsyncMock(return_value=(
+        False, f'SCRIPT EXECUTION FAILED\nEFFECTS: {runner.PARTIAL_EFFECTS} - changed')))
+    page = SimpleNamespace(get_url=AsyncMock(return_value='https://x.test'), evaluate=AsyncMock(return_value='els'))
+    browser = SimpleNamespace(must_get_current_page=AsyncMock(return_value=page),
+                              get_browser_state_summary=AsyncMock(return_value=SimpleNamespace(dom_state=object())))
+    ok, detail, fixed = await runner._repair_reflex('async()=>{}', 'missing', {}, '', browser, None, max_attempts=3)
+    assert (ok, fixed) == (False, None) and runner.PARTIAL_EFFECTS in detail
+    generated.assert_awaited_once()  # no second whole-stage attempt over partial effects
