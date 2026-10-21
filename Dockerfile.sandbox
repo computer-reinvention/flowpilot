@@ -11,8 +11,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # ── System dependencies ──────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Browser
-    chromium \
-    chromium-sandbox \
     # Virtual framebuffer (Chromium still needs a display for proper rendering)
     xvfb \
     # Process manager
@@ -46,8 +44,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # ── Python packages ──────────────────────────────────────────────────
 RUN pip install --no-cache-dir \
-    browser-use \
-    playwright \
+    playwright==1.64.0 \
     && playwright install chromium \
     && playwright install-deps chromium \
     && chmod 755 /root \
@@ -72,7 +69,6 @@ COPY sandbox/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # ── Volumes & Ports ──────────────────────────────────────────────────
-VOLUME ["/profiles"]
 EXPOSE 9222 9223
 
 # ── Health check ─────────────────────────────────────────────────────

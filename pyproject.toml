@@ -7,11 +7,8 @@ dependencies = [
     "fastapi>=0.115.0",
     "uvicorn>=0.30.0",
     "docker>=7.0.0",
-    "browser-use>=0.11.0,<1.0.0",
+    "browser-use>=0.13.11,<0.14.0",
     "playwright>=1.40.0",
-    "langchain-google-genai>=2.0.0",
-    "langchain-anthropic>=0.3.0",
-    "langchain-openai>=0.3.0",
     "pydantic>=2.0.0",
     "bcrypt>=4.0.0",
     "PyJWT>=2.8.0",
@@ -37,3 +34,4 @@ packages = ["backend"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+markers = ["live: requires a running application, browser and configured LLM provider"]

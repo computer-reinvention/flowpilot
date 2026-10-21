@@ -1,8 +1,23 @@
 """Shared test fixtures — temp DB, async client, auth helpers."""
 
+import os
 import pytest
 import httpx
 from unittest.mock import patch
+
+
+def pytest_addoption(parser):
+    parser.addoption("--live", action="store_true", help="Run live browser/provider tests against FLOWPILOT_URL")
+
+
+def pytest_collection_modifyitems(config, items):
+    """Keep offline checks deterministic; live tests remain an explicit gate."""
+    live_enabled = config.getoption("--live") and os.environ.get("FLOWPILOT_SKIP_E2E") != "1"
+    for item in items:
+        if item.path.name.startswith("test_e2e_") or item.path.name == "test_flow_run.py":
+            item.add_marker(pytest.mark.live)
+            if not live_enabled:
+                item.add_marker(pytest.mark.skip(reason="requires --live, running app and provider credentials"))
 
 
 @pytest.fixture
@@ -18,6 +33,7 @@ async def client(tmp_path):
         patch("backend.main.PROFILES_DIR", tmp_path),
         patch("backend.main.sandbox_mgr"),
         patch("backend.main.profile_mgr"),
+        patch("backend.main._run_exploration"),
     ):
         from backend import auth
         from backend import db as platform_db

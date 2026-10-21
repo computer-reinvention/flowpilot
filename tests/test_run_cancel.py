@@ -15,15 +15,16 @@ def mock_db_and_services(monkeypatch):
     import backend.db as db_mod
 
     # Stub sandbox_mgr
-    main_mod.sandbox_mgr = MagicMock()
+    monkeypatch.setattr(main_mod, "sandbox_mgr", MagicMock())
     main_mod.sandbox_mgr.stop = MagicMock()
 
     # Stub profile_mgr
-    main_mod.profile_mgr = MagicMock()
+    monkeypatch.setattr(main_mod, "profile_mgr", MagicMock())
 
-    # No-op DB init and seed
+    # Restore these attributes after tests that assign per-case mocks.
+    monkeypatch.setattr(db_mod, "get_run", db_mod.get_run)
+    monkeypatch.setattr(db_mod, "update_run", db_mod.update_run)
     monkeypatch.setattr(db_mod, "init_db", AsyncMock())
-    monkeypatch.setattr(db_mod, "seed_default_flows", AsyncMock())
 
     # Stub sandbox cleanup
     main_mod.sandbox_mgr.cleanup_orphans = MagicMock(return_value=0)

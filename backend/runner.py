@@ -35,6 +35,9 @@ from browser_use.llm.anthropic.chat import ChatAnthropic
 from browser_use.llm.openai.chat import ChatOpenAI
 
 from .models import Flow
+from .llm import get_llm
+from .replay import RunControl, replay_plan
+from .programs import generate_program
 
 _db = None
 
@@ -70,78 +73,15 @@ class RunStatus(str, Enum):
 
 
 def _get_llm() -> ChatGoogle | ChatAnthropic | ChatOpenAI:
-    provider = (os.environ.get("LLM_PROVIDER") or "gemini").strip().lower()
-    if provider == "gemini":
-        api_key = os.environ.get("GOOGLE_API_KEY")
-        if not api_key:
-            raise ValueError(
-                "GOOGLE_API_KEY env var is required when LLM_PROVIDER=gemini"
-            )
-        model = os.environ.get("GEMINI_MODEL") or "gemini-3.1-pro-preview-customtools"
-        logger.info("Using Gemini model: %s", model)
-        return ChatGoogle(model=model, api_key=api_key, max_output_tokens=65536)
-    elif provider in ("claude", "anthropic"):
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        if not api_key:
-            raise ValueError(
-                "ANTHROPIC_API_KEY env var is required when LLM_PROVIDER=claude"
-            )
-        model = os.environ.get("ANTHROPIC_MODEL") or "claude-sonnet-4-20250514"
-        logger.info("Using Anthropic model: %s", model)
-        return ChatAnthropic(model=model, api_key=api_key)
-    elif provider == "openai":
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError(
-                "OPENAI_API_KEY env var is required when LLM_PROVIDER=openai"
-            )
-        model = os.environ.get("OPENAI_MODEL") or "gpt-4o"
-        logger.info("Using OpenAI model: %s", model)
-        return ChatOpenAI(model=model, api_key=api_key)
-    else:
-        raise ValueError(
-            f"Unknown LLM_PROVIDER='{provider}'. Valid options: gemini, claude, anthropic, openai"
-        )
+    return get_llm("agent")
 
 
 def _get_exploration_llm() -> ChatGoogle | ChatAnthropic | ChatOpenAI:
-    """Return the LLM used for the exploration agent — optimised for long output."""
-    provider = (os.environ.get("LLM_PROVIDER") or "gemini").strip().lower()
-    if provider == "gemini":
-        api_key = os.environ.get("GOOGLE_API_KEY")
-        if not api_key:
-            raise ValueError("GOOGLE_API_KEY env var is required when LLM_PROVIDER=gemini")
-        model = os.environ.get("GEMINI_EXPLORATION_MODEL") or "gemini-3.1-pro-preview"
-        logger.info("Using exploration Gemini model: %s", model)
-        return ChatGoogle(model=model, api_key=api_key, max_output_tokens=65536)
-    # For non-Gemini providers, fall back to the default LLM
-    return _get_llm()
+    return get_llm("exploration")
 
 
 def _get_fast_llm() -> ChatGoogle | ChatAnthropic | ChatOpenAI:
-    """Return a cheap/fast model for page extraction. Falls back to _get_llm()."""
-    provider = (os.environ.get("LLM_PROVIDER") or "gemini").strip().lower()
-    if provider == "gemini":
-        model = os.environ.get("GEMINI_FAST_MODEL") or "gemini-3-flash-preview"
-        api_key = os.environ.get("GOOGLE_API_KEY", "")
-        logger.info("Using fast Gemini model: %s", model)
-        return ChatGoogle(model=model, api_key=api_key, max_output_tokens=16384)
-    elif provider in ("claude", "anthropic"):
-        model = os.environ.get("ANTHROPIC_FAST_MODEL")
-        if not model:
-            return _get_llm()
-        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        logger.info("Using fast Anthropic model: %s", model)
-        return ChatAnthropic(model=model, api_key=api_key)
-    elif provider == "openai":
-        model = os.environ.get("OPENAI_FAST_MODEL")
-        if not model:
-            return _get_llm()
-        api_key = os.environ.get("OPENAI_API_KEY", "")
-        logger.info("Using fast OpenAI model: %s", model)
-        return ChatOpenAI(model=model, api_key=api_key)
-    else:
-        return _get_llm()
+    return get_llm("fast")
 
 
 
@@ -220,28 +160,34 @@ async def _execute_reflex(
         arg_strs = [_json.dumps(inputs), _json.dumps(entry_url)]
         expression = f'({script})({", ".join(arg_strs)})'
         session_id = await page._ensure_session()
-        result = await page._client.send.Runtime.evaluate(
-            {'expression': expression, 'returnByValue': True, 'awaitPromise': True},
-            session_id=session_id,
-        )
+        timeout = float(os.environ.get("REFLEX_TIMEOUT_SECONDS", "30"))
+        if timeout <= 0:
+            raise ValueError("REFLEX_TIMEOUT_SECONDS must be positive")
+        try:
+            result = await asyncio.wait_for(page._client.send.Runtime.evaluate(
+                {'expression': expression, 'returnByValue': True, 'awaitPromise': True,
+                 'timeout': timeout * 1000},
+                session_id=session_id,
+            ), timeout=timeout)
+        except (TimeoutError, asyncio.CancelledError):
+            # Cancelling the Python await alone leaves JavaScript running.
+            try:
+                await asyncio.wait_for(page._client.send.Runtime.terminateExecution(
+                    {}, session_id=session_id), timeout=2)
+            except Exception:
+                pass
+            raise
         if 'exceptionDetails' in result:
             raise RuntimeError(f'JavaScript evaluation failed: {result["exceptionDetails"]}')
+        value = result.get("result", {}).get("value")
+        if value is False or (isinstance(value, dict) and value.get("success") is False):
+            raise RuntimeError(f"Reflex reported failure: {value}")
+        if isinstance(value, dict) and value.get("needs_human"):
+            return False, "NEEDS_HUMAN: " + json.dumps(value)[:4000]
         trace("execute_reflex.ok", script=script[:500], pre_url=pre_url)
-        return True, "Reflex executed successfully"
+        return True, json.dumps(value, ensure_ascii=False)[:8000] if value is not None else "Reflex executed successfully"
     except Exception as e:
-        # window.location.href / navigation scripts cause CDP to drop the
-        # evaluate context mid-execution — the exception fires even though
-        # the navigation succeeded. Detect this by checking if the URL changed.
-        await asyncio.sleep(1.0)  # let navigation settle
-        try:
-            post_url = await page.get_url()
-            if pre_url and post_url and post_url != pre_url and post_url not in ("about:blank", "chrome://newtab/"):
-                logger.debug("Reflex caused navigation %s → %s (evaluate threw but treated as success)", pre_url, post_url)
-                trace("execute_reflex.nav_ok", pre_url=pre_url, post_url=post_url)
-                return True, f"Reflex navigated to {post_url}"
-        except Exception:
-            pass
-
+        # A changed URL does not establish that the script's remaining work ran.
         # Dump page state so the agent can pick up where the script stopped
         try:
             fail_url = await page.get_url()
@@ -249,7 +195,7 @@ async def _execute_reflex(
             context = f"URL: {fail_url}\nElements on page:\n{elements}"
         except Exception:
             context = "Could not read page state"
-        err_str = str(e)
+        err_str = str(e) or type(e).__name__
         result_msg = f"SCRIPT EXECUTION FAILED\nError: {err_str}\n{context}"
         trace("execute_reflex.fail", error=err_str, context=context)
         return False, result_msg
@@ -278,6 +224,9 @@ async def _repair_reflex(
     for attempt in range(max_attempts):
         # Get fresh DOM state for the repair prompt
         try:
+            state = await browser_session.get_browser_state_summary(include_screenshot=False, cached=False)
+            if not state.dom_state:
+                return False, 'Cannot obtain stable browser state for repair', None
             page = await browser_session.must_get_current_page()
             current_url = await page.get_url()
             elements = await page.evaluate(_DUMP_ELEMENTS_JS)
@@ -302,16 +251,12 @@ async def _repair_reflex(
         )
 
         try:
-            from browser_use.llm.messages import UserMessage
-
-            response = await llm.ainvoke([UserMessage(content=repair_prompt)])
-            fixed_script = response.completion.strip()
-            # Strip markdown fences if the model included them anyway
-            if fixed_script.startswith("```"):
-                fixed_script = "\n".join(fixed_script.split("\n")[1:])
-            if fixed_script.endswith("```"):
-                fixed_script = "\n".join(fixed_script.split("\n")[:-1])
-            fixed_script = fixed_script.strip()
+            fixed_script = await generate_program(llm, {
+                "operation": "repair the remaining work of this failed stage",
+                "broken_script": broken_script, "error": error_msg[:8000],
+                "url": current_url, "elements": elements,
+                "input_names": list(inputs),
+            })
         except Exception as e:
             logger.warning("Repair LLM call failed: %s", e)
             return False, f"Repair LLM call failed: {e}", None
@@ -327,7 +272,9 @@ async def _repair_reflex(
         )
 
         if success:
-            return True, "Repaired and executed successfully", fixed_script
+            return True, msg, fixed_script
+        if "NEEDS_HUMAN" in msg or "NEEDS_AUTH" in msg:
+            return False, msg, None
 
         # Update error for next attempt
         broken_script = fixed_script
@@ -398,16 +345,10 @@ async def _generate_reflex(
     )
 
     try:
-        from browser_use.llm.messages import UserMessage
-
-        response = await llm.ainvoke([UserMessage(content=generate_prompt)])
-        script = response.completion.strip()
-        # Strip markdown fences
-        if script.startswith("```"):
-            script = "\n".join(script.split("\n")[1:])
-        if script.endswith("```"):
-            script = "\n".join(script.split("\n")[:-1])
-        script = script.strip()
+        script = await generate_program(llm, {
+            "operation": "complete the entire task", "task": flow.task,
+            "input_names": list(inputs), "url": current_url, "elements": elements,
+        })
     except Exception as e:
         return False, f"LLM generation failed: {e}", None
 
@@ -536,24 +477,15 @@ class FlowRunner:
             raise RuntimeError(f"CDP not reachable at {cdp_url} after 40s")
 
         _ws_path = "/" + "/".join(_cdp_info["webSocketDebuggerUrl"].split("/")[3:])
-        cdp_url = f"ws://{_cdp_h}:{_cdp_p}{_ws_path}"
+        import socket
+        address = await asyncio.to_thread(socket.gethostbyname, _cdp_h)
+        cdp_url = f"ws://{address}:{_cdp_p}{_ws_path}"
 
         # ------------------------------------------------------------------
         # Load domain reflexes — ordered by the exploration tree if available,
         # otherwise fall back to DB creation order.
         # ------------------------------------------------------------------
-        all_reflexes = await _get_db().list_reflexes_for_domain(flow.domain)
-        tree = json.loads(flow.exploration_tree) if flow.exploration_tree else []
-        if tree:
-            tree_order = _tree_reflex_order(tree)
-            by_name = {r["name"]: r for r in all_reflexes}
-            # Tree-ordered first, then any reflexes not in the tree appended at the end
-            domain_reflexes = [by_name[n] for n in tree_order if n in by_name]
-            domain_reflexes += [
-                r for r in all_reflexes if r["name"] not in {n for n in tree_order}
-            ]
-        else:
-            domain_reflexes = all_reflexes
+        domain_reflexes, replay_complete = await replay_plan(_get_db(), flow)
 
         # ------------------------------------------------------------------
         # Agent run
@@ -574,7 +506,6 @@ class FlowRunner:
             browser = Browser(
                 cdp_url=cdp_url,
                 storage_state=ss_arg,
-                headers={"Host": "localhost"},
             )
             await browser.start()
 
@@ -584,107 +515,81 @@ class FlowRunner:
                     f"Injected {len(storage_state.get('cookies', []))} cookies from saved session",
                 )
 
-            await _update(RunStatus.RUNNING, "Connected. Launching agent...")
+            _paused = [False]
+            control = RunControl(_paused)
+            if agent_ready_callback:
+                await agent_ready_callback(control, browser, flow, _paused)
 
-            llm = _get_llm()
+            async def human_help(reason: str, category: str = "other"):
+                control.pause()
+                await _update(RunStatus.PAUSED_FOR_HITL, f"[{category}] {reason}")
+                await control.checkpoint()
+                await _update(RunStatus.RUNNING, "Human assistance complete; continuing")
+
+            await _update(RunStatus.RUNNING, "Connected. Checking replay plan...")
+            llm = None  # Successful warm replay requires neither credentials nor LLM calls.
 
             # ----------------------------------------------------------
             # Fast path: if a saved reflex exists, execute it directly.
             # If no reflex exists, try generating one from the DOM.
             # Only fall through to the full agent if both fail.
             # ----------------------------------------------------------
-            MAX_REFLEX_FAILURES = 3  # fall through to agent after this many
-            reflex_failures = 0
-
-            if domain_reflexes:
+            completed_names = []
+            stage_results = []
+            if replay_complete:
                 for reflex in domain_reflexes:
-                    if reflex_failures >= MAX_REFLEX_FAILURES:
-                        logger.info(
-                            "Hit %d reflex failures, skipping remaining reflexes and falling through to agent",
-                            reflex_failures,
-                        )
-                        await _update(
-                            RunStatus.RUNNING,
-                            f"Reflexes failed {reflex_failures} times, switching to manual agent...",
-                        )
-                        break
-
+                    await control.checkpoint()
                     await _update(
                         RunStatus.RUNNING, f"Trying reflex '{reflex['name']}'..."
                     )
-                    trace("fast_path.try_reflex", name=reflex["name"], failures_so_far=reflex_failures, script=reflex["script"])
                     success, msg = await _execute_reflex(
                         script=reflex["script"],
                         inputs=inputs,
                         entry_url=flow.entry_url or "",
                         browser_session=browser,
                     )
-                    if success:
-                        await _update(
-                            RunStatus.COMPLETED,
-                            f"Reflex '{reflex['name']}' completed flow",
+                    await control.checkpoint()
+                    if not success and "NEEDS_HUMAN" not in msg and "NEEDS_AUTH" not in msg:
+                        from .blockers import classify_blocker
+                        category = await classify_blocker(msg)
+                        if category:
+                            await human_help("Browser failure classified as " + category, category)
+                            break
+                    if not success and ("NEEDS_HUMAN" in msg or "NEEDS_AUTH" in msg):
+                        await human_help(msg[:2000], "auth" if "NEEDS_AUTH" in msg else "other")
+                        # A failed stage may have partially acted. Let the agent inspect
+                        # the resumed state instead of automatically repeating it.
+                        break
+                    if not success:
+                        llm = llm or _get_fast_llm()
+                        success, msg, fixed_script = await _repair_reflex(
+                            broken_script=reflex["script"], error_msg=msg,
+                            inputs=inputs, entry_url=flow.entry_url or "",
+                            browser_session=browser, llm=llm,
                         )
-                        return {
-                            "raw_result": f"Completed via reflex '{reflex['name']}'",
-                            "flow_name": flow.name,
-                            "inputs": inputs,
-                            "completed_at": datetime.now(timezone.utc).isoformat(),
-                        }
+                        if success and fixed_script:
+                            await _get_db().upsert_reflex(
+                                domain=flow.domain, flow_id=flow.id, name=reflex["name"],
+                                description=reflex["description"], script=fixed_script,
+                                pause_after=reflex.get("pause_after"), tags=reflex.get("tags", []),
+                            )
+                    if not success:
+                        # Dependent stages cannot run after a failed prerequisite.
+                        if "NEEDS_HUMAN" in msg or "NEEDS_AUTH" in msg:
+                            await human_help(msg[:2000])
+                        break
+                    completed_names.append(reflex["name"])
+                    stage_results.append({"name": reflex["name"], "result": msg})
+                    if reflex.get("pause_after"):
+                        await human_help(f"Stage '{reflex['name']}' needs human assistance", reflex["pause_after"])
+                else:
+                    await control.checkpoint()
+                    await _update(RunStatus.COMPLETED, f"Completed all {len(stage_results)} replay stages")
+                    return {"raw_result": stage_results, "flow_name": flow.name,
+                            "inputs": inputs, "execution_mode": "replay",
+                            "completed_at": datetime.now(timezone.utc).isoformat()}
 
-                    reflex_failures += 1
-                    logger.info(
-                        "Reflex '%s' failed (%d/%d): %s",
-                        reflex["name"], reflex_failures, MAX_REFLEX_FAILURES, msg[:200],
-                    )
-
-                    if reflex_failures >= MAX_REFLEX_FAILURES:
-                        continue  # will break at top of next iteration
-
-                    # Try auto-repair
-                    await _update(
-                        RunStatus.RUNNING,
-                        f"Reflex '{reflex['name']}' failed, repairing...",
-                    )
-                    repaired, repair_msg, fixed_script = await _repair_reflex(
-                        broken_script=reflex["script"],
-                        error_msg=msg,
-                        inputs=inputs,
-                        entry_url=flow.entry_url or "",
-                        browser_session=browser,
-                        llm=llm,
-                    )
-                    if repaired and fixed_script:
-                        await _get_db().upsert_reflex(
-                            domain=flow.domain,
-                            name=reflex["name"],
-                            description=reflex["description"],
-                            script=fixed_script,
-                            pause_after=reflex.get("pause_after"),
-                            tags=(
-                                json.loads(reflex.get("tags", "[]"))
-                                if isinstance(reflex.get("tags"), str)
-                                else reflex.get("tags", [])
-                            ),
-                        )
-                        await _update(
-                            RunStatus.COMPLETED,
-                            f"Reflex '{reflex['name']}' repaired and completed flow",
-                        )
-                        return {
-                            "raw_result": f"Completed via repaired reflex '{reflex['name']}'",
-                            "flow_name": flow.name,
-                            "inputs": inputs,
-                            "completed_at": datetime.now(timezone.utc).isoformat(),
-                        }
-
-                    # Repair also failed — count it
-                    reflex_failures += 1
-                    logger.info(
-                        "Reflex '%s' repair also failed (%d/%d): %s",
-                        reflex["name"], reflex_failures, MAX_REFLEX_FAILURES, repair_msg[:200],
-                    )
-
-            elif flow.entry_url:
+            elif not domain_reflexes and not json.loads(flow.exploration_tree or "[]") and flow.entry_url:
                 # No saved reflexes — try generating one from the live page
                 await _update(
                     RunStatus.RUNNING,
@@ -694,12 +599,13 @@ class FlowRunner:
                     flow=flow,
                     inputs=inputs,
                     browser_session=browser,
-                    llm=llm,
+                    llm=_get_fast_llm(),
                 )
                 if gen_ok and gen_script:
                     # Save it for next time
                     await _get_db().upsert_reflex(
                         domain=flow.domain,
+                        flow_id=flow.id,
                         name="auto_generated",
                         description=f"Auto-generated for: {flow.task}",
                         script=gen_script,
@@ -723,10 +629,13 @@ class FlowRunner:
             # Slow path: full agent loop (only if fast paths failed)
             # ----------------------------------------------------------
             await _update(RunStatus.RUNNING, "Starting agent loop...")
-            task = _build_task(flow, inputs, domain_reflexes)
-
-            _paused = [False]
-            _agent_ref: list = []
+            await control.checkpoint()
+            llm = _get_llm()
+            remaining_reflexes = [r for r in domain_reflexes if r["name"] not in completed_names]
+            task = _build_task(flow, inputs, remaining_reflexes)
+            if completed_names:
+                task += "\nAlready completed stages (do not repeat): " + json.dumps(completed_names)
+            task += "\nContinue from the current page. Inspect state before retrying any partially failed stage."
 
             def _on_step(state_summary, agent_output, step_num):
                 try:
@@ -761,7 +670,12 @@ class FlowRunner:
                 )
             )
             async def run_reflex(name: str) -> ActionResult:
-                reflex = await _get_db().get_reflex(flow.domain, name)
+                await control.checkpoint()
+                if name in completed_names:
+                    return ActionResult(error=f"Stage '{name}' already completed; do not repeat it.")
+                reflex = await _get_db().get_reflex(flow.domain, name, flow_id=flow.id)
+                if reflex is None:
+                    reflex = next((r for r in remaining_reflexes if r["name"] == name), None)
                 if not reflex:
                     return ActionResult(
                         error=f"No reflex '{name}' for '{flow.domain}'."
@@ -776,11 +690,17 @@ class FlowRunner:
                 )
 
                 if success:
+                    completed_names.append(name)
+                    if reflex.get("pause_after"):
+                        await human_help(f"Stage '{name}' needs human assistance", reflex["pause_after"])
                     return ActionResult(
-                        extracted_content=f"Reflex '{name}' done. Continue from current page."
+                        extracted_content=f"Reflex '{name}' done: {msg}. Continue from current page."
                     )
 
                 # Reflex failed — try auto-repair with a subagent LLM call.
+                if "NEEDS_HUMAN" in msg or "NEEDS_AUTH" in msg:
+                    await human_help(msg[:2000])
+                    return ActionResult(extracted_content="Human assisted; inspect current state before retrying the partial stage.")
                 # This keeps the DOM dump + repair loop out of the main agent context.
                 await _update(
                     RunStatus.RUNNING,
@@ -799,6 +719,7 @@ class FlowRunner:
                     # Save the fixed script so it works next time
                     await _get_db().upsert_reflex(
                         domain=flow.domain,
+                        flow_id=flow.id,
                         name=name,
                         description=reflex["description"],
                         script=fixed_script,
@@ -809,6 +730,9 @@ class FlowRunner:
                             else reflex.get("tags", [])
                         ),
                     )
+                    completed_names.append(name)
+                    if reflex.get("pause_after"):
+                        await human_help(f"Stage '{name}' needs human assistance", reflex["pause_after"])
                     return ActionResult(
                         extracted_content=f"Reflex '{name}' was broken but auto-repaired and executed. "
                         "Updated script saved. Continue from current page."
@@ -844,6 +768,7 @@ class FlowRunner:
                 pause_after = "auth" if pause_after_auth else None
                 await _get_db().upsert_reflex(
                     domain=flow.domain,
+                    flow_id=flow.id,
                     name=name,
                     description=description,
                     script=script,
@@ -867,13 +792,18 @@ class FlowRunner:
             async def request_human_help(
                 reason: str, category: str = "other"
             ) -> ActionResult:
-                _paused[0] = True
-                await _update(RunStatus.PAUSED_FOR_HITL, f"[{category}] {reason}")
-                if _agent_ref:
-                    _agent_ref[0].pause()
+                await human_help(reason, category)
                 return ActionResult(
                     extracted_content="Human assisted. Continue from current page state."
                 )
+
+            if os.getenv("AGENT_DRIVER", "browser-use") == "pi":
+                from .pi_browser import drive_browser
+                result = await drive_browser(browser, task, inputs, flow.entry_url or "",
+                                             control, human_help, run_reflex, save_reflex)
+                await _update(RunStatus.COMPLETED, "Pi completed and verified the flow")
+                return {"raw_result": result, "flow_name": flow.name, "inputs": inputs,
+                        "execution_mode": "pi", "completed_at": datetime.now(timezone.utc).isoformat()}
 
             agent = Agent(
                 task=task,
@@ -885,10 +815,8 @@ class FlowRunner:
                 extend_system_message=_AGENT_RULES,
             )
 
-            _agent_ref.append(agent)
-
-            if agent_ready_callback:
-                await agent_ready_callback(agent, browser, flow, _paused)
+            control.agent = agent
+            await control.checkpoint()
 
             await _update(RunStatus.RUNNING, f"Agent running flow '{flow.name}'...")
 

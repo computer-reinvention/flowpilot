@@ -1,0 +1,3505 @@
+{
+  "started_at": "2026-10-17T09:29:09.283063+00:00",
+  "run_id": "d033542d",
+  "host": {
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "ram_gib": 64.0,
+    "logical_cpus": 18
+  },
+  "docker": {
+    "cpus": 18,
+    "ram_gib": 7.746059417724609,
+    "version": "29.7.2",
+    "architecture": "aarch64"
+  },
+  "image_id": "sha256:5725dc387dab4ce81d4f68358523de708118ea3a39a2edea0e0bd182b31aba2d",
+  "method": "Shared CPU sets, 75% RAM evenly split into hard container limits; no swap; host controller outside limits. Fresh isolated profiles and simultaneous startup. Synthetic 300-product shop with 2 cross-origin frames, 5 UI additions per cycle, reload, 250ms think time, screenshot every third cycle. No model inference.",
+  "pass_criteria": "All sessions finish, isolation intact, no memory/PID max or OOM events, startup p95 <=60s and five-item cart p95 <=5s.",
+  "cases": [
+    {
+      "cpus": 2,
+      "machine_ram_gib": 2,
+      "concurrency": 2,
+      "per_container_memory_mib": 768,
+      "repeat": 0,
+      "duration_seconds": 120,
+      "pid_limit": 1024,
+      "sessions": [
+        {
+          "index": 0,
+          "ok": true,
+          "latencies": [
+            995.61,
+            1012.1,
+            785.61,
+            1035.48,
+            856.89,
+            1022.48,
+            897.69,
+            877.47,
+            812.97,
+            874.77,
+            915.43,
+            1104.16,
+            801.82,
+            769.41,
+            795.85,
+            975.12,
+            934.11,
+            894.32,
+            934.25,
+            844.91,
+            896.72,
+            937.51,
+            771.98,
+            957.38,
+            1028.08,
+            981.01,
+            887.19,
+            918.29,
+            948.65,
+            824.51,
+            833.46,
+            845.86,
+            888.97,
+            933.26,
+            1059.8,
+            945.53,
+            940.44,
+            914.35,
+            1049.83,
+            847.96,
+            899.46,
+            851.23,
+            884.27,
+            894.32,
+            1008.84,
+            846.63,
+            793.32,
+            833.33,
+            808.06,
+            896.62,
+            802.61,
+            999.51,
+            811.45,
+            858.29,
+            952.95,
+            965.26,
+            885.54,
+            975.47,
+            988.22,
+            942.8,
+            920.64,
+            883.48,
+            966.39,
+            933.41,
+            1005.1,
+            807.86,
+            935.24,
+            891.51,
+            852.09,
+            768.19,
+            904.45,
+            836.31,
+            961.23,
+            1042.89,
+            1003.2,
+            844.55,
+            884.95,
+            943.12,
+            873.13,
+            842.07,
+            959.03,
+            955.18,
+            877.15,
+            797.56,
+            889.53
+          ],
+          "cart_cycles": 85,
+          "screenshot_ms": [
+            211.02,
+            177.95,
+            170.77,
+            180.86,
+            145.13,
+            153.24,
+            140.73,
+            170.97,
+            219.48,
+            189.74,
+            202.61,
+            174.57,
+            133.33,
+            144.57,
+            161.5,
+            135.78,
+            171.42,
+            175.05,
+            144.73,
+            152.59,
+            162.31,
+            160.63,
+            155.69,
+            170.98,
+            179.86,
+            138.32,
+            211.75,
+            161.26
+          ],
+          "startup_seconds": 2.323,
+          "isolated_initial_state": true,
+          "isolation_verified_after_load": true
+        },
+        {
+          "index": 1,
+          "ok": true,
+          "latencies": [
+            989.99,
+            1018.56,
+            728.47,
+            938.62,
+            930.65,
+            889.77,
+            898.51,
+            968.66,
+            801.38,
+            794.65,
+            971.59,
+            854.12,
+            793.05,
+            794.3,
+            800.91,
+            831.47,
+            891.01,
+            922.81,
+            675.96,
+            922.8,
+            1046.93,
+            865.24,
+            1011.99,
+            831.11,
+            1004.22,
+            765.35,
+            954.43,
+            1014.25,
+            891.13,
+            904.61,
+            944.96,
+            903.95,
+            981.1,
+            776.16,
+            949.38,
+            838.17,
+            924.98,
+            945.84,
+            965.67,
+            896.35,
+            912.48,
+            872.25,
+            894.38,
+            902.43,
+            1014.73,
+            810.62,
+            954.74,
+            960.29,
+            830.48,
+            934.72,
+            1011.14,
+            905.05,
+            942.5,
+            921.78,
+            869.32,
+            845.71,
+            806.01,
+            886.84,
+            891.92,
+            948.8,
+            883.37,
+            1001.85,
+            853.55,
+            889.35,
+            901.46,
+            888.21,
+            907.38,
+            804.53,
+            826.26,
+            983.2,
+            806.21,
+            800.83,
+            890.35,
+            932.84,
+            899.36,
+            931.48,
+            954.57,
+            886.41,
+            963.41,
+            901.18,
+            920.98,
+            846.78,
+            836.06,
+            798.17,
+            1872.71
+          ],
+          "cart_cycles": 85,
+          "screenshot_ms": [
+            129.9,
+            137.14,
+            171.58,
+            171.83,
+            173.08,
+            163.67,
+            185.81,
+            163.91,
+            171.54,
+            147.39,
+            171.01,
+            96.65,
+            165.85,
+            180.83,
+            168.39,
+            174.03,
+            159.7,
+            205.97,
+            165.84,
+            148.0,
+            214.05,
+            171.4,
+            201.34,
+            140.8,
+            168.96,
+            176.72,
+            92.26,
+            168.51
+          ],
+          "startup_seconds": 2.275,
+          "isolated_initial_state": true,
+          "isolation_verified_after_load": true
+        }
+      ],
+      "samples": [
+        {
+          "t": 0.0,
+          "memory_mib": 0,
+          "working_mib": 0,
+          "cpu_seconds": 0,
+          "pids_total": 0,
+          "controller": {
+            "rss_mib": 229.765625,
+            "cpu_seconds": 0.426291876
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 1.02,
+          "memory_mib": 40.08,
+          "working_mib": 40.07,
+          "cpu_seconds": 0.13200499999999998,
+          "pids_total": 2,
+          "controller": {
+            "rss_mib": 234.25,
+            "cpu_seconds": 0.47229482799999994
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 2.03,
+          "memory_mib": 563.82,
+          "working_mib": 556.43,
+          "cpu_seconds": 1.435969,
+          "pids_total": 287,
+          "controller": {
+            "rss_mib": 250.09375,
+            "cpu_seconds": 0.608412622
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 3.06,
+          "memory_mib": 853.18,
+          "working_mib": 845.73,
+          "cpu_seconds": 2.081734,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 266.40625,
+            "cpu_seconds": 0.7790474439999999
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 4.08,
+          "memory_mib": 950.33,
+          "working_mib": 942.82,
+          "cpu_seconds": 2.771396,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 270.328125,
+            "cpu_seconds": 0.9287956720000001
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 5.1,
+          "memory_mib": 957.43,
+          "working_mib": 949.92,
+          "cpu_seconds": 3.4053820000000004,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 277.09375,
+            "cpu_seconds": 1.054941648
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 6.12,
+          "memory_mib": 962.71,
+          "working_mib": 955.2,
+          "cpu_seconds": 3.74532,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 280.828125,
+            "cpu_seconds": 1.136845568
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 7.13,
+          "memory_mib": 1038.75,
+          "working_mib": 1031.18,
+          "cpu_seconds": 4.364047,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 284.59375,
+            "cpu_seconds": 1.2528447679999999
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 8.16,
+          "memory_mib": 1025.36,
+          "working_mib": 1017.74,
+          "cpu_seconds": 5.0063759999999995,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 286.421875,
+            "cpu_seconds": 1.3771107439999999
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 9.18,
+          "memory_mib": 1006.12,
+          "working_mib": 998.49,
+          "cpu_seconds": 5.459105,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 294.171875,
+            "cpu_seconds": 1.511708896
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 10.2,
+          "memory_mib": 1062.87,
+          "working_mib": 1055.2,
+          "cpu_seconds": 5.929536000000001,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 293.03125,
+            "cpu_seconds": 1.6589003999999998
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 11.22,
+          "memory_mib": 1052.75,
+          "working_mib": 1045.08,
+          "cpu_seconds": 6.534722,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 295.03125,
+            "cpu_seconds": 1.776065616
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 12.24,
+          "memory_mib": 1024.71,
+          "working_mib": 1016.79,
+          "cpu_seconds": 7.095098999999999,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 296.796875,
+            "cpu_seconds": 1.895157152
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 13.25,
+          "memory_mib": 1009.43,
+          "working_mib": 1001.52,
+          "cpu_seconds": 7.538825,
+          "pids_total": 314,
+          "controller": {
+            "rss_mib": 297.75,
+            "cpu_seconds": 1.9890812480000002
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 14.27,
+          "memory_mib": 1086.54,
+          "working_mib": 1078.62,
+          "cpu_seconds": 8.10346,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 294.859375,
+            "cpu_seconds": 2.113741808
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 15.29,
+          "memory_mib": 1073.11,
+          "working_mib": 1065.14,
+          "cpu_seconds": 8.743588,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 296.890625,
+            "cpu_seconds": 2.2389014720000002
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 16.31,
+          "memory_mib": 1040.18,
+          "working_mib": 1032.2,
+          "cpu_seconds": 9.349749,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 298.3125,
+            "cpu_seconds": 2.334179776
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 17.32,
+          "memory_mib": 1027.5,
+          "working_mib": 1019.49,
+          "cpu_seconds": 9.714081,
+          "pids_total": 317,
+          "controller": {
+            "rss_mib": 296.71875,
+            "cpu_seconds": 2.414890976
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 18.34,
+          "memory_mib": 1034.85,
+          "working_mib": 1026.82,
+          "cpu_seconds": 10.265054,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 298.25,
+            "cpu_seconds": 2.5164024959999995
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 19.35,
+          "memory_mib": 1026.08,
+          "working_mib": 1017.75,
+          "cpu_seconds": 10.913889000000001,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 300.203125,
+            "cpu_seconds": 2.6371332159999996
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 20.37,
+          "memory_mib": 1030.55,
+          "working_mib": 1022.2,
+          "cpu_seconds": 11.419557999999999,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 301.03125,
+            "cpu_seconds": 2.7482947199999996
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 21.39,
+          "memory_mib": 1054.2,
+          "working_mib": 1045.81,
+          "cpu_seconds": 12.095073,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 298.515625,
+            "cpu_seconds": 2.8641007039999997
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 22.4,
+          "memory_mib": 1073.85,
+          "working_mib": 1065.42,
+          "cpu_seconds": 12.735617999999999,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 300.03125,
+            "cpu_seconds": 2.943946624
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 23.42,
+          "memory_mib": 1121.57,
+          "working_mib": 1113.05,
+          "cpu_seconds": 13.365595,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 302.1875,
+            "cpu_seconds": 3.05698048
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 24.44,
+          "memory_mib": 1089.97,
+          "working_mib": 1081.45,
+          "cpu_seconds": 13.877523,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 303.5625,
+            "cpu_seconds": 3.171051168
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 25.46,
+          "memory_mib": 1128.08,
+          "working_mib": 1119.54,
+          "cpu_seconds": 14.487399,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 300.703125,
+            "cpu_seconds": 3.306753504
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 26.47,
+          "memory_mib": 1150.22,
+          "working_mib": 1141.65,
+          "cpu_seconds": 14.970391,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 302.046875,
+            "cpu_seconds": 3.419674272
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 27.49,
+          "memory_mib": 1166.3,
+          "working_mib": 1157.73,
+          "cpu_seconds": 15.53145,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 303.96875,
+            "cpu_seconds": 3.522112128
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 28.51,
+          "memory_mib": 1188.61,
+          "working_mib": 1180.01,
+          "cpu_seconds": 16.159708000000002,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 305.359375,
+            "cpu_seconds": 3.6305794880000004
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 29.53,
+          "memory_mib": 1207.45,
+          "working_mib": 1198.82,
+          "cpu_seconds": 16.783141999999998,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 301.921875,
+            "cpu_seconds": 3.759074016
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 30.55,
+          "memory_mib": 1172.65,
+          "working_mib": 1164.01,
+          "cpu_seconds": 17.237364,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 303.28125,
+            "cpu_seconds": 3.85634368
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 31.56,
+          "memory_mib": 1181.39,
+          "working_mib": 1173.08,
+          "cpu_seconds": 17.816564999999997,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 304.5625,
+            "cpu_seconds": 3.9657786240000004
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 32.58,
+          "memory_mib": 1170.98,
+          "working_mib": 1162.66,
+          "cpu_seconds": 18.474372000000002,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 306.109375,
+            "cpu_seconds": 4.0709752319999994
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 33.6,
+          "memory_mib": 1150.26,
+          "working_mib": 1141.88,
+          "cpu_seconds": 19.00601,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 302.015625,
+            "cpu_seconds": 4.199877248
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 34.62,
+          "memory_mib": 1152.51,
+          "working_mib": 1144.07,
+          "cpu_seconds": 19.603026,
+          "pids_total": 329,
+          "controller": {
+            "rss_mib": 302.875,
+            "cpu_seconds": 4.329210176
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 35.64,
+          "memory_mib": 1136.04,
+          "working_mib": 1127.58,
+          "cpu_seconds": 20.093348,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 304.171875,
+            "cpu_seconds": 4.405712832
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 36.66,
+          "memory_mib": 1170.36,
+          "working_mib": 1161.87,
+          "cpu_seconds": 20.572714,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 307.09375,
+            "cpu_seconds": 4.5132807679999996
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 37.68,
+          "memory_mib": 1187.97,
+          "working_mib": 1179.46,
+          "cpu_seconds": 21.21142,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 308.5625,
+            "cpu_seconds": 4.617846527999999
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 38.69,
+          "memory_mib": 1181.4,
+          "working_mib": 1172.89,
+          "cpu_seconds": 21.737529000000002,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 304.328125,
+            "cpu_seconds": 4.727147968000001
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 39.71,
+          "memory_mib": 1215.54,
+          "working_mib": 1206.98,
+          "cpu_seconds": 22.357131,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 305.671875,
+            "cpu_seconds": 4.841746432
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 40.72,
+          "memory_mib": 1244.06,
+          "working_mib": 1235.49,
+          "cpu_seconds": 22.854993,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 307.578125,
+            "cpu_seconds": 4.941895552
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 41.74,
+          "memory_mib": 1219.08,
+          "working_mib": 1210.48,
+          "cpu_seconds": 23.491994,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 304.046875,
+            "cpu_seconds": 5.088822336
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 42.76,
+          "memory_mib": 1234.48,
+          "working_mib": 1225.86,
+          "cpu_seconds": 23.975732,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 305.5,
+            "cpu_seconds": 5.183936576
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 43.78,
+          "memory_mib": 1257.5,
+          "working_mib": 1248.86,
+          "cpu_seconds": 24.459831,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 306.765625,
+            "cpu_seconds": 5.293099328
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 44.8,
+          "memory_mib": 1266.09,
+          "working_mib": 1257.39,
+          "cpu_seconds": 25.100501,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 308.875,
+            "cpu_seconds": 5.414712512
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 45.82,
+          "memory_mib": 1301.9,
+          "working_mib": 1293.14,
+          "cpu_seconds": 25.782733,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 309.625,
+            "cpu_seconds": 5.5158743040000004
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 46.83,
+          "memory_mib": 1267.27,
+          "working_mib": 1258.5,
+          "cpu_seconds": 26.305311,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 304.703125,
+            "cpu_seconds": 5.6079712
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 47.85,
+          "memory_mib": 1289.7,
+          "working_mib": 1280.92,
+          "cpu_seconds": 26.783338,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 306.109375,
+            "cpu_seconds": 5.707015104
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 48.88,
+          "memory_mib": 1303.58,
+          "working_mib": 1294.77,
+          "cpu_seconds": 27.444149,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 308.625,
+            "cpu_seconds": 5.824221184
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 49.9,
+          "memory_mib": 1216.93,
+          "working_mib": 1208.08,
+          "cpu_seconds": 28.000055,
+          "pids_total": 306,
+          "controller": {
+            "rss_mib": 309.390625,
+            "cpu_seconds": 5.929164544
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 50.91,
+          "memory_mib": 1217.28,
+          "working_mib": 1208.43,
+          "cpu_seconds": 28.478322,
+          "pids_total": 305,
+          "controller": {
+            "rss_mib": 305.078125,
+            "cpu_seconds": 6.030928256
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 51.93,
+          "memory_mib": 1331.39,
+          "working_mib": 1322.52,
+          "cpu_seconds": 29.04607,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 306.515625,
+            "cpu_seconds": 6.144453887999999
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 52.95,
+          "memory_mib": 1249.09,
+          "working_mib": 1240.2,
+          "cpu_seconds": 29.599608,
+          "pids_total": 305,
+          "controller": {
+            "rss_mib": 308.421875,
+            "cpu_seconds": 6.236260864
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 53.97,
+          "memory_mib": 1164.22,
+          "working_mib": 1155.3,
+          "cpu_seconds": 30.198429,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 309.203125,
+            "cpu_seconds": 6.337296064
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 54.99,
+          "memory_mib": 1165.43,
+          "working_mib": 1156.47,
+          "cpu_seconds": 30.678872,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 310.65625,
+            "cpu_seconds": 6.439769536
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 56.02,
+          "memory_mib": 1208.12,
+          "working_mib": 1199.1,
+          "cpu_seconds": 31.27912,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 306.03125,
+            "cpu_seconds": 6.59648768
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 57.04,
+          "memory_mib": 1190.39,
+          "working_mib": 1181.34,
+          "cpu_seconds": 31.81464,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 307.96875,
+            "cpu_seconds": 6.702613184
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 58.06,
+          "memory_mib": 1188.21,
+          "working_mib": 1179.16,
+          "cpu_seconds": 32.438570999999996,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 309.359375,
+            "cpu_seconds": 6.784147264
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 59.07,
+          "memory_mib": 1192.55,
+          "working_mib": 1183.46,
+          "cpu_seconds": 32.950321,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 310.78125,
+            "cpu_seconds": 6.856343744
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 60.09,
+          "memory_mib": 1025.59,
+          "working_mib": 1016.48,
+          "cpu_seconds": 33.635152000000005,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 311.9375,
+            "cpu_seconds": 6.9575050240000005
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 61.1,
+          "memory_mib": 1008.04,
+          "working_mib": 998.93,
+          "cpu_seconds": 34.107973,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 308.125,
+            "cpu_seconds": 7.061067584
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 62.12,
+          "memory_mib": 1029.73,
+          "working_mib": 1019.86,
+          "cpu_seconds": 34.672264999999996,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 310.109375,
+            "cpu_seconds": 7.176579648000001
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 63.14,
+          "memory_mib": 1043.77,
+          "working_mib": 1029.02,
+          "cpu_seconds": 35.351539,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 310.890625,
+            "cpu_seconds": 7.281596224
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 64.17,
+          "memory_mib": 1051.35,
+          "working_mib": 1036.56,
+          "cpu_seconds": 35.967162,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 312.359375,
+            "cpu_seconds": 7.386146368
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 65.18,
+          "memory_mib": 1076.24,
+          "working_mib": 1061.45,
+          "cpu_seconds": 36.389022,
+          "pids_total": 317,
+          "controller": {
+            "rss_mib": 308.328125,
+            "cpu_seconds": 7.485553152
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 66.2,
+          "memory_mib": 1106.58,
+          "working_mib": 1091.72,
+          "cpu_seconds": 37.052215000000004,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 310.296875,
+            "cpu_seconds": 7.587712192
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 67.22,
+          "memory_mib": 1133.61,
+          "working_mib": 1118.68,
+          "cpu_seconds": 37.669868,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 311.203125,
+            "cpu_seconds": 7.68451552
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 68.23,
+          "memory_mib": 1109.57,
+          "working_mib": 1094.61,
+          "cpu_seconds": 38.120351,
+          "pids_total": 324,
+          "controller": {
+            "rss_mib": 311.890625,
+            "cpu_seconds": 7.7765088
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 69.25,
+          "memory_mib": 1149.05,
+          "working_mib": 1134.09,
+          "cpu_seconds": 38.588495,
+          "pids_total": 324,
+          "controller": {
+            "rss_mib": 313.28125,
+            "cpu_seconds": 7.880455808
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 70.28,
+          "memory_mib": 1164.13,
+          "working_mib": 1149.14,
+          "cpu_seconds": 39.308281,
+          "pids_total": 324,
+          "controller": {
+            "rss_mib": 310.640625,
+            "cpu_seconds": 8.075398144
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 71.3,
+          "memory_mib": 1154.42,
+          "working_mib": 1139.4,
+          "cpu_seconds": 39.959376,
+          "pids_total": 324,
+          "controller": {
+            "rss_mib": 311.359375,
+            "cpu_seconds": 8.156401792
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 72.31,
+          "memory_mib": 1120.61,
+          "working_mib": 1105.57,
+          "cpu_seconds": 40.444084000000004,
+          "pids_total": 324,
+          "controller": {
+            "rss_mib": 312.0625,
+            "cpu_seconds": 8.23199232
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 73.33,
+          "memory_mib": 1147.75,
+          "working_mib": 1132.69,
+          "cpu_seconds": 40.904578,
+          "pids_total": 324,
+          "controller": {
+            "rss_mib": 313.421875,
+            "cpu_seconds": 8.325734912
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 74.35,
+          "memory_mib": 1203.46,
+          "working_mib": 1188.38,
+          "cpu_seconds": 41.633119,
+          "pids_total": 324,
+          "controller": {
+            "rss_mib": 310.390625,
+            "cpu_seconds": 8.447921152
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 75.36,
+          "memory_mib": 1158.91,
+          "working_mib": 1143.79,
+          "cpu_seconds": 42.189696,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 310.5,
+            "cpu_seconds": 8.541549695999999
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 76.38,
+          "memory_mib": 1079.86,
+          "working_mib": 1064.71,
+          "cpu_seconds": 42.670381000000006,
+          "pids_total": 324,
+          "controller": {
+            "rss_mib": 311.84375,
+            "cpu_seconds": 8.630150016000002
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 77.4,
+          "memory_mib": 1132.38,
+          "working_mib": 1117.21,
+          "cpu_seconds": 43.313627999999994,
+          "pids_total": 324,
+          "controller": {
+            "rss_mib": 313.28125,
+            "cpu_seconds": 8.741761023999999
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 78.42,
+          "memory_mib": 1131.04,
+          "working_mib": 1115.8,
+          "cpu_seconds": 44.002358,
+          "pids_total": 324,
+          "controller": {
+            "rss_mib": 314.5,
+            "cpu_seconds": 8.829009152000001
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 79.43,
+          "memory_mib": 1105.65,
+          "working_mib": 1090.41,
+          "cpu_seconds": 44.331743,
+          "pids_total": 325,
+          "controller": {
+            "rss_mib": 308.46875,
+            "cpu_seconds": 8.969884544
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 80.45,
+          "memory_mib": 1189.12,
+          "working_mib": 1173.86,
+          "cpu_seconds": 44.970054,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 309.90625,
+            "cpu_seconds": 9.071029888
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 81.48,
+          "memory_mib": 1212.65,
+          "working_mib": 1197.36,
+          "cpu_seconds": 45.65532,
+          "pids_total": 325,
+          "controller": {
+            "rss_mib": 311.390625,
+            "cpu_seconds": 9.176863103999999
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 82.49,
+          "memory_mib": 1137.17,
+          "working_mib": 1121.86,
+          "cpu_seconds": 46.239041,
+          "pids_total": 323,
+          "controller": {
+            "rss_mib": 312.65625,
+            "cpu_seconds": 9.270700928
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 83.51,
+          "memory_mib": 1203.03,
+          "working_mib": 1187.7,
+          "cpu_seconds": 46.692377,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 313.984375,
+            "cpu_seconds": 9.364724992
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 84.53,
+          "memory_mib": 1252.76,
+          "working_mib": 1237.39,
+          "cpu_seconds": 47.321964,
+          "pids_total": 325,
+          "controller": {
+            "rss_mib": 310.359375,
+            "cpu_seconds": 9.484651136
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 85.55,
+          "memory_mib": 1199.72,
+          "working_mib": 1184.32,
+          "cpu_seconds": 47.937117,
+          "pids_total": 325,
+          "controller": {
+            "rss_mib": 311.125,
+            "cpu_seconds": 9.594446464
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 86.57,
+          "memory_mib": 1193.41,
+          "working_mib": 1178.0,
+          "cpu_seconds": 48.296912,
+          "pids_total": 325,
+          "controller": {
+            "rss_mib": 312.359375,
+            "cpu_seconds": 9.679820928
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 87.59,
+          "memory_mib": 1244.22,
+          "working_mib": 1228.75,
+          "cpu_seconds": 48.945646999999994,
+          "pids_total": 325,
+          "controller": {
+            "rss_mib": 314.390625,
+            "cpu_seconds": 9.79006272
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 88.61,
+          "memory_mib": 1270.79,
+          "working_mib": 1255.26,
+          "cpu_seconds": 49.625883,
+          "pids_total": 325,
+          "controller": {
+            "rss_mib": 310.859375,
+            "cpu_seconds": 9.908343040000002
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 89.63,
+          "memory_mib": 1236.08,
+          "working_mib": 1220.52,
+          "cpu_seconds": 50.197624,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 311.03125,
+            "cpu_seconds": 10.000118528
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 90.64,
+          "memory_mib": 1242.29,
+          "working_mib": 1226.73,
+          "cpu_seconds": 50.577286,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 312.34375,
+            "cpu_seconds": 10.08792384
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 91.66,
+          "memory_mib": 1290.6,
+          "working_mib": 1275.01,
+          "cpu_seconds": 51.239592,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 314.875,
+            "cpu_seconds": 10.21129472
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 92.68,
+          "memory_mib": 1263.68,
+          "working_mib": 1248.06,
+          "cpu_seconds": 51.855824,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 315.0,
+            "cpu_seconds": 10.30839488
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 93.69,
+          "memory_mib": 1190.05,
+          "working_mib": 1174.41,
+          "cpu_seconds": 52.198959,
+          "pids_total": 305,
+          "controller": {
+            "rss_mib": 310.15625,
+            "cpu_seconds": 10.406481792000001
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 94.71,
+          "memory_mib": 1203.23,
+          "working_mib": 1187.59,
+          "cpu_seconds": 52.801539,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 311.625,
+            "cpu_seconds": 10.519541888
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 95.73,
+          "memory_mib": 1212.64,
+          "working_mib": 1196.97,
+          "cpu_seconds": 53.47603,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 313.53125,
+            "cpu_seconds": 10.638076928
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 96.75,
+          "memory_mib": 1225.1,
+          "working_mib": 1209.4,
+          "cpu_seconds": 53.956807999999995,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 314.28125,
+            "cpu_seconds": 10.729401344
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 97.76,
+          "memory_mib": 1221.36,
+          "working_mib": 1205.62,
+          "cpu_seconds": 54.432347,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 310.609375,
+            "cpu_seconds": 10.808998912
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 98.78,
+          "memory_mib": 1269.24,
+          "working_mib": 1253.47,
+          "cpu_seconds": 55.115753999999995,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 311.984375,
+            "cpu_seconds": 10.913260288
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 99.8,
+          "memory_mib": 1252.63,
+          "working_mib": 1236.8,
+          "cpu_seconds": 55.742036,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 313.921875,
+            "cpu_seconds": 11.00826944
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 100.82,
+          "memory_mib": 1190.19,
+          "working_mib": 1174.32,
+          "cpu_seconds": 56.155131,
+          "pids_total": 293,
+          "controller": {
+            "rss_mib": 314.578125,
+            "cpu_seconds": 11.095700352000001
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 101.83,
+          "memory_mib": 1241.47,
+          "working_mib": 1225.61,
+          "cpu_seconds": 56.677418,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 315.953125,
+            "cpu_seconds": 11.195735551999999
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 102.85,
+          "memory_mib": 1303.2,
+          "working_mib": 1287.31,
+          "cpu_seconds": 57.328283,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 312.34375,
+            "cpu_seconds": 11.311701376
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 103.87,
+          "memory_mib": 1257.3,
+          "working_mib": 1241.39,
+          "cpu_seconds": 58.003842,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 313.59375,
+            "cpu_seconds": 11.42664384
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 104.89,
+          "memory_mib": 1218.72,
+          "working_mib": 1202.78,
+          "cpu_seconds": 58.395074,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 314.953125,
+            "cpu_seconds": 11.516530688
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 105.91,
+          "memory_mib": 1299.27,
+          "working_mib": 1283.32,
+          "cpu_seconds": 58.887208,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 316.3125,
+            "cpu_seconds": 11.61687168
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 106.93,
+          "memory_mib": 1289.76,
+          "working_mib": 1273.79,
+          "cpu_seconds": 59.504528,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 311.9375,
+            "cpu_seconds": 11.77324864
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 107.96,
+          "memory_mib": 1286.59,
+          "working_mib": 1270.59,
+          "cpu_seconds": 59.967971,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 313.234375,
+            "cpu_seconds": 11.867801088
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 108.98,
+          "memory_mib": 1206.29,
+          "working_mib": 1190.25,
+          "cpu_seconds": 60.487611,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 315.21875,
+            "cpu_seconds": 11.971640832000002
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 110.0,
+          "memory_mib": 1255.18,
+          "working_mib": 1239.12,
+          "cpu_seconds": 61.153171,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 316.625,
+            "cpu_seconds": 12.085318784000002
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 111.01,
+          "memory_mib": 1267.69,
+          "working_mib": 1251.56,
+          "cpu_seconds": 61.71554,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 317.453125,
+            "cpu_seconds": 12.202318848
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 112.03,
+          "memory_mib": 1266.9,
+          "working_mib": 1250.77,
+          "cpu_seconds": 62.064397,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 309.609375,
+            "cpu_seconds": 12.295795584
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 113.05,
+          "memory_mib": 1315.4,
+          "working_mib": 1299.24,
+          "cpu_seconds": 62.695329,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 311.5625,
+            "cpu_seconds": 12.413498367999999
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 114.07,
+          "memory_mib": 1305.41,
+          "working_mib": 1289.23,
+          "cpu_seconds": 63.301702000000006,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 312.359375,
+            "cpu_seconds": 12.52685824
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 115.09,
+          "memory_mib": 1265.52,
+          "working_mib": 1249.32,
+          "cpu_seconds": 63.793538,
+          "pids_total": 316,
+          "controller": {
+            "rss_mib": 313.0625,
+            "cpu_seconds": 12.628238848
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 116.11,
+          "memory_mib": 1313.49,
+          "working_mib": 1297.27,
+          "cpu_seconds": 64.233384,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 314.90625,
+            "cpu_seconds": 12.719009152
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 117.13,
+          "memory_mib": 1259.92,
+          "working_mib": 1243.68,
+          "cpu_seconds": 64.953124,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 311.84375,
+            "cpu_seconds": 12.821035648
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 118.15,
+          "memory_mib": 1249.58,
+          "working_mib": 1233.32,
+          "cpu_seconds": 65.439308,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 313.21875,
+            "cpu_seconds": 12.91404736
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 119.16,
+          "memory_mib": 1280.16,
+          "working_mib": 1263.8,
+          "cpu_seconds": 66.023482,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 314.015625,
+            "cpu_seconds": 13.017777536
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 120.18,
+          "memory_mib": 1273.57,
+          "working_mib": 1239.76,
+          "cpu_seconds": 66.605917,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 315.421875,
+            "cpu_seconds": 13.126446080000001
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 121.2,
+          "memory_mib": 1304.95,
+          "working_mib": 1271.11,
+          "cpu_seconds": 67.22473500000001,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 312.609375,
+            "cpu_seconds": 13.301485824
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 122.22,
+          "memory_mib": 1284.24,
+          "working_mib": 1251.09,
+          "cpu_seconds": 67.507394,
+          "pids_total": 307,
+          "controller": {
+            "rss_mib": 313.375,
+            "cpu_seconds": 13.369480704
+          },
+          "sample_errors": 0
+        }
+      ],
+      "status": "pass",
+      "active_started_at": 2.33,
+      "container_events": [
+        "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0\nmax 0\n",
+        "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0\nmax 0\n"
+      ],
+      "summary": {
+        "successes": 2,
+        "cycles": 170,
+        "startup_p95_seconds": 2.323,
+        "cart_p50_ms": 898.51,
+        "cart_p95_ms": 1022.48,
+        "peak_memory_mib": 1331.39,
+        "peak_working_mib": 1322.52,
+        "peak_controller_rss_mib": 317.453125,
+        "peak_pids_total": 332,
+        "active_cpu_cores": 0.5490572339711314,
+        "resource_limit_hit": false
+      },
+      "elapsed_seconds": 123.66
+    },
+    {
+      "cpus": 2,
+      "machine_ram_gib": 2,
+      "concurrency": 2,
+      "per_container_memory_mib": 768,
+      "repeat": 1,
+      "duration_seconds": 120,
+      "pid_limit": 1024,
+      "sessions": [
+        {
+          "index": 0,
+          "ok": true,
+          "latencies": [
+            792.94,
+            930.04,
+            973.13,
+            1005.98,
+            863.04,
+            914.21,
+            844.81,
+            818.03,
+            851.85,
+            888.17,
+            848.87,
+            866.98,
+            1000.81,
+            846.59,
+            795.51,
+            793.67,
+            1028.28,
+            859.76,
+            977.81,
+            1010.5,
+            913.83,
+            819.18,
+            712.57,
+            960.99,
+            897.71,
+            868.2,
+            804.11,
+            906.98,
+            840.27,
+            966.69,
+            793.92,
+            943.42,
+            799.84,
+            980.66,
+            877.56,
+            1047.76,
+            878.11,
+            928.13,
+            860.67,
+            1050.8,
+            968.76,
+            972.33,
+            831.79,
+            765.98,
+            944.21,
+            830.08,
+            986.9,
+            849.39,
+            903.65,
+            900.67,
+            827.93,
+            870.33,
+            990.85,
+            1003.83,
+            1020.8,
+            806.22,
+            966.33,
+            937.14,
+            971.24,
+            892.85,
+            813.4,
+            841.64,
+            1014.42,
+            921.66,
+            986.94,
+            844.3,
+            883.23,
+            928.95,
+            916.24,
+            848.69,
+            797.96,
+            1055.66,
+            1000.08,
+            928.24,
+            933.61,
+            951.83,
+            939.96,
+            772.23,
+            936.75,
+            874.98,
+            974.0,
+            957.45,
+            927.95,
+            987.65,
+            964.3,
+            851.32
+          ],
+          "cart_cycles": 86,
+          "screenshot_ms": [
+            142.18,
+            179.9,
+            167.2,
+            172.26,
+            168.98,
+            166.19,
+            171.41,
+            147.95,
+            176.87,
+            173.6,
+            172.51,
+            163.57,
+            213.8,
+            172.82,
+            173.55,
+            210.93,
+            207.31,
+            177.39,
+            180.79,
+            169.98,
+            134.89,
+            137.27,
+            179.04,
+            165.48,
+            175.44,
+            135.23,
+            183.74,
+            164.81
+          ],
+          "startup_seconds": 2.336,
+          "isolated_initial_state": true,
+          "isolation_verified_after_load": true
+        },
+        {
+          "index": 1,
+          "ok": true,
+          "latencies": [
+            764.3,
+            768.68,
+            789.15,
+            885.09,
+            973.4,
+            834.82,
+            895.38,
+            946.94,
+            850.09,
+            895.1,
+            879.01,
+            840.99,
+            878.97,
+            844.35,
+            1006.01,
+            818.61,
+            821.84,
+            722.56,
+            920.89,
+            798.99,
+            968.93,
+            892.79,
+            947.09,
+            783.43,
+            973.77,
+            959.78,
+            878.93,
+            873.39,
+            830.0,
+            934.67,
+            834.12,
+            759.96,
+            855.96,
+            1024.57,
+            911.34,
+            749.97,
+            1042.01,
+            1030.94,
+            844.33,
+            716.41,
+            985.03,
+            982.58,
+            932.18,
+            956.79,
+            854.01,
+            826.95,
+            1016.49,
+            904.5,
+            843.81,
+            928.36,
+            888.86,
+            757.5,
+            929.54,
+            921.91,
+            889.32,
+            748.56,
+            805.7,
+            933.23,
+            836.56,
+            1039.37,
+            923.62,
+            837.78,
+            893.06,
+            891.05,
+            942.37,
+            911.33,
+            921.28,
+            1002.14,
+            845.83,
+            972.9,
+            872.75,
+            867.81,
+            1002.14,
+            975.82,
+            989.87,
+            1029.41,
+            810.6,
+            983.35,
+            931.18,
+            847.14,
+            904.1,
+            966.8,
+            863.22,
+            935.86,
+            965.53,
+            968.79
+          ],
+          "cart_cycles": 86,
+          "screenshot_ms": [
+            132.51,
+            181.54,
+            183.61,
+            145.5,
+            181.67,
+            170.86,
+            172.15,
+            141.92,
+            166.43,
+            175.04,
+            190.32,
+            172.61,
+            172.82,
+            180.74,
+            174.74,
+            165.01,
+            173.65,
+            169.19,
+            174.0,
+            179.47,
+            168.01,
+            126.6,
+            208.81,
+            181.1,
+            172.36,
+            170.23,
+            174.24,
+            144.36
+          ],
+          "startup_seconds": 2.105,
+          "isolated_initial_state": true,
+          "isolation_verified_after_load": true
+        }
+      ],
+      "samples": [
+        {
+          "t": 0.0,
+          "memory_mib": 0,
+          "working_mib": 0,
+          "cpu_seconds": 0,
+          "pids_total": 0,
+          "controller": {
+            "rss_mib": 314.375,
+            "cpu_seconds": 13.458193664
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 1.02,
+          "memory_mib": 39.34,
+          "working_mib": 39.34,
+          "cpu_seconds": 0.131345,
+          "pids_total": 2,
+          "controller": {
+            "rss_mib": 314.453125,
+            "cpu_seconds": 13.500992
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 2.04,
+          "memory_mib": 675.99,
+          "working_mib": 668.57,
+          "cpu_seconds": 1.586367,
+          "pids_total": 308,
+          "controller": {
+            "rss_mib": 316.890625,
+            "cpu_seconds": 13.608285824
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 3.06,
+          "memory_mib": 855.8,
+          "working_mib": 848.35,
+          "cpu_seconds": 2.04885,
+          "pids_total": 331,
+          "controller": {
+            "rss_mib": 318.390625,
+            "cpu_seconds": 13.726567808
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 4.07,
+          "memory_mib": 959.91,
+          "working_mib": 952.4,
+          "cpu_seconds": 2.680222,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 315.1875,
+            "cpu_seconds": 13.837276544
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 5.09,
+          "memory_mib": 999.55,
+          "working_mib": 992.04,
+          "cpu_seconds": 3.293529,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 316.515625,
+            "cpu_seconds": 13.945527040000002
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 6.11,
+          "memory_mib": 967.95,
+          "working_mib": 960.41,
+          "cpu_seconds": 3.7634619999999996,
+          "pids_total": 333,
+          "controller": {
+            "rss_mib": 317.703125,
+            "cpu_seconds": 14.031196032
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 7.13,
+          "memory_mib": 998.36,
+          "working_mib": 990.75,
+          "cpu_seconds": 4.324342,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 319.09375,
+            "cpu_seconds": 14.141998976
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 8.15,
+          "memory_mib": 1035.49,
+          "working_mib": 1027.87,
+          "cpu_seconds": 4.830515,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 315.84375,
+            "cpu_seconds": 14.289231488
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 9.17,
+          "memory_mib": 996.12,
+          "working_mib": 988.46,
+          "cpu_seconds": 5.4785889999999995,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 316.5,
+            "cpu_seconds": 14.401053824
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 10.19,
+          "memory_mib": 974.75,
+          "working_mib": 967.07,
+          "cpu_seconds": 5.951560000000001,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 317.71875,
+            "cpu_seconds": 14.500259456
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 11.21,
+          "memory_mib": 999.03,
+          "working_mib": 991.35,
+          "cpu_seconds": 6.417644,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 319.59375,
+            "cpu_seconds": 14.605458559999999
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 12.22,
+          "memory_mib": 1062.81,
+          "working_mib": 1054.89,
+          "cpu_seconds": 7.057982,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 321.25,
+            "cpu_seconds": 14.705719552
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 13.24,
+          "memory_mib": 1038.9,
+          "working_mib": 1030.98,
+          "cpu_seconds": 7.68807,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 316.203125,
+            "cpu_seconds": 14.819244672
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 14.26,
+          "memory_mib": 1008.48,
+          "working_mib": 1000.54,
+          "cpu_seconds": 8.120488,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 317.453125,
+            "cpu_seconds": 14.914881792
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 15.28,
+          "memory_mib": 1091.44,
+          "working_mib": 1083.46,
+          "cpu_seconds": 8.618773000000001,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 319.328125,
+            "cpu_seconds": 15.022896
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 16.29,
+          "memory_mib": 1047.36,
+          "working_mib": 1039.38,
+          "cpu_seconds": 9.273347000000001,
+          "pids_total": 332,
+          "controller": {
+            "rss_mib": 320.84375,
+            "cpu_seconds": 15.139952128000001
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 17.31,
+          "memory_mib": 1030.61,
+          "working_mib": 1022.58,
+          "cpu_seconds": 9.916931,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 316.453125,
+            "cpu_seconds": 15.232649472
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 18.32,
+          "memory_mib": 990.79,
+          "working_mib": 982.75,
+          "cpu_seconds": 10.33629,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 317.671875,
+            "cpu_seconds": 15.319154688
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 19.34,
+          "memory_mib": 1069.33,
+          "working_mib": 1061.29,
+          "cpu_seconds": 10.857902,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 319.546875,
+            "cpu_seconds": 15.424083968
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 20.36,
+          "memory_mib": 1066.18,
+          "working_mib": 1058.09,
+          "cpu_seconds": 11.490814,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 320.25,
+            "cpu_seconds": 15.534312448
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 21.38,
+          "memory_mib": 1035.19,
+          "working_mib": 1027.09,
+          "cpu_seconds": 12.031499,
+          "pids_total": 308,
+          "controller": {
+            "rss_mib": 321.625,
+            "cpu_seconds": 15.636459008
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 22.39,
+          "memory_mib": 1111.55,
+          "working_mib": 1103.45,
+          "cpu_seconds": 12.574237,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 316.6875,
+            "cpu_seconds": 15.751259648
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 23.41,
+          "memory_mib": 1147.73,
+          "working_mib": 1139.51,
+          "cpu_seconds": 13.216424,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 319.265625,
+            "cpu_seconds": 15.849720832
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 24.43,
+          "memory_mib": 1148.34,
+          "working_mib": 1140.11,
+          "cpu_seconds": 13.80214,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 320.625,
+            "cpu_seconds": 15.931862528
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 25.45,
+          "memory_mib": 1142.5,
+          "working_mib": 1134.25,
+          "cpu_seconds": 14.285228,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 321.421875,
+            "cpu_seconds": 16.02553728
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 26.47,
+          "memory_mib": 1143.62,
+          "working_mib": 1135.34,
+          "cpu_seconds": 14.834782,
+          "pids_total": 308,
+          "controller": {
+            "rss_mib": 318.46875,
+            "cpu_seconds": 16.122639872
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 27.48,
+          "memory_mib": 1214.27,
+          "working_mib": 1205.99,
+          "cpu_seconds": 15.466253,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 320.6875,
+            "cpu_seconds": 16.228764416
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 28.5,
+          "memory_mib": 1211.75,
+          "working_mib": 1203.42,
+          "cpu_seconds": 16.063107,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 321.453125,
+            "cpu_seconds": 16.326928384
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 29.52,
+          "memory_mib": 1245.85,
+          "working_mib": 1237.51,
+          "cpu_seconds": 16.519002,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 322.890625,
+            "cpu_seconds": 16.408859904
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 30.54,
+          "memory_mib": 1242.81,
+          "working_mib": 1234.47,
+          "cpu_seconds": 17.045581,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 318.546875,
+            "cpu_seconds": 16.503813888
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 31.55,
+          "memory_mib": 1242.99,
+          "working_mib": 1235.21,
+          "cpu_seconds": 17.732551,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 320.5625,
+            "cpu_seconds": 16.612199936
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 32.57,
+          "memory_mib": 1195.89,
+          "working_mib": 1188.1,
+          "cpu_seconds": 18.266979,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 321.984375,
+            "cpu_seconds": 16.7027328
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 33.58,
+          "memory_mib": 1048.26,
+          "working_mib": 1040.44,
+          "cpu_seconds": 18.905549999999998,
+          "pids_total": 330,
+          "controller": {
+            "rss_mib": 322.71875,
+            "cpu_seconds": 16.811255552000002
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 34.6,
+          "memory_mib": 1034.16,
+          "working_mib": 1026.24,
+          "cpu_seconds": 19.385930000000002,
+          "pids_total": 329,
+          "controller": {
+            "rss_mib": 324.078125,
+            "cpu_seconds": 16.895301632
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 35.62,
+          "memory_mib": 987.55,
+          "working_mib": 979.62,
+          "cpu_seconds": 20.045914,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 320.421875,
+            "cpu_seconds": 17.036294400000003
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 36.65,
+          "memory_mib": 988.57,
+          "working_mib": 980.62,
+          "cpu_seconds": 20.529713,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 321.84375,
+            "cpu_seconds": 17.140843776
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 37.66,
+          "memory_mib": 1009.42,
+          "working_mib": 1001.44,
+          "cpu_seconds": 21.021357000000002,
+          "pids_total": 308,
+          "controller": {
+            "rss_mib": 322.578125,
+            "cpu_seconds": 17.235022592
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 38.68,
+          "memory_mib": 1087.59,
+          "working_mib": 1079.61,
+          "cpu_seconds": 21.651926,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 323.953125,
+            "cpu_seconds": 17.33771392
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 39.7,
+          "memory_mib": 1092.68,
+          "working_mib": 1084.64,
+          "cpu_seconds": 22.300034,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 320.28125,
+            "cpu_seconds": 17.449577983999998
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 40.72,
+          "memory_mib": 1054.11,
+          "working_mib": 1046.07,
+          "cpu_seconds": 22.769677,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 320.953125,
+            "cpu_seconds": 17.544629248
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 41.73,
+          "memory_mib": 1081.38,
+          "working_mib": 1073.34,
+          "cpu_seconds": 23.236995,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 322.359375,
+            "cpu_seconds": 17.63973888
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 42.75,
+          "memory_mib": 1083.36,
+          "working_mib": 1075.28,
+          "cpu_seconds": 23.880784,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 323.734375,
+            "cpu_seconds": 17.742635776
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 43.77,
+          "memory_mib": 1063.33,
+          "working_mib": 1055.22,
+          "cpu_seconds": 24.535335,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 325.65625,
+            "cpu_seconds": 17.831165696
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 44.78,
+          "memory_mib": 1027.45,
+          "working_mib": 1019.32,
+          "cpu_seconds": 25.017985000000003,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 320.0,
+            "cpu_seconds": 17.966826496
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 45.8,
+          "memory_mib": 1046.85,
+          "working_mib": 1038.62,
+          "cpu_seconds": 25.505991,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 321.34375,
+            "cpu_seconds": 18.060653056
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 46.82,
+          "memory_mib": 1095.08,
+          "working_mib": 1086.86,
+          "cpu_seconds": 26.147095999999998,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 322.78125,
+            "cpu_seconds": 18.169291776
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 47.84,
+          "memory_mib": 1115.72,
+          "working_mib": 1107.45,
+          "cpu_seconds": 26.824922,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 324.671875,
+            "cpu_seconds": 18.292755456000002
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 48.85,
+          "memory_mib": 1058.61,
+          "working_mib": 1050.32,
+          "cpu_seconds": 27.270494,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 325.546875,
+            "cpu_seconds": 18.406554368
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 49.87,
+          "memory_mib": 1140.08,
+          "working_mib": 1131.79,
+          "cpu_seconds": 27.72632,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 326.953125,
+            "cpu_seconds": 18.504870912
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 50.89,
+          "memory_mib": 1150.89,
+          "working_mib": 1142.55,
+          "cpu_seconds": 28.361051000000003,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 328.328125,
+            "cpu_seconds": 18.61264128
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 51.91,
+          "memory_mib": 1061.61,
+          "working_mib": 1053.28,
+          "cpu_seconds": 28.831791,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 329.0,
+            "cpu_seconds": 18.704174336
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 52.93,
+          "memory_mib": 1087.09,
+          "working_mib": 1078.76,
+          "cpu_seconds": 29.324584,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 330.90625,
+            "cpu_seconds": 18.796094464
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 53.95,
+          "memory_mib": 1137.75,
+          "working_mib": 1129.37,
+          "cpu_seconds": 29.962972,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 335.1875,
+            "cpu_seconds": 18.899458048
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 54.97,
+          "memory_mib": 1139.44,
+          "working_mib": 1131.04,
+          "cpu_seconds": 30.574930000000002,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 341.171875,
+            "cpu_seconds": 19.0089088
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 55.98,
+          "memory_mib": 1106.04,
+          "working_mib": 1097.61,
+          "cpu_seconds": 30.91767,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 335.984375,
+            "cpu_seconds": 19.118779904
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 57.0,
+          "memory_mib": 1179.71,
+          "working_mib": 1171.2,
+          "cpu_seconds": 31.553882,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 338.0625,
+            "cpu_seconds": 19.228856064
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 58.03,
+          "memory_mib": 1188.12,
+          "working_mib": 1179.6,
+          "cpu_seconds": 32.160985,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 338.890625,
+            "cpu_seconds": 19.338982912
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 59.05,
+          "memory_mib": 1187.7,
+          "working_mib": 1179.15,
+          "cpu_seconds": 32.652948,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 340.296875,
+            "cpu_seconds": 19.42934528
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 60.07,
+          "memory_mib": 1196.19,
+          "working_mib": 1187.62,
+          "cpu_seconds": 33.096699,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 342.5625,
+            "cpu_seconds": 19.523383296
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 61.08,
+          "memory_mib": 1134.64,
+          "working_mib": 1126.06,
+          "cpu_seconds": 33.741824,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 341.953125,
+            "cpu_seconds": 19.6522944
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 62.1,
+          "memory_mib": 1126.92,
+          "working_mib": 1117.45,
+          "cpu_seconds": 34.404247,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 343.59375,
+            "cpu_seconds": 19.759194880000003
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 63.12,
+          "memory_mib": 1140.93,
+          "working_mib": 1126.7,
+          "cpu_seconds": 34.948819,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 344.671875,
+            "cpu_seconds": 19.852870144
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 64.13,
+          "memory_mib": 1137.23,
+          "working_mib": 1123.0,
+          "cpu_seconds": 35.404945,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 347.34375,
+            "cpu_seconds": 19.945759744
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 65.15,
+          "memory_mib": 1176.52,
+          "working_mib": 1144.79,
+          "cpu_seconds": 36.170245,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 349.71875,
+            "cpu_seconds": 20.032306944
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 66.18,
+          "memory_mib": 1202.05,
+          "working_mib": 1170.27,
+          "cpu_seconds": 36.828042999999994,
+          "pids_total": 328,
+          "controller": {
+            "rss_mib": 352.25,
+            "cpu_seconds": 20.15351936
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 67.19,
+          "memory_mib": 1149.82,
+          "working_mib": 1118.0,
+          "cpu_seconds": 37.142825,
+          "pids_total": 306,
+          "controller": {
+            "rss_mib": 354.265625,
+            "cpu_seconds": 20.237109760000003
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 68.21,
+          "memory_mib": 1251.44,
+          "working_mib": 1219.57,
+          "cpu_seconds": 37.732888,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 349.96875,
+            "cpu_seconds": 20.368420864
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 69.23,
+          "memory_mib": 1236.85,
+          "working_mib": 1204.96,
+          "cpu_seconds": 38.41561,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 352.8125,
+            "cpu_seconds": 20.470543104
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 70.25,
+          "memory_mib": 1198.21,
+          "working_mib": 1166.3,
+          "cpu_seconds": 38.884809000000004,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 354.0625,
+            "cpu_seconds": 20.560157439999998
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 71.27,
+          "memory_mib": 1227.89,
+          "working_mib": 1195.95,
+          "cpu_seconds": 39.36558,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 355.5,
+            "cpu_seconds": 20.647437056
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 72.29,
+          "memory_mib": 1260.02,
+          "working_mib": 1228.07,
+          "cpu_seconds": 39.990823,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 357.75,
+            "cpu_seconds": 20.752913663999998
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 73.3,
+          "memory_mib": 1240.67,
+          "working_mib": 1208.68,
+          "cpu_seconds": 40.683276,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 353.3125,
+            "cpu_seconds": 20.87792512
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 74.32,
+          "memory_mib": 1219.55,
+          "working_mib": 1187.55,
+          "cpu_seconds": 41.148359,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 354.125,
+            "cpu_seconds": 20.968101376
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 75.34,
+          "memory_mib": 1247.83,
+          "working_mib": 1215.83,
+          "cpu_seconds": 41.609661,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 355.5,
+            "cpu_seconds": 21.073931520000002
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 76.36,
+          "memory_mib": 1258.55,
+          "working_mib": 1226.5,
+          "cpu_seconds": 42.322788,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 357.015625,
+            "cpu_seconds": 21.17634176
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 77.38,
+          "memory_mib": 1142.08,
+          "working_mib": 1109.98,
+          "cpu_seconds": 42.811909,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 357.625,
+            "cpu_seconds": 21.2660416
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 78.4,
+          "memory_mib": 1173.42,
+          "working_mib": 1141.29,
+          "cpu_seconds": 43.350193000000004,
+          "pids_total": 307,
+          "controller": {
+            "rss_mib": 359.578125,
+            "cpu_seconds": 21.370340864
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 79.41,
+          "memory_mib": 1237.75,
+          "working_mib": 1205.57,
+          "cpu_seconds": 43.922792,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 353.78125,
+            "cpu_seconds": 21.521362944
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 80.43,
+          "memory_mib": 1268.98,
+          "working_mib": 1236.8,
+          "cpu_seconds": 44.678747,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 354.609375,
+            "cpu_seconds": 21.63005312
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 81.44,
+          "memory_mib": 1154.2,
+          "working_mib": 1121.98,
+          "cpu_seconds": 45.154858000000004,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 356.625,
+            "cpu_seconds": 21.729310208
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 82.46,
+          "memory_mib": 1153.93,
+          "working_mib": 1121.68,
+          "cpu_seconds": 45.741967,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 357.953125,
+            "cpu_seconds": 21.837930752
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 83.48,
+          "memory_mib": 1166.62,
+          "working_mib": 1134.37,
+          "cpu_seconds": 46.250786000000005,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 358.75,
+            "cpu_seconds": 21.93726464
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 84.49,
+          "memory_mib": 1203.13,
+          "working_mib": 1170.85,
+          "cpu_seconds": 46.738884,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 360.15625,
+            "cpu_seconds": 22.014119936
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 85.51,
+          "memory_mib": 1181.31,
+          "working_mib": 1148.92,
+          "cpu_seconds": 47.374053,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 362.5,
+            "cpu_seconds": 22.127586304
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 86.53,
+          "memory_mib": 1188.08,
+          "working_mib": 1155.68,
+          "cpu_seconds": 47.872895,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 356.765625,
+            "cpu_seconds": 22.232411392
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 87.55,
+          "memory_mib": 1236.22,
+          "working_mib": 1203.78,
+          "cpu_seconds": 48.490025,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 358.234375,
+            "cpu_seconds": 22.346847232000002
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 88.57,
+          "memory_mib": 1265.69,
+          "working_mib": 1233.18,
+          "cpu_seconds": 48.992922,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 359.671875,
+            "cpu_seconds": 22.449915392
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 89.59,
+          "memory_mib": 1263.88,
+          "working_mib": 1231.36,
+          "cpu_seconds": 49.48106,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 360.953125,
+            "cpu_seconds": 22.5372032
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 90.61,
+          "memory_mib": 1289.9,
+          "working_mib": 1257.33,
+          "cpu_seconds": 50.122217,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 362.453125,
+            "cpu_seconds": 22.629462527999998
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 91.63,
+          "memory_mib": 1298.97,
+          "working_mib": 1266.39,
+          "cpu_seconds": 50.647906000000006,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 356.75,
+            "cpu_seconds": 22.772491776
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 92.65,
+          "memory_mib": 1310.88,
+          "working_mib": 1278.27,
+          "cpu_seconds": 51.240004,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 357.546875,
+            "cpu_seconds": 22.887700224
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 93.67,
+          "memory_mib": 1291.9,
+          "working_mib": 1259.27,
+          "cpu_seconds": 51.729114,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 358.9375,
+            "cpu_seconds": 22.987738880000002
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 94.68,
+          "memory_mib": 1311.96,
+          "working_mib": 1279.32,
+          "cpu_seconds": 52.363057,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 360.828125,
+            "cpu_seconds": 23.094961664000003
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 95.7,
+          "memory_mib": 1316.04,
+          "working_mib": 1283.38,
+          "cpu_seconds": 52.847221,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 362.25,
+            "cpu_seconds": 23.182103808
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 96.71,
+          "memory_mib": 1332.74,
+          "working_mib": 1300.05,
+          "cpu_seconds": 53.345484,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 363.0625,
+            "cpu_seconds": 23.26448512
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 97.73,
+          "memory_mib": 1260.64,
+          "working_mib": 1227.94,
+          "cpu_seconds": 53.998125,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 364.46875,
+            "cpu_seconds": 23.370543872
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 98.75,
+          "memory_mib": 1262.0,
+          "working_mib": 1229.27,
+          "cpu_seconds": 54.513988999999995,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 358.984375,
+            "cpu_seconds": 23.512836352
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 99.77,
+          "memory_mib": 1280.44,
+          "working_mib": 1247.62,
+          "cpu_seconds": 55.082223,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 360.078125,
+            "cpu_seconds": 23.620441856
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 100.79,
+          "memory_mib": 1319.54,
+          "working_mib": 1286.71,
+          "cpu_seconds": 55.599703,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 361.46875,
+            "cpu_seconds": 23.723703808000003
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 101.81,
+          "memory_mib": 1303.54,
+          "working_mib": 1270.67,
+          "cpu_seconds": 56.20514300000001,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 362.890625,
+            "cpu_seconds": 23.842342656
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 102.83,
+          "memory_mib": 1271.33,
+          "working_mib": 1238.45,
+          "cpu_seconds": 56.660604,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 363.53125,
+            "cpu_seconds": 23.945918976
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 103.85,
+          "memory_mib": 1290.0,
+          "working_mib": 1257.12,
+          "cpu_seconds": 57.150240999999994,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 358.84375,
+            "cpu_seconds": 24.087892992
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 104.87,
+          "memory_mib": 1320.56,
+          "working_mib": 1287.64,
+          "cpu_seconds": 57.740106,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 359.640625,
+            "cpu_seconds": 24.200021760000002
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 105.89,
+          "memory_mib": 1313.03,
+          "working_mib": 1280.1,
+          "cpu_seconds": 58.296171,
+          "pids_total": 304,
+          "controller": {
+            "rss_mib": 361.0625,
+            "cpu_seconds": 24.305684736
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 106.91,
+          "memory_mib": 1348.18,
+          "working_mib": 1315.24,
+          "cpu_seconds": 58.696203,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 362.125,
+            "cpu_seconds": 24.40001408
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 107.93,
+          "memory_mib": 1360.7,
+          "working_mib": 1327.72,
+          "cpu_seconds": 59.377308,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 364.359375,
+            "cpu_seconds": 24.526077695999998
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 108.95,
+          "memory_mib": 1337.01,
+          "working_mib": 1303.99,
+          "cpu_seconds": 59.960742999999994,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 365.140625,
+            "cpu_seconds": 24.626750207999997
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 109.96,
+          "memory_mib": 1332.62,
+          "working_mib": 1299.54,
+          "cpu_seconds": 60.431118,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 359.03125,
+            "cpu_seconds": 24.772104704
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 110.98,
+          "memory_mib": 1347.3,
+          "working_mib": 1314.18,
+          "cpu_seconds": 60.897958,
+          "pids_total": 327,
+          "controller": {
+            "rss_mib": 360.40625,
+            "cpu_seconds": 24.870991104
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 112.0,
+          "memory_mib": 1368.41,
+          "working_mib": 1335.29,
+          "cpu_seconds": 61.528791999999996,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 362.34375,
+            "cpu_seconds": 24.987131904
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 113.02,
+          "memory_mib": 1349.88,
+          "working_mib": 1316.74,
+          "cpu_seconds": 62.031714,
+          "pids_total": 304,
+          "controller": {
+            "rss_mib": 363.046875,
+            "cpu_seconds": 25.090615296000003
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 114.04,
+          "memory_mib": 1282.26,
+          "working_mib": 1249.09,
+          "cpu_seconds": 62.536438000000004,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 364.484375,
+            "cpu_seconds": 25.185064704
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 115.07,
+          "memory_mib": 1329.87,
+          "working_mib": 1296.69,
+          "cpu_seconds": 63.146886,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 365.875,
+            "cpu_seconds": 25.300944383999997
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 116.08,
+          "memory_mib": 1330.3,
+          "working_mib": 1297.07,
+          "cpu_seconds": 63.824651,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 361.109375,
+            "cpu_seconds": 25.457623808
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 117.1,
+          "memory_mib": 1298.61,
+          "working_mib": 1265.36,
+          "cpu_seconds": 64.136774,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 361.84375,
+            "cpu_seconds": 25.5368064
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 118.12,
+          "memory_mib": 1340.03,
+          "working_mib": 1306.78,
+          "cpu_seconds": 64.734312,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 363.296875,
+            "cpu_seconds": 25.650373887999997
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 119.14,
+          "memory_mib": 1365.79,
+          "working_mib": 1332.45,
+          "cpu_seconds": 65.350677,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 364.796875,
+            "cpu_seconds": 25.754349312000002
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 120.16,
+          "memory_mib": 1340.48,
+          "working_mib": 1307.08,
+          "cpu_seconds": 65.889204,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 365.40625,
+            "cpu_seconds": 25.854710272
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 121.18,
+          "memory_mib": 1363.14,
+          "working_mib": 1329.74,
+          "cpu_seconds": 66.341024,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 367.34375,
+            "cpu_seconds": 25.95115136
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 122.2,
+          "memory_mib": 1393.75,
+          "working_mib": 1361.84,
+          "cpu_seconds": 66.94226900000001,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 362.234375,
+            "cpu_seconds": 26.108609792
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 123.22,
+          "memory_mib": 1366.34,
+          "working_mib": 1334.36,
+          "cpu_seconds": 67.515862,
+          "pids_total": 326,
+          "controller": {
+            "rss_mib": 362.296875,
+            "cpu_seconds": 26.212676096000003
+          },
+          "sample_errors": 0
+        }
+      ],
+      "status": "pass",
+      "active_started_at": 2.34,
+      "container_events": [
+        "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0\nmax 0\n",
+        "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0\nmax 0\n"
+      ],
+      "summary": {
+        "successes": 2,
+        "cycles": 172,
+        "startup_p95_seconds": 2.336,
+        "cart_p50_ms": 900.67,
+        "cart_p95_ms": 1024.57,
+        "peak_memory_mib": 1393.75,
+        "peak_working_mib": 1361.84,
+        "peak_controller_rss_mib": 367.34375,
+        "peak_pids_total": 333,
+        "active_cpu_cores": 0.5448319906790945,
+        "resource_limit_hit": false
+      },
+      "elapsed_seconds": 124.69
+    }
+  ],
+  "finished_at": "2026-10-17T09:33:17.792674+00:00"
+}

@@ -36,6 +36,7 @@ async def e2e_client(tmp_path):
         patch("backend.main.PROFILES_DIR", tmp_path),
         patch("backend.main.sandbox_mgr") as mock_sandbox,
         patch("backend.main.profile_mgr") as mock_profile,
+        patch("backend.main._run_exploration"),
     ):
         # Configure sandbox mock to return plausible values
         mock_sandbox.start.return_value = {
@@ -84,7 +85,7 @@ async def e2e_flow(e2e_client, e2e_user):
     resp = await e2e_client.post("/api/flows", headers=headers, json={
         "name": "Protected Site Flow",
         "domain": "protected.example.com",
-        "description": "Navigate to the protected page and extract the user dashboard data.",
+        "task": "Navigate to the protected page and extract the user dashboard data.",
         "entry_url": "https://protected.example.com/dashboard",
         "inputs": [
             {"name": "username", "label": "Username", "type": "text"},
@@ -121,6 +122,7 @@ async def test_e2e_hitl_full_lifecycle(e2e_client, e2e_user, e2e_flow):
     # paused state manually.
 
     run_started = asyncio.Event()
+    allow_completion = asyncio.Event()
     run_id_holder = {}
 
     original_execute_run = None
@@ -144,7 +146,7 @@ async def test_e2e_hitl_full_lifecycle(e2e_client, e2e_user, e2e_flow):
         # Set up mock agent and browser
         mock_agent = MagicMock()
         mock_browser = MagicMock()
-        mock_browser.get_storage_state = AsyncMock(return_value={
+        mock_browser.export_storage_state = AsyncMock(return_value={
             "cookies": [
                 {"name": "auth_token", "value": "tok_abc123", "domain": "protected.example.com"},
                 {"name": "session_id", "value": "sess_xyz", "domain": "protected.example.com"},
@@ -169,6 +171,7 @@ async def test_e2e_hitl_full_lifecycle(e2e_client, e2e_user, e2e_flow):
 
         # Wait up to 10 seconds for resume
         await asyncio.wait_for(resume_event.wait(), timeout=10)
+        await asyncio.wait_for(allow_completion.wait(), timeout=10)
 
         # After resume, agent continues and completes
         if progress_callback:
@@ -235,6 +238,7 @@ async def test_e2e_hitl_full_lifecycle(e2e_client, e2e_user, e2e_flow):
         assert sessions_for_domain[0]["domain"] == "protected.example.com"
         # profile_name defaults to user_id when no explicit profile_id is set on the run
         assert sessions_for_domain[0]["profile_name"] == user_id
+        allow_completion.set()
 
         # ── Step 6: Wait for run to complete ─────────────────────────
         # The fake_run_flow will continue after resume
@@ -297,13 +301,13 @@ async def test_e2e_hitl_resume_wrong_user(e2e_client, e2e_user, e2e_flow):
 
     mock_flow = Flow(
         id=flow["id"], name=flow["name"], domain=flow["domain"],
-        description=flow["description"], inputs=json.dumps(flow["inputs"]),
+        task=flow["task"], inputs=json.dumps(flow["inputs"]),
         created_by=user["id"],
     )
     mock_agent = MagicMock()
     mock_agent.resume = MagicMock()
     mock_browser = MagicMock()
-    mock_browser.get_storage_state = AsyncMock(return_value={
+    mock_browser.export_storage_state = AsyncMock(return_value={
         "cookies": [{"name": "authz_cookie", "value": "secret", "domain": "protected.example.com"}],
     })
     paused_ref = [True]  # starts paused
@@ -329,13 +333,13 @@ async def test_e2e_hitl_resume_wrong_user(e2e_client, e2e_user, e2e_flow):
         mock_agent.resume.assert_called_once()
 
         # Verify cookies were captured
-        mock_browser.get_storage_state.assert_called_once()
+        mock_browser.export_storage_state.assert_called_once()
 
         # Verify session was persisted for owner with profile_name
         resp = await e2e_client.get("/api/sessions", headers=headers)
         sessions = [s for s in resp.json() if s["domain"] == "protected.example.com"]
         assert len(sessions) == 1, f"Expected 1 session for owner, got {len(sessions)}"
-        assert sessions[0]["profile_name"] == "protected.example.com"
+        assert sessions[0]["profile_name"] == run.profile_id
 
         # Verify attacker has no sessions
         resp = await e2e_client.get("/api/sessions", headers=attacker_headers)
@@ -372,12 +376,12 @@ async def test_e2e_hitl_manual_pause_then_resume(e2e_client, e2e_user, e2e_flow)
 
     mock_flow = Flow(
         id=flow["id"], name=flow["name"], domain=flow["domain"],
-        description=flow["description"], inputs=json.dumps(flow["inputs"]),
+        task=flow["task"], inputs=json.dumps(flow["inputs"]),
         created_by=user["id"],
     )
     mock_agent = MagicMock()
     mock_browser = MagicMock()
-    mock_browser.get_storage_state = AsyncMock(return_value={
+    mock_browser.export_storage_state = AsyncMock(return_value={
         "cookies": [{"name": "manual_cookie", "value": "val", "domain": "protected.example.com"}],
     })
     paused_ref = [False]
@@ -405,7 +409,7 @@ async def test_e2e_hitl_manual_pause_then_resume(e2e_client, e2e_user, e2e_flow)
         resp = await e2e_client.get("/api/sessions", headers=headers)
         sessions = [s for s in resp.json() if s["domain"] == "protected.example.com"]
         assert len(sessions) >= 1
-        assert sessions[0]["profile_name"] == "protected.example.com"
+        assert sessions[0]["profile_name"] == run.profile_id
 
         # Step 5: Verify state back to running
         resp = await e2e_client.get("/api/runs/run-manual-pause", headers=headers)

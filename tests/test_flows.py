@@ -9,7 +9,7 @@ async def _create_flow(client: httpx.AsyncClient, headers: dict, **overrides) ->
     payload = {
         "name": "Test Flow",
         "domain": "example.com",
-        "description": "A test flow",
+        "task": "A test flow",
         "entry_url": "https://example.com",
         "inputs": [{"key": "query", "label": "Search query", "type": "text"}],
         "icon": "🔍",
@@ -24,7 +24,7 @@ async def test_create_flow(client: httpx.AsyncClient, auth_headers: dict):
     data = await _create_flow(client, auth_headers)
     assert data["name"] == "Test Flow"
     assert data["domain"] == "example.com"
-    assert data["description"] == "A test flow"
+    assert data["task"] == "A test flow"
     assert data["entry_url"] == "https://example.com"
     assert len(data["inputs"]) == 1
     assert data["icon"] == "🔍"
@@ -65,13 +65,13 @@ async def test_update_flow(client: httpx.AsyncClient, auth_headers: dict):
 
     resp = await client.put(
         f"/api/flows/{flow_id}",
-        json={"name": "Updated Flow", "description": "Updated desc"},
+        json={"name": "Updated Flow", "task": "Updated desc"},
         headers=auth_headers,
     )
     assert resp.status_code == 200
     data = resp.json()
     assert data["name"] == "Updated Flow"
-    assert data["description"] == "Updated desc"
+    assert data["task"] == "Updated desc"
     assert data["domain"] == "example.com"  # unchanged
 
 
@@ -96,6 +96,6 @@ async def test_create_flow_unauthenticated(client: httpx.AsyncClient):
     resp = await client.post("/api/flows", json={
         "name": "No Auth",
         "domain": "example.com",
-        "description": "Should fail",
+        "task": "Should fail",
     })
     assert resp.status_code == 401

@@ -1,4 +1,6 @@
 networks:
+  control:
+    internal: true
   flowpilot_sandbox-net:
     driver: bridge
 
@@ -14,7 +16,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     privileged: true
     networks:
-      - flowpilot_sandbox-net
+      - control
 
   backend:
     build:
@@ -27,6 +29,7 @@ services:
     volumes:
       - ./profiles:/app/profiles
       - ./traces:/tmp/flowpilot-traces
+      - ./.pi-auth:/app/.pi-auth
     environment:
       - FLOWPILOT_TRACE=${FLOWPILOT_TRACE:-1}
       - DOCKER_HOST=tcp://docker-proxy:2375
@@ -34,9 +37,24 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
+      - AGENT_DRIVER=${AGENT_DRIVER:-browser-use}
+      - PI_AUTH_FILE=/app/.pi-auth/auth.json
+      - CODEX_MODEL=${CODEX_MODEL:-gpt-6.1-sol}
+      - CODEX_EXPLORATION_MODEL=${CODEX_EXPLORATION_MODEL:-}
+      - CODEX_FAST_MODEL=${CODEX_FAST_MODEL:-}
+      - JEV_ENABLED=${JEV_ENABLED:-false}
+      - TYPESAFE_API_KEY=${TYPESAFE_API_KEY:-}
+      - JEV_MODEL=${JEV_MODEL:-jev-latest}
+      - SANDBOX_RUNTIME=${SANDBOX_RUNTIME:-}
       - GEMINI_MODEL=${GEMINI_MODEL:-}
+      - GEMINI_EXPLORATION_MODEL=${GEMINI_EXPLORATION_MODEL:-}
+      - GEMINI_FAST_MODEL=${GEMINI_FAST_MODEL:-}
       - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-}
+      - ANTHROPIC_EXPLORATION_MODEL=${ANTHROPIC_EXPLORATION_MODEL:-}
+      - ANTHROPIC_FAST_MODEL=${ANTHROPIC_FAST_MODEL:-}
       - OPENAI_MODEL=${OPENAI_MODEL:-}
+      - OPENAI_EXPLORATION_MODEL=${OPENAI_EXPLORATION_MODEL:-}
+      - OPENAI_FAST_MODEL=${OPENAI_FAST_MODEL:-}
       - PROFILES_DIR=/app/profiles
       - PROFILES_HOST_DIR=${PROFILES_HOST_DIR:-${PWD}/profiles}
       - SANDBOX_NETWORK=flowpilot_flowpilot_sandbox-net
@@ -46,4 +64,5 @@ services:
     depends_on:
       - docker-proxy
     networks:
+      - control
       - flowpilot_sandbox-net

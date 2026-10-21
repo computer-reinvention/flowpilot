@@ -1,0 +1,230 @@
+{
+  "started_at": "2026-10-17T09:16:28.849898+00:00",
+  "run_id": "8b56d964",
+  "host": {
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "ram_gib": 64.0,
+    "logical_cpus": 18
+  },
+  "docker": {
+    "cpus": 18,
+    "ram_gib": 7.746059417724609,
+    "version": "29.7.2",
+    "architecture": "aarch64"
+  },
+  "image_id": "sha256:5725dc387dab4ce81d4f68358523de708118ea3a39a2edea0e0bd182b31aba2d",
+  "method": "Shared CPU sets, 75% RAM evenly split into hard container limits; no swap; host controller outside limits. Fresh isolated profiles and simultaneous startup. Synthetic 300-product shop with 2 cross-origin frames, 5 UI additions per cycle, reload, 250ms think time, screenshot every third cycle. No model inference.",
+  "pass_criteria": "All sessions finish, isolation intact, no memory/PID max or OOM events, startup p95 <=60s and five-item cart p95 <=5s.",
+  "cases": [
+    {
+      "cpus": 2,
+      "machine_ram_gib": 2,
+      "concurrency": 1,
+      "per_container_memory_mib": 1536,
+      "repeat": 0,
+      "duration_seconds": 10,
+      "pid_limit": 1024,
+      "sessions": [
+        {
+          "index": 0,
+          "ok": true,
+          "latencies": [
+            1053.09,
+            893.3,
+            942.89,
+            1112.25,
+            1128.29,
+            979.46,
+            1133.52
+          ],
+          "cart_cycles": 7,
+          "screenshot_ms": [
+            86.51,
+            203.21
+          ],
+          "startup_seconds": 2.005,
+          "isolated_initial_state": true,
+          "isolation_verified_after_load": true
+        }
+      ],
+      "samples": [
+        {
+          "t": 0.0,
+          "memory_mib": 0,
+          "working_mib": 0,
+          "cpu_seconds": 0,
+          "pids_total": 0,
+          "controller": {
+            "rss_mib": 230.625,
+            "cpu_seconds": 0.5441973720000001
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 1.02,
+          "memory_mib": 19.86,
+          "working_mib": 19.86,
+          "cpu_seconds": 0.069845,
+          "pids_total": 1,
+          "controller": {
+            "rss_mib": 234.140625,
+            "cpu_seconds": 0.5823130360000001
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 2.03,
+          "memory_mib": 408.54,
+          "working_mib": 404.82,
+          "cpu_seconds": 0.975067,
+          "pids_total": 165,
+          "controller": {
+            "rss_mib": 261.75,
+            "cpu_seconds": 0.738108448
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 3.04,
+          "memory_mib": 434.42,
+          "working_mib": 430.7,
+          "cpu_seconds": 1.155477,
+          "pids_total": 165,
+          "controller": {
+            "rss_mib": 262.0625,
+            "cpu_seconds": 0.7751050800000001
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 4.05,
+          "memory_mib": 479.54,
+          "working_mib": 475.78,
+          "cpu_seconds": 1.490772,
+          "pids_total": 165,
+          "controller": {
+            "rss_mib": 263.15625,
+            "cpu_seconds": 0.8262508
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 5.07,
+          "memory_mib": 505.08,
+          "working_mib": 501.32,
+          "cpu_seconds": 1.856522,
+          "pids_total": 165,
+          "controller": {
+            "rss_mib": 264.4375,
+            "cpu_seconds": 0.8789103039999999
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 6.08,
+          "memory_mib": 505.38,
+          "working_mib": 501.6,
+          "cpu_seconds": 2.235863,
+          "pids_total": 165,
+          "controller": {
+            "rss_mib": 267.140625,
+            "cpu_seconds": 0.9263313120000001
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 7.09,
+          "memory_mib": 505.68,
+          "working_mib": 501.88,
+          "cpu_seconds": 2.406095,
+          "pids_total": 165,
+          "controller": {
+            "rss_mib": 270.734375,
+            "cpu_seconds": 0.958388296
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 8.11,
+          "memory_mib": 523.73,
+          "working_mib": 519.92,
+          "cpu_seconds": 2.735516,
+          "pids_total": 165,
+          "controller": {
+            "rss_mib": 275.0625,
+            "cpu_seconds": 1.0027456240000001
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 9.12,
+          "memory_mib": 496.62,
+          "working_mib": 492.8,
+          "cpu_seconds": 3.051464,
+          "pids_total": 165,
+          "controller": {
+            "rss_mib": 278.0625,
+            "cpu_seconds": 1.042479992
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 10.13,
+          "memory_mib": 501.79,
+          "working_mib": 497.95,
+          "cpu_seconds": 3.256374,
+          "pids_total": 165,
+          "controller": {
+            "rss_mib": 282.0,
+            "cpu_seconds": 1.075394504
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 11.15,
+          "memory_mib": 528.18,
+          "working_mib": 524.35,
+          "cpu_seconds": 3.610641,
+          "pids_total": 165,
+          "controller": {
+            "rss_mib": 280.015625,
+            "cpu_seconds": 1.11690428
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 12.16,
+          "memory_mib": 507.66,
+          "working_mib": 503.75,
+          "cpu_seconds": 3.753776,
+          "pids_total": 165,
+          "controller": {
+            "rss_mib": 280.0625,
+            "cpu_seconds": 1.144456816
+          },
+          "sample_errors": 0
+        }
+      ],
+      "status": "pass",
+      "active_started_at": 2.01,
+      "container_events": [
+        "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0\nmax 0\n"
+      ],
+      "summary": {
+        "successes": 1,
+        "cycles": 7,
+        "startup_p95_seconds": 2.005,
+        "cart_p50_ms": 1053.09,
+        "cart_p95_ms": 1133.52,
+        "peak_memory_mib": 528.18,
+        "peak_working_mib": 524.35,
+        "peak_controller_rss_mib": 282.0,
+        "peak_pids_total": 165,
+        "active_cpu_cores": 0.27430493583415594,
+        "resource_limit_hit": false
+      },
+      "elapsed_seconds": 13.37
+    }
+  ],
+  "finished_at": "2026-10-17T09:16:42.528008+00:00"
+}

@@ -48,7 +48,8 @@ class SandboxManager:
                 self._client = docker.from_env()
         return self._client
 
-    def start(self, profile_path: str | None = None, user_id: str = "") -> dict:
+    def start(self, profile_path: str | None = None, user_id: str = "", *,
+              publish_local_cdp: bool = False, profile_archive: str | None = None) -> dict:
         """Create and start a new sandbox container.
 
         Args:
@@ -62,21 +63,19 @@ class SandboxManager:
 
         environment = {
             "DISPLAY": ":1",
+            **({'CHROME_AUTORESTART': 'false'} if publish_local_cdp else {}),
         }
 
-        volumes = {
-            self.profiles_host_dir: {"bind": "/profiles", "mode": "rw"},
-        }
-
+        container = None
         try:
-            container = self.client.containers.run(
+            container = self.client.containers.create(
                 image=SANDBOX_IMAGE,
                 name=f"flowpilot-{sandbox_id}",
                 detach=True,
                 # CDP port is NOT published to the host; accessed via sandbox-net
-                volumes=volumes,
                 environment=environment,
                 network=SANDBOX_NETWORK,
+                **({"ports": {f"{CDP_CONTAINER_PORT}/tcp": ("127.0.0.1", None)}} if publish_local_cdp else {}),
                 labels={
                     "flowpilot": "sandbox",
                     "sandbox-id": sandbox_id,
@@ -87,31 +86,44 @@ class SandboxManager:
                 cpu_quota=100000,
                 pids_limit=256,
                 shm_size="256m",
-                # Chromium needs relaxed seccomp to avoid SIGTRAP crashes
-                security_opt=["seccomp=unconfined"],
+                security_opt=["no-new-privileges:true"],
+                **({"runtime": os.environ["SANDBOX_RUNTIME"]} if os.getenv("SANDBOX_RUNTIME") else {}),
             )
+            if profile_archive:
+                archive = Path(profile_archive).resolve(strict=True)
+                if not archive.is_relative_to(Path(self.profiles_host_dir).resolve()):
+                    raise ValueError('Profile archive must be within the configured profile directory')
+                container.put_archive('/tmp', archive.read_bytes())
+            if profile_path:
+                src = Path(profile_path).resolve(strict=True)
+                root = Path(self.profiles_host_dir).resolve()
+                if not src.is_relative_to(root):
+                    raise ValueError("Profile must be within the configured profile directory")
+                buf = io.BytesIO()
+                with tarfile.open(fileobj=buf, mode="w") as tar:
+                    for item in src.rglob("*"):
+                        if item.is_file() and not item.is_symlink():
+                            tar.add(str(item), arcname="chrome-profile/" + str(item.relative_to(src)), recursive=False)
+                buf.seek(0)
+                container.put_archive("/tmp", buf)
+            # Restore before Chromium starts: no shared profile mount or startup race.
+            container.start()
+            if publish_local_cdp:
+                container.reload()
+                local_port = container.attrs['NetworkSettings']['Ports'][f'{CDP_CONTAINER_PORT}/tcp'][0]['HostPort']
         except APIError as e:
+            if container is not None:
+                container.remove(force=True)
             logger.error("Failed to start sandbox container: %s", e)
             raise RuntimeError(f"Failed to start sandbox: {e}") from e
+        except Exception:
+            if container is not None:
+                container.remove(force=True)
+            raise
 
         # CDP accessible via container name on the internal network
         cdp_host = f"flowpilot-{sandbox_id}"
         cdp_port = CDP_CONTAINER_PORT  # internal port, not published
-
-        # If a profile was provided, copy it into the container via Docker SDK
-        if profile_path:
-            try:
-                buf = io.BytesIO()
-                with tarfile.open(fileobj=buf, mode="w") as tar:
-                    src = Path(profile_path)
-                    for item in src.iterdir():
-                        tar.add(str(item), arcname=item.name)
-                buf.seek(0)
-                container.put_archive("/tmp/chrome-profile", buf)
-                container.exec_run("chown -R sandboxuser:sandboxuser /tmp/chrome-profile")
-                logger.info("Restored profile from %s into sandbox %s", profile_path, sandbox_id)
-            except Exception as e:
-                logger.warning("Failed to restore profile: %s", e)
 
         info = SandboxInfo(
             sandbox_id=sandbox_id,
@@ -134,6 +146,7 @@ class SandboxManager:
             "container_id": container.id,
             "cdp_url": cdp_url,
             "status": "running",
+            **({"local_cdp_url": f"http://127.0.0.1:{local_port}"} if publish_local_cdp else {}),
         }
 
     def stop(self, sandbox_id: str) -> None:
@@ -251,4 +264,3 @@ class SandboxManager:
     def validate_profile_name(profile_name: str) -> bool:
         """H5: Validate profile name is safe (alphanumeric + hyphens + underscores)."""
         return bool(PROFILE_NAME_PATTERN.match(profile_name))
-

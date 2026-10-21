@@ -1,0 +1,267 @@
+{
+  "started_at": "2026-10-17T09:25:52.719329+00:00",
+  "run_id": "7e6b1c93",
+  "host": {
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "ram_gib": 64.0,
+    "logical_cpus": 18
+  },
+  "docker": {
+    "cpus": 18,
+    "ram_gib": 7.746059417724609,
+    "version": "29.7.2",
+    "architecture": "aarch64"
+  },
+  "image_id": "sha256:5725dc387dab4ce81d4f68358523de708118ea3a39a2edea0e0bd182b31aba2d",
+  "method": "Shared CPU sets, 75% RAM evenly split into hard container limits; no swap; host controller outside limits. Fresh isolated profiles and simultaneous startup. Synthetic 300-product shop with 2 cross-origin frames, 5 UI additions per cycle, reload, 250ms think time, screenshot every third cycle. No model inference.",
+  "pass_criteria": "All sessions finish, isolation intact, no memory/PID max or OOM events, startup p95 <=60s and five-item cart p95 <=5s.",
+  "cases": [
+    {
+      "cpus": 2,
+      "machine_ram_gib": 2,
+      "concurrency": 3,
+      "per_container_memory_mib": 512,
+      "repeat": 0,
+      "duration_seconds": 60,
+      "pid_limit": 1024,
+      "sessions": [
+        {
+          "index": 0,
+          "ok": false,
+          "latencies": [
+            767.96,
+            862.79,
+            930.13,
+            931.57,
+            1177.69,
+            875.69,
+            857.94
+          ],
+          "cart_cycles": 7,
+          "screenshot_ms": [
+            126.97,
+            175.62
+          ],
+          "startup_seconds": 2.87,
+          "isolated_initial_state": true,
+          "error": "Locator.fill: Target crashed \nCall log:\n  - waiting for locator(\"#search\")\n"
+        },
+        {
+          "index": 1,
+          "ok": false,
+          "latencies": [
+            791.6,
+            993.17,
+            999.95,
+            1308.08
+          ],
+          "cart_cycles": 4,
+          "screenshot_ms": [
+            89.02
+          ],
+          "startup_seconds": 2.61,
+          "isolated_initial_state": true,
+          "error": "Locator.fill: Target crashed \nCall log:\n  - waiting for locator(\"#search\")\n"
+        },
+        {
+          "index": 2,
+          "ok": false,
+          "latencies": [
+            1053.87,
+            1034.65,
+            1025.44,
+            802.33,
+            757.3
+          ],
+          "cart_cycles": 5,
+          "screenshot_ms": [
+            135.08
+          ],
+          "startup_seconds": 2.415,
+          "isolated_initial_state": true,
+          "error": "Locator.fill: Target crashed \nCall log:\n  - waiting for locator(\"#search\")\n"
+        }
+      ],
+      "samples": [
+        {
+          "t": 0.0,
+          "memory_mib": 0,
+          "working_mib": 0,
+          "cpu_seconds": 0,
+          "pids_total": 0,
+          "controller": {
+            "rss_mib": 229.796875,
+            "cpu_seconds": 0.449723581
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 1.02,
+          "memory_mib": 58.42,
+          "working_mib": 58.39,
+          "cpu_seconds": 0.20118799999999998,
+          "pids_total": 3,
+          "controller": {
+            "rss_mib": 235.046875,
+            "cpu_seconds": 0.5096026929999999
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 2.03,
+          "memory_mib": 801.37,
+          "working_mib": 791.16,
+          "cpu_seconds": 1.865523,
+          "pids_total": 427,
+          "controller": {
+            "rss_mib": 248.671875,
+            "cpu_seconds": 0.638879416
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 3.04,
+          "memory_mib": 1278.86,
+          "working_mib": 1267.69,
+          "cpu_seconds": 2.835518,
+          "pids_total": 498,
+          "controller": {
+            "rss_mib": 269.75,
+            "cpu_seconds": 0.8676237
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 4.06,
+          "memory_mib": 1343.65,
+          "working_mib": 1332.4,
+          "cpu_seconds": 3.6235,
+          "pids_total": 498,
+          "controller": {
+            "rss_mib": 275.296875,
+            "cpu_seconds": 1.021602496
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 5.08,
+          "memory_mib": 1328.51,
+          "working_mib": 1317.25,
+          "cpu_seconds": 4.1190359999999995,
+          "pids_total": 478,
+          "controller": {
+            "rss_mib": 283.421875,
+            "cpu_seconds": 1.150431744
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 6.09,
+          "memory_mib": 1483.86,
+          "working_mib": 1472.59,
+          "cpu_seconds": 4.94077,
+          "pids_total": 499,
+          "controller": {
+            "rss_mib": 286.34375,
+            "cpu_seconds": 1.303734576
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 7.11,
+          "memory_mib": 1423.79,
+          "working_mib": 1412.44,
+          "cpu_seconds": 5.789404,
+          "pids_total": 496,
+          "controller": {
+            "rss_mib": 294.890625,
+            "cpu_seconds": 1.5023637920000001
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 8.12,
+          "memory_mib": 1459.22,
+          "working_mib": 1447.8,
+          "cpu_seconds": 6.389536,
+          "pids_total": 499,
+          "controller": {
+            "rss_mib": 296.53125,
+            "cpu_seconds": 1.624420656
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 9.14,
+          "memory_mib": 1287.47,
+          "working_mib": 1279.86,
+          "cpu_seconds": 7.133129,
+          "pids_total": 466,
+          "controller": {
+            "rss_mib": 298.875,
+            "cpu_seconds": 1.765746144
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 10.16,
+          "memory_mib": 1062.94,
+          "working_mib": 1058.61,
+          "cpu_seconds": 7.815417,
+          "pids_total": 433,
+          "controller": {
+            "rss_mib": 300.28125,
+            "cpu_seconds": 1.876138672
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 11.18,
+          "memory_mib": 1046.25,
+          "working_mib": 1041.91,
+          "cpu_seconds": 8.062415999999999,
+          "pids_total": 432,
+          "controller": {
+            "rss_mib": 296.296875,
+            "cpu_seconds": 1.944614224
+          },
+          "sample_errors": 0
+        },
+        {
+          "t": 12.2,
+          "memory_mib": 1067.64,
+          "working_mib": 1063.73,
+          "cpu_seconds": 8.418444,
+          "pids_total": 431,
+          "controller": {
+            "rss_mib": 297.078125,
+            "cpu_seconds": 2.02415192
+          },
+          "sample_errors": 0
+        }
+      ],
+      "status": "fail",
+      "active_started_at": 2.88,
+      "container_events": [
+        "low 0\nhigh 0\nmax 110\noom 2\noom_kill 1\noom_group_kill 0\nsock_throttled 0\nmax 0\n",
+        "low 0\nhigh 0\nmax 128\noom 1\noom_kill 1\noom_group_kill 0\nsock_throttled 0\nmax 0\n",
+        "low 0\nhigh 0\nmax 182\noom 2\noom_kill 1\noom_group_kill 0\nsock_throttled 0\nmax 0\n"
+      ],
+      "summary": {
+        "successes": 0,
+        "cycles": 16,
+        "startup_p95_seconds": 2.87,
+        "cart_p50_ms": 930.13,
+        "cart_p95_ms": 1308.08,
+        "peak_memory_mib": 1483.86,
+        "peak_working_mib": 1472.59,
+        "peak_controller_rss_mib": 300.28125,
+        "peak_pids_total": 499,
+        "active_cpu_cores": 0.6094897379912663,
+        "resource_limit_hit": true
+      },
+      "elapsed_seconds": 22.9
+    }
+  ],
+  "finished_at": "2026-10-17T09:26:15.770618+00:00"
+}

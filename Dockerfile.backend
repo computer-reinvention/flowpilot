@@ -1,5 +1,5 @@
 # ── Stage 1: build frontend ──────────────────────────────────────────────────
-FROM node:20-slim AS frontend-builder
+FROM node:22-bookworm-slim AS frontend-builder
 
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
@@ -8,6 +8,11 @@ RUN npm ci --prefer-offline
 COPY frontend/ ./
 RUN npm run build
 
+FROM node:22-bookworm-slim AS agent-builder
+WORKDIR /app/agent-host
+COPY agent-host/package*.json ./
+RUN npm ci --omit=dev
+COPY agent-host/*.mjs ./
 
 # ── Stage 2: Python backend ───────────────────────────────────────────────────
 FROM python:3.12-slim
@@ -25,6 +30,8 @@ RUN uv sync --frozen --no-dev
 RUN uv run playwright install chromium && uv run playwright install-deps
 
 COPY backend/ ./backend/
+COPY --from=agent-builder /usr/local/bin/node /usr/local/bin/node
+COPY --from=agent-builder /app/agent-host/ ./agent-host/
 COPY --from=frontend-builder /app/frontend/dist/ ./frontend/
 
 EXPOSE 8080

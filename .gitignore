@@ -2,6 +2,9 @@ profiles/
 __pycache__/
 *.pyc
 .env
+.pi-auth/
+.repl-state/
+repl.local.json
 .venv/
 node_modules/
 

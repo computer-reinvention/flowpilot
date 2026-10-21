@@ -1,7 +1,14 @@
 .venv
 node_modules
+**/node_modules
+**/dist
+**/__pycache__
+traces/
 .git
 __pycache__
 *.pyc
 .env
+.pi-auth/
+.repl-state/
+repl.local.json
 profiles/

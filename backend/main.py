@@ -44,8 +44,7 @@ FRONTEND_DIR = Path(os.environ.get("FRONTEND_DIR", "/app/frontend"))
 # Singleton services
 # ---------------------------------------------------------------------------
 
-_profiles_host_dir = os.environ.get("PROFILES_HOST_DIR", str(PROFILES_DIR))
-sandbox_mgr = SandboxManager(profiles_host_dir=_profiles_host_dir)
+sandbox_mgr = SandboxManager(profiles_host_dir=str(PROFILES_DIR))
 profile_mgr = ProfileManager(profiles_dir=PROFILES_DIR)
 flow_runner = FlowRunner()
 
@@ -818,9 +817,11 @@ def _build_webhook_payload(
     if sandbox_id and event in ("run.started", "run.paused"):
         payload["browser_cdp_url"] = f"{BASE_URL}/ws/browser/{sandbox_id}"
     if event == "run.paused":
-        payload["resume_url"] = f"{BASE_URL}/api/v1/runs/{run_id}/resume"
         normalized = category if category in webhook_svc.HITL_CATEGORIES else "other"
-        payload["category"] = normalized
+        from .handoff import pause_payload
+        payload.update(pause_payload(message, normalized,
+                                    payload.get("browser_cdp_url"),
+                                    f"{BASE_URL}/api/v1/runs/{run_id}/resume"))
     return payload
 
 

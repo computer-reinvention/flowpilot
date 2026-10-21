@@ -6,9 +6,154 @@ FlowPilot is a self-hosted platform for building browser automations that need h
 
 Everything is API-first: start runs, handle pauses, resume — all programmable. Webhook events fire on every state change with the live browser URL baked in. Trigger hooks give you URL endpoints that start runs from Slack, Zapier, cron, or anything that can POST.
 
-Built on [browser-use](https://github.com/browser-use/browser-use). Runs in Docker.
+Uses [browser-use](https://github.com/browser-use/browser-use) for browser connectivity, with selectable browser-use or Pi agent drivers. Runs in Docker.
 
-### Benchmarks (Gemini Flash, 5 scenarios)
+## Modernized local setup
+
+### Conversational test REPL (no dashboard)
+
+```sh
+./chat --user pankaj
+```
+
+This starts **full Chromium on an Xvfb virtual display in Docker**, using the
+original sandbox image. It does not open a window on your desktop or attach to
+your existing Chrome. Talk to the agent in the terminal:
+
+```text
+you> Go to Blinkit. Help me log in, then add two cartons of milk to my cart. Stop before checkout.
+you> What is currently in my cart?
+you> /stats
+you> /scripts
+you> /quit
+```
+
+For missing information (including OTP codes) the agent asks in the terminal and
+continues using your answer. Confirmations also happen in chat. Enter `/browser`
+instead of a requested value if you prefer to handle it yourself.
+For direct intervention (CAPTCHA, device approval, or a sign-in you want to handle),
+the agent sends a clickable assistance link. Open it to interact with the same
+browser, then click **Resume agent** there. The link expires on resume or cancellation.
+The page streams the browser through CDP and forwards pointer movement,
+button-down/up, dragging, scrolling and direct keyboard input. Click the image
+to control it; click outside to release keyboard focus. A text-entry box and
+screenshot fallback are also available. This is browser-viewport remote control,
+not an OS desktop/VNC server; it does not expose native system dialogs.
+Links are local to this machine. Application deployments retain the existing
+authenticated CDP proxy, webhook delivery and resume API.
+
+Programmatic callers can pass `on_handoff=async_callback` to receive a `run.paused`
+event with `assistance_url`, `browser_cdp_url`, `resume_url`, category and requested
+fields. Return from that callback after delivery; the agent waits for resolution
+via the link/API. `human_help` remains a legacy callback override. `/cdp` also
+prints raw endpoints for developer access. Use `--user alice`
+or `--user bob` for separate browser profiles, histories, and saved scripts.
+The same user keeps cookies/local storage across restarts. Only one process can
+open a given user's profile at a time.
+
+For programmatic chat, pass `on_question=async_callback`. It receives
+`{kind, message, fields}` and returns `{"values": {"field_name": "answer"}}` for
+inputs or `{"confirmed": true/false}` for confirmation. Values collected this
+way are available during the run but are not appended to persisted input history.
+
+Copy `repl.example.json` to ignored `repl.local.json` for startup defaults, or
+pass `--config FILE`. Alternatively set `FLOWPILOT_REPL_USER=pankaj` in `.env`
+and launch `./chat` without arguments. Identity precedence is `--user`, config,
+environment, then OS username. State is stored under ignored `.repl-state/<user>/`.
+These are local identity namespaces, **not authentication against other people
+with access to the same OS account**. The configured model subscription is shared;
+website sessions and automation memory are separate. The chat now uses the same
+Docker/Xvfb browser architecture as the application, with CDP published only to
+localhost. Its Linux profile is saved atomically as `sandbox-profile.tar` under
+the user directory after Chromium closes gracefully and restored before startup.
+The previous native macOS profile remains in `browser/`; it is not overwritten
+or copied across operating systems. Conversation and saved scripts are retained.
+
+Commands: `/history`, `/stats`, `/scripts`, `/repeat`, `/cdp`, `/inputs {"key":"value"}`,
+`/quit`. `/repeat` resubmits the previous ask using the current inputs and page;
+the agent checks existing state before acting. Similar asks can reuse saved scripts
+or repair failed ones. Each answer reports wall/agent/human time, model turns,
+tool calls, script reuse and failures. This is explicit reusable automation, not
+model training; reuse and speed improvements are measured rather than guaranteed.
+
+One-shot and programmatic usage:
+
+```sh
+./chat --user pankaj --ask 'Visit https://example.com and summarize it'
+```
+
+```python
+from dotenv import load_dotenv
+from backend.repl import BrowserSession
+
+load_dotenv()  # configured Codex/Pi environment
+async with BrowserSession("pankaj") as session:
+    result = await session.ask("Search this site for milk", inputs={"query": "milk"})
+    print(result["answer"], result["metrics"])
+    followup = await session.ask("Which result is cheapest?")
+```
+
+Prerequisites: running Docker, `docker build -f Dockerfile.sandbox -t flowpilot-sandbox .`,
+`uv sync`, `npm ci --prefix agent-host`, and subscription sign-in below.
+`--browser-mode native` retains the previous local headless test backend and needs
+`uv run playwright install chromium`. The default `sandbox` mode needs no local browser.
+Read-only
+live trial: first request 32.39s/8 turns; follow-up with saved-script reuse
+19.18s/5 turns. Cookies/local-storage isolation and restart persistence verified
+by `uv run python -m scripts.smoke_repl_state`.
+
+1. Copy `.env.example` to `.env`, set a strong `JWT_SECRET`, and add the key for
+   your chosen `LLM_PROVIDER` (`gemini`, `claude`, or `openai`).
+2. Run `./dev build`, then `docker compose up -d`.
+3. Open http://localhost:8080. Local Compose binds the backend to loopback.
+
+Set `AGENT_DRIVER=pi` to use Pi for exploration/fallback. Its code-mode tool runs
+JavaScript in a bounded QuickJS/WASM VM with only injected browser capabilities;
+browser calls are serialized and human-help calls remain outside timed batches.
+The default remains `browser-use` pending live provider comparison. Docker includes
+Node and Pi. Native development also needs Node >=22.19 and `npm ci` in `agent-host`.
+
+### Codex subscription instead of an API key
+
+Run `node agent-host/login.mjs` locally and complete the displayed OpenAI device
+sign-in. Credentials are saved privately in ignored `.pi-auth/auth.json`, mounted
+only into the backend. Pi refreshes tokens under a cross-process file lock.
+Set `LLM_PROVIDER=codex`, `AGENT_DRIVER=pi`, and optionally `CODEX_MODEL` (or
+`CODEX_EXPLORATION_MODEL`/`CODEX_FAST_MODEL`), then rebuild/recreate Compose.
+Exploration, fallback, script generation and repair all use the subscription.
+This does not authenticate the separate optional Jev service.
+
+Model overrides use `GEMINI_`, `ANTHROPIC_`, or `OPENAI_` prefixes followed by
+`MODEL`, `EXPLORATION_MODEL`, or `FAST_MODEL`. See `.env.example`. Cached complete
+replay plans do not construct a model or require a provider key.
+
+Optional Jev routing: set `JEV_ENABLED=true` and `TYPESAFE_API_KEY` to classify
+failure observations through TypeSafe. Low-confidence or unavailable responses
+fall back to the agent. Successful replay never invokes Jev.
+
+Sandbox profiles are copied into stopped containers before Chromium starts; no
+shared profile mount is exposed. Default Docker seccomp and no-new-privileges
+are used. `SANDBOX_RUNTIME=runsc` requires a separately configured gVisor host;
+it is not installed by this project. Chromium still uses `--no-sandbox`, so the
+container boundary remains important.
+
+Verification commands:
+
+```sh
+uv run pytest -q
+npm --prefix agent-host test
+npm --prefix frontend run build
+docker compose exec -T backend uv run python < scripts/smoke_replay.py
+```
+
+The last command creates an isolated test database/container, checks real two-stage
+CDP replay with pause/resume and no repeated first-stage effect, then cleans up.
+Live provider tests require `uv run pytest --live` and configured credentials.
+Research, decisions, current evidence and limitations: [modernization notes](docs/modernization.md).
+Concurrent browser-worker sizing, measured limits and reproducible load harness:
+[session capacity benchmark](docs/session-capacity.md).
+
+### Historical benchmarks (Gemini Flash, 5 scenarios; not revalidated for this revision)
 
 | Scenario | What it does | Baseline | Cold | Warm | Speedup |
 |---|---|---|---|---|---|
@@ -35,13 +180,13 @@ Pass rate: 5/5 across all modes. Warm runs make zero LLM calls.
 
 ### Three-tier execution
 
-1. **Fast path** — Execute cached JS reflexes in order. Auto-repair on failure (LLM rewrites script using current DOM). Bail after 3 failures.
+1. **Fast path** — Execute every stage in a complete flow-scoped plan. Auto-repair on failure; an unrepaired prerequisite stops dependent replay and hands off current state.
 2. **Generate** — No reflexes? Navigate to entry URL, snapshot DOM, LLM writes a script.
-3. **Agent** — Full browser-use agent loop as last resort. Saves new reflexes for next time.
+3. **Agent** — Selectable Pi or browser-use loop as fallback. Saves new reflexes for next time.
 
 ### Reflexes
 
-JavaScript async arrow functions stored per-domain, executed via CDP `Runtime.evaluate`:
+JavaScript async arrow functions stored per-flow and domain, executed via bounded CDP `Runtime.evaluate`. Explicit tree references preserve legacy scripts:
 
 ```javascript
 async (inputs, entryUrl) => {

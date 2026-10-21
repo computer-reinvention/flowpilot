@@ -17,7 +17,7 @@ def _make_flow(flow_id="flow-1"):
     from backend.models import Flow
     return Flow(
         id=flow_id, name="Test Flow", domain="example.com",
-        description="A test flow", inputs="[]", created_by="user-1",
+        task="A test flow", inputs="[]", created_by="user-1",
     )
 
 
@@ -49,7 +49,7 @@ async def test_resume_paused_run(client, auth_headers, test_user_id):
     mock_agent.resume = MagicMock()
 
     mock_browser = MagicMock()
-    mock_browser.get_storage_state = AsyncMock(return_value={
+    mock_browser.export_storage_state = AsyncMock(return_value={
         "cookies": [
             {"name": "session_id", "value": "abc123", "domain": "example.com"},
         ],
@@ -68,12 +68,12 @@ async def test_resume_paused_run(client, auth_headers, test_user_id):
         assert data["run_id"] == "run-1"
 
         mock_agent.resume.assert_called_once()
-        mock_browser.get_storage_state.assert_called_once()
+        mock_browser.export_storage_state.assert_called_once()
 
         db_mod.create_session.assert_called_once()
         session_arg = db_mod.create_session.call_args[0][0]
         assert session_arg.domain == "example.com"
-        assert session_arg.profile_name == "example.com"  # profile_name set to flow domain on resume
+        assert session_arg.profile_name == run.profile_id
         cookies = json.loads(session_arg.cookies)
         assert len(cookies) == 1
         assert cookies[0]["name"] == "session_id"

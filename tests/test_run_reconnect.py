@@ -12,15 +12,16 @@ def mock_db_and_services(monkeypatch):
     import backend.main as main_mod
     import backend.db as db_mod
 
-    main_mod.sandbox_mgr = MagicMock()
+    monkeypatch.setattr(main_mod, "sandbox_mgr", MagicMock())
     main_mod.sandbox_mgr.stop = MagicMock()
     main_mod.sandbox_mgr.cleanup_orphans = MagicMock(return_value=0)
     main_mod.sandbox_mgr.stop_all = MagicMock()
 
-    main_mod.profile_mgr = MagicMock()
+    monkeypatch.setattr(main_mod, "profile_mgr", MagicMock())
 
     monkeypatch.setattr(db_mod, "init_db", AsyncMock())
-    monkeypatch.setattr(db_mod, "seed_default_flows", AsyncMock())
+    monkeypatch.setattr(db_mod, "get_run", db_mod.get_run)
+    monkeypatch.setattr(db_mod, "list_runs", db_mod.list_runs)
 
 
 @pytest.fixture

@@ -113,6 +113,28 @@ async def init_db() -> None:
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )
         """)
+        # Preserve legacy domain scripts in the empty scope. Rebuild to replace
+        # the old UNIQUE(domain, name) constraint without losing their IDs.
+        columns = await (await db.execute("PRAGMA table_info(reflexes)")).fetchall()
+        if "flow_id" not in {column[1] for column in columns}:
+            await db.execute("ALTER TABLE reflexes RENAME TO reflexes_legacy")
+            await db.execute("""
+                CREATE TABLE reflexes (
+                    id TEXT PRIMARY KEY, domain TEXT NOT NULL,
+                    flow_id TEXT NOT NULL DEFAULT '', name TEXT NOT NULL,
+                    description TEXT NOT NULL, script TEXT NOT NULL,
+                    pause_after TEXT, tags TEXT NOT NULL DEFAULT '[]',
+                    created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                    UNIQUE(domain, flow_id, name)
+                )
+            """)
+            await db.execute("""
+                INSERT INTO reflexes
+                (id, domain, name, description, script, pause_after, tags, created_at, updated_at)
+                SELECT id, domain, name, description, script, pause_after, tags, created_at, updated_at
+                FROM reflexes_legacy
+            """)
+            await db.execute("DROP TABLE reflexes_legacy")
         await db.execute("""
             CREATE TABLE IF NOT EXISTS webhooks (
                 id TEXT PRIMARY KEY,
@@ -384,6 +406,7 @@ async def upsert_reflex(
     script: str,
     pause_after: str | None = None,
     tags: list[str] | None = None,
+    flow_id: str = "",
 ) -> dict:
     """Insert or replace a reflex. Returns the stored row as a dict."""
     now = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
@@ -393,7 +416,7 @@ async def upsert_reflex(
         db.row_factory = aiosqlite.Row
         # Try to get existing id so we don't churn it on updates
         cursor = await db.execute(
-            "SELECT id FROM reflexes WHERE domain = ? AND name = ?", (domain, name)
+            "SELECT id FROM reflexes WHERE domain = ? AND flow_id = ? AND name = ?", (domain, flow_id, name)
         )
         existing = await cursor.fetchone()
         if existing:
@@ -401,14 +424,14 @@ async def upsert_reflex(
             await db.execute(
                 """UPDATE reflexes
                    SET description=?, script=?, pause_after=?, tags=?, updated_at=?
-                   WHERE domain=? AND name=?""",
-                (description, script, pause_after, tags_json, now, domain, name),
+                   WHERE domain=? AND flow_id=? AND name=?""",
+                (description, script, pause_after, tags_json, now, domain, flow_id, name),
             )
         else:
             await db.execute(
-                """INSERT INTO reflexes (id, domain, name, description, script, pause_after, tags, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (reflex_id, domain, name, description, script, pause_after, tags_json, now, now),
+                """INSERT INTO reflexes (id, domain, flow_id, name, description, script, pause_after, tags, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (reflex_id, domain, flow_id, name, description, script, pause_after, tags_json, now, now),
             )
         await db.commit()
         cursor = await db.execute("SELECT * FROM reflexes WHERE id = ?", (reflex_id,))
@@ -418,12 +441,12 @@ async def upsert_reflex(
     return result
 
 
-async def get_reflex(domain: str, name: str) -> dict | None:
+async def get_reflex(domain: str, name: str, flow_id: str = "") -> dict | None:
     """Get a single reflex by domain + name."""
     async with aiosqlite.connect(str(DB_PATH)) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            "SELECT * FROM reflexes WHERE domain = ? AND name = ?", (domain, name)
+            "SELECT * FROM reflexes WHERE domain = ? AND flow_id = ? AND name = ?", (domain, flow_id, name)
         )
         row = await cursor.fetchone()
     if not row:
@@ -433,12 +456,12 @@ async def get_reflex(domain: str, name: str) -> dict | None:
     return result
 
 
-async def list_reflexes_for_domain(domain: str) -> list[dict]:
+async def list_reflexes_for_domain(domain: str, flow_id: str = "") -> list[dict]:
     """Return all reflexes for a domain, ordered by creation time."""
     async with aiosqlite.connect(str(DB_PATH)) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            "SELECT * FROM reflexes WHERE domain = ? ORDER BY created_at ASC", (domain,)
+            "SELECT * FROM reflexes WHERE domain = ? AND flow_id = ? ORDER BY created_at ASC", (domain, flow_id)
         )
         rows = await cursor.fetchall()
     result = []
@@ -449,17 +472,17 @@ async def list_reflexes_for_domain(domain: str) -> list[dict]:
     return result
 
 
-async def search_reflexes(domain: str, query: str) -> list[dict]:
+async def search_reflexes(domain: str, query: str, flow_id: str = "") -> list[dict]:
     """Search reflexes for a domain by keyword match on name and description."""
     pattern = f"%{query}%"
     async with aiosqlite.connect(str(DB_PATH)) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
             """SELECT * FROM reflexes
-               WHERE domain = ?
+               WHERE domain = ? AND flow_id = ?
                  AND (name LIKE ? OR description LIKE ?)
                ORDER BY created_at ASC""",
-            (domain, pattern, pattern),
+            (domain, flow_id, pattern, pattern),
         )
         rows = await cursor.fetchall()
     result = []
@@ -728,4 +751,3 @@ async def touch_trigger_hook(hook_id: str) -> None:
 # ---------------------------------------------------------------------------
 # Seed default flows
 # ---------------------------------------------------------------------------
-
