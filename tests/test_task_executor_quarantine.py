@@ -2,6 +2,7 @@
 import asyncio
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -126,6 +127,31 @@ def test_ledger_byte_quota_charges_measured_and_unreadable_entries(tmp_path):
     with pytest.raises(TaskFault) as raised:
         ledger.reserve(lease_for('bob', 'next'), key_of(lease_for('bob', 'next')))
     assert raised.value.error.code == ErrorCode.CAPACITY_EXHAUSTED
+
+
+def _race_reserve(state_dir, number, start):
+    settings = quota(Path(state_dir), quarantine_max_count=3, quarantine_max_account_count=3,
+                     quarantine_max_bytes=3 * GIB, quarantine_max_account_bytes=3 * GIB)
+    lease = lease_for('racer', f'profile{number}', f'task{number}')
+    start.wait()
+    try:
+        QuarantineLedger(settings).reserve(lease, key_of(lease))
+        return 'reserved'
+    except TaskFault as fault:
+        return fault.error.code
+
+
+def test_cross_process_reservations_are_atomic(tmp_path):
+    import multiprocessing
+    from concurrent.futures import ProcessPoolExecutor
+    context = multiprocessing.get_context('spawn')
+    with context.Manager() as manager, ProcessPoolExecutor(8, mp_context=context) as pool:
+        start = manager.Event()
+        futures = [pool.submit(_race_reserve, str(tmp_path), number, start) for number in range(8)]
+        start.set()
+        outcomes = sorted(future.result() for future in futures)
+    assert outcomes == ['capacity_exhausted'] * 5 + ['reserved'] * 3
+    assert len(QuarantineLedger(quota(tmp_path)).entries()) == 3
 
 
 class Runtime:

@@ -103,7 +103,7 @@ class QuarantineLedger:
     @contextmanager
     def _locked(self):
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        with (self.root / '.lock').open('a') as lock:
+        with os.fdopen(os.open(self.root / '.lock', os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), 'a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             yield
 
