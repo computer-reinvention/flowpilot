@@ -1,0 +1,24 @@
+# Import this site explicitly into an existing operator-owned Caddyfile.
+# Do not enable global/debug/access logging: assistance paths AND queries are secrets.
+{$FLOWPILOT_DOMAIN} {
+    request_body {
+        max_size 128KB
+    }
+    header {
+        Referrer-Policy no-referrer
+        X-Content-Type-Options nosniff
+        -Server
+    }
+    reverse_proxy 127.0.0.1:8080 {
+        # Do not use client-supplied forwarded headers for authorization/Origin.
+        header_up X-Forwarded-Proto https
+        header_up X-Forwarded-Host {host}
+        header_up -Forwarded
+        transport http {
+            dial_timeout 5s
+            response_header_timeout 35s
+        }
+        stream_timeout 10m
+        stream_close_delay 5s
+    }
+}
