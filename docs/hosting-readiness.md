@@ -269,6 +269,10 @@ durable tmpfs state, or rate-limit correctness.
 
 ### Exact application/contract requests to the integrator
 
+The following original checkpoint requests are historical. The read-only triage
+below checks newer owner commits and supersedes blanket missing-implementation
+claims for resource wiring, profile-turn retention, task recovery scope and idle cleanup.
+
 - **001:** implement terminal-only history retention using `history_retention_days`;
   ensure login/signup and all existing/new API key routes have enforceable limits;
   retain fail-closed readiness until startup reconciliation is complete.
@@ -296,3 +300,112 @@ Required remaining gates include assembled lane006 acceptance, crash/reboot/grac
 stop semantics, resource/ENOSPC tests, real sandbox topology/policy probes, TLS/viewer
 authorization and all dependency vulnerabilities reviewed by their owners. Do not
 promote this branch based on its documentation or an HTTP 200 alone.
+
+## Read-only dependency and implementation triage — 2026-10-21
+
+Machine-readable actionable inventory: `scripts/ops_dependency_triage.json`.
+It includes **all 28 Python advisory IDs, aliases and individual reported fixed
+versions**, all seven frontend package/version findings, locked dependency paths,
+conditional runtime exposure, exact candidate edits and immutable source references.
+Original manifests/locks remain byte-identical to the recorded SHA256 values.
+Experiments modified only disposable container copies; no provider was contacted.
+
+### Smallest dependency amendments proposed, not applied
+
+1. **Certifi first: `uv.lock` only.** Target `certifi==2026.10.19` using
+   `uv lock --upgrade-package certifi==2026.10.19`. The disposable uv 0.9.5 resolver
+   changed **only certifi**. It is transitive through HTTPX/HTTPcore/Requests without
+   a conflicting upstream exact pin. Verify the new trust bundle, frozen sync/audit
+   and existing tests; intentionally distrusted certificate chains may stop working.
+
+2. **Frontend: preserve CSS, remove unused CLI.** The seven high package findings
+   are **one** root braces stack-exhaustion advisory propagated through
+   `shadcn -> {registry, ts-morph -> common, fast-glob} -> micromatch -> braces`.
+   All seven entries are dev-only; no vulnerable CLI JavaScript is imported by the
+   app or copied into the runtime image. However, `frontend/src/index.css:3` imports
+   `shadcn/tailwind.css`: deleting only the dev dependency clears audit but **breaks
+   the build**. A second disposable experiment preserved the pinned stylesheet
+   byte-for-byte, changed only its import, and removed the CLI. Result: **zero npm
+   findings, build passed, complete dist byte-identical, all TSX sources unchanged,
+   runtime dependency map unchanged, no surviving lock version changed**, 291 unused
+   lock entries removed.
+
+   Proposed exact files: remove `devDependencies.shadcn` in `frontend/package.json`;
+   regenerate `frontend/package-lock.json`; change the one import in
+   `frontend/src/index.css`; add `frontend/src/shadcn-tailwind.css` with the exact
+   16,340-byte pinned stylesheet (SHA256
+   `4c371f7a1ff5d219ae2f7ff28bd256b4346fd546fe46fbae22092e57db2f0fae`);
+   preserve verified release licensing in `frontend/src/shadcn-tailwind.LICENSE`.
+   **License provenance review remains required.** Repeat clean npm ci, audit,
+   build/dist comparison and UI animation smoke against the merged lane004 source.
+   No component rewrite or runtime dependency upgrade is proposed. CLI-based future
+   component generation becomes a separate explicitly pinned developer workflow.
+
+   A targeted braces patch override is **not presently established**: npm registry
+   latest is 3.0.3, the affected version; no 3.0.4 was published at this check.
+   Do not invent that version, substitute an API-incompatible parser, or accept
+   npm's suggested shadcn 1.0.0 breaking downgrade as a verified fix.
+
+3. **Remaining Python dependencies: coordinated override amendment required.**
+   Actual installed browser-use **0.13.11** metadata pins **aiohttp==3.14.3,
+   anyio==4.12.1, mcp==2.1.1, pillow==12.3.0, pypdf==6.16.2** exactly;
+   browser-harness 0.1.13 also pins Pillow. Therefore a normal targeted lock upgrade
+   cannot fix these pins; the disposable aiohttp patch experiment was unsatisfiable.
+   Proposed files are `pyproject.toml` and `uv.lock`, not browser-use source/upgrades:
+
+   ```toml
+   [tool.uv]
+   override-dependencies = [
+     "aiohttp==3.14.4", "anyio==4.14.2", "mcp==2.2.0",
+     "pillow==13.0.0", "pypdf==6.19.0",
+   ]
+   ```
+
+   With the certifi change, disposable resolution changed **exactly seven** packages:
+   those six plus required `mcp-types 2.1.1 -> 2.2.0`; zero removals; browser-use stayed
+   **0.13.11**. Frozen no-dev export audit then reported **zero Python findings**.
+   This is a **resolver/advisory experiment, not runtime compatibility proof**.
+   Overrides deliberately replace upstream requirements; Pillow 13 crosses a major.
+   PyPI's published 12.x series ends at 12.3.0 at this check; there is no demonstrated
+   12.3.1 security patch alternative. If 13 fails compatibility, a supported upstream
+   backport or reviewed native-wheel backport is a separate amendment, not an invented
+   version pin or automatic risk waiver.
+   No candidate runtime packages were installed into the application environment.
+   Before approval require owner acceptance of the exact override, offline full tests,
+   screenshot/PNG/JPEG/GIF/video/image codec fixtures, PDF extraction/resource limits,
+   cancellation/replay/repair, MCP schema imports without exposing an MCP listener,
+   and assembled lane006 + backend/ASGI rebuild checks. No broad browser-use upgrade
+   or change to shared public contracts is proposed.
+
+The report distinguishes installed from exercised vulnerabilities: Flowpilot's
+ingress uses FastAPI/Uvicorn, not aiohttp; the aiohttp server-specific issues are not
+automatically ASGI ingress issues. MCP's advisory concerns a stateful Streamable
+HTTP server not observed in this service. AnyIO TLS and certifi affect shared HTTP
+infrastructure; browser-use directly reads PDFs, so parser/text-extraction exhaustion
+deserves particular attention. Pillow's generic image opens exist, but not every
+specific TIFF/EPS/PDF/morphology advisory path was demonstrated. No issue is silently
+accepted because a targeted API has not yet been observed.
+
+### Missing implementation versus missing assembled proof
+
+Reviewed **immutable owner Git objects**, not peer files: lane002 `c90556f`, lane001
+`efbcd76`; integration `main` was `d3301fe` at triage start. These are source-level
+findings, not assertions that all those revisions are merged or deployed.
+
+| Requirement | Current evidence | Remaining action |
+| --- | --- | --- |
+| Sandbox memory/CPU/PID/SHM settings | **Implemented**: runtime injects settings, browser adapter passes them, `sandbox.py:87-90` derives Docker arguments; memory/PIDs mock test exists | Real merged container/cgroup and bounded exhaustion proof; do not ask owner to wire these again |
+| Global/account caps | **Implemented**: repository `127-137` checks reservations transactionally | Concurrency/paused/cleanup-failure assembled admission proof |
+| Normal terminal idle browsers | **Eagerly closed**, not a retained warm pool: executor `108-155`, runtime `289-293`, profile save/remove path | Prove normal terminal containers are gone and follow-up restores state; unused idle timeout does not itself prove a leak |
+| Profile conversational turns | **Implemented lazy retention**: `memory.py:28-31,50-52`, configured age + last 100 on write | Cutoff/lock tests; unopened inactive profiles are not continuously swept |
+| Durable control/task history | **Missing age-based implementation** in lane001; profile deletion removes history but no retention sweep consumes the knob | Transactional terminal-only pruning, lease protection and explicit idempotency/tombstone retention semantics |
+| Sandbox Docker logs | **Missing explicit creation-time log_config** in lane002; Compose service logging does not apply to spawned containers | Set bounded json-file 10m/3 or reviewed equivalent; inspect actual sandbox LogConfig; no daemon edits |
+| Failed-save quarantine | **Preservation implemented**: bounded archives, prior archive survives, stopped recovery container retained, profile recovery marker and host-scoped locking | **Missing global age/count/byte retention**; explicit deletion exists but is not a sweep. Never delete only recovery source/active lease by age alone |
+| Executor dispatch memory | **Missing bound**: `Executor.seen` grows per execution at `31,60-63`; only active map is removed | Coordinate bounded dedupe with durable terminal/generation fences; duplicate dispatch must remain safe |
+| Raw traces | Hosted executor rejects raw tracing; offline safe retention tool exists | Operator scheduling/monitoring, not a destructive app/profile janitor |
+| Recovery/orphan scope | Task recovery **host-scoped**, legacy cleanup now skips task containers | Legacy orphan selection remains broad; unnecessary capability drops remain absent |
+
+**No readiness clearance:** kernel/network enforcement blocker is unchanged.
+OS/Chromium advisories remain **unverified**, not included in the zero-findings
+candidate Python/npm experiments. TLS/topology/real assistance and application
+acceptance gates remain in force.
