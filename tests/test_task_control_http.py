@@ -464,3 +464,51 @@ async def test_paired_session_profile_authorization_errors_are_identical_and_ato
     assert matching.json()['profile_id'] == first['profile_id']
     await wait_started(starts, 2)
     assert bindings.executor.execute.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_legacy_auth_and_key_responses_never_cache_secrets_or_errors(system, monkeypatch, caplog):
+    client, control, bindings, starts, host = system
+    async def no_store(method, path, expected, **kwargs):
+        response = await getattr(client, method)(path, **kwargs)
+        assert response.status_code == expected, response.text
+        assert response.headers.get('Cache-Control') == 'no-store', (path, response.headers)
+        return response
+    signup = await no_store('post', '/api/auth/signup', 200, json={'email': 'cache@example.test', 'password': 'CANARY-cache-password', 'name': 'Cache owner'})
+    jwt_headers = {'Authorization': 'Bearer ' + signup.json()['token']}
+    await no_store('post', '/api/auth/login', 200, json={'email': 'cache@example.test', 'password': 'CANARY-cache-password'})
+    await no_store('get', '/api/auth/me', 200, headers=jwt_headers)
+    created = await no_store('post', '/api/v1/api-keys', 200, headers=jwt_headers, json={'name': 'Cache test'})
+    key = created.json()['key']
+    listed = await no_store('get', '/api/v1/api-keys', 200, headers=jwt_headers)
+    assert key not in listed.text and 'key_hash' not in listed.text
+    assert all('key' not in metadata for metadata in listed.json())
+    await no_store('delete', '/api/v1/api-keys/' + created.json()['id'], 200, headers=jwt_headers)
+    listed = await no_store('get', '/api/v1/api-keys', 200, headers=jwt_headers)
+    assert listed.json() == []
+    errors = [
+        await no_store('get', '/api/auth/me', 401),
+        await no_store('get', '/api/v1/api-keys', 401, headers={'Authorization': 'Bearer ' + key}),
+        await no_store('post', '/api/v1/api-keys', 401, json={'name': 'Unauthorized'}),
+        await no_store('delete', '/api/v1/api-keys/' + created.json()['id'], 404, headers=jwt_headers),
+        await no_store('post', '/api/auth/login', 401, json={'email': 'cache@example.test', 'password': 'CANARY-wrong-password'}),
+        await no_store('post', '/api/auth/signup', 409, json={'email': 'cache@example.test', 'password': 'CANARY-cache-password', 'name': 'Duplicate'}),
+        await no_store('post', '/api/auth/signup', 400, json={'email': 'short@example.test', 'password': 'abc', 'name': 'Short'}),
+        await no_store('post', '/api/auth/login', 422, json={'email': 'cache@example.test', 'password': {'secret': 'CANARY-invalid-password'}}),
+        await no_store('post', '/api/v1/api-keys', 422, headers=jwt_headers, json={'name': {'secret': 'CANARY-invalid-key'}}),
+        await no_store('post', '/api/v1/api-keys', 400, headers=jwt_headers, json={'name': ' '}),
+    ]
+    for response in errors:
+        assert 'CANARY' not in response.text and key not in response.text
+    await no_store('post', '/api/auth/login', 422, content=b'x' * 9000)
+    auth._rate_buckets.clear()
+    for _ in range(10):
+        await no_store('post', '/api/auth/login', 422, json={})
+    limited = await no_store('post', '/api/auth/login', 429, json={})
+    assert limited.headers['Retry-After'] == '60'
+    auth._rate_buckets.clear()
+    async def failed_authenticate(*args):
+        raise RuntimeError('CANARY-internal-credential-error')
+    monkeypatch.setattr(auth, 'authenticate', failed_authenticate)
+    unavailable = await no_store('post', '/api/auth/login', 500, json={'email': 'cache@example.test', 'password': 'synthetic'})
+    assert 'CANARY' not in unavailable.text and 'CANARY' not in caplog.text

@@ -76,7 +76,17 @@ class SensitiveRoute(APIRoute):
                 return JSONResponse({'detail': 'Invalid authentication request'}, status_code=422, headers={'Cache-Control': 'no-store'})
             response.headers['Cache-Control'] = 'no-store'
             return response
-        return handle
+        async def protected(request):
+            try:
+                return await handle(request)
+            except HTTPException as exc:
+                return JSONResponse({'detail': exc.detail}, status_code=exc.status_code,
+                                    headers={**(exc.headers or {}), 'Cache-Control': 'no-store'})
+            except Exception:
+                logger.error('Authentication operation failed; exception details withheld')
+                return JSONResponse({'detail': 'Authentication operation unavailable'}, status_code=500,
+                                    headers={'Cache-Control': 'no-store'})
+        return protected
 
 
 async def init_db() -> None:
