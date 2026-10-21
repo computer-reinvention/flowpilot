@@ -49,7 +49,8 @@ class SandboxManager:
         return self._client
 
     def start(self, profile_path: str | None = None, user_id: str = "", *,
-              publish_local_cdp: bool = False, profile_archive: str | None = None) -> dict:
+              publish_local_cdp: bool = False, profile_archive: str | None = None,
+              task_labels: dict | None = None, settings=None) -> dict:
         """Create and start a new sandbox container.
 
         Args:
@@ -63,7 +64,7 @@ class SandboxManager:
 
         environment = {
             "DISPLAY": ":1",
-            **({'CHROME_AUTORESTART': 'false'} if publish_local_cdp else {}),
+            **({'CHROME_AUTORESTART': 'false'} if publish_local_cdp or task_labels else {}),
         }
 
         container = None
@@ -80,12 +81,15 @@ class SandboxManager:
                     "flowpilot": "sandbox",
                     "sandbox-id": sandbox_id,
                     "user-id": user_id,
+                    **(task_labels or {}),
                 },
+                **({'log_config': docker.types.LogConfig(type='json-file',
+                        config={'max-size': '1m', 'max-file': '2'})} if task_labels else {}),
                 # Resource limits
-                mem_limit="1g",
-                cpu_quota=100000,
-                pids_limit=256,
-                shm_size="256m",
+                mem_limit=f"{settings.sandbox_memory_mb}m" if settings else "1g",
+                cpu_quota=int(settings.sandbox_cpu_cores * 100000) if settings else 100000,
+                pids_limit=settings.sandbox_pids if settings else 256,
+                shm_size=f"{settings.sandbox_shm_mb}m" if settings else "256m",
                 security_opt=["no-new-privileges:true"],
                 **({"runtime": os.environ["SANDBOX_RUNTIME"]} if os.getenv("SANDBOX_RUNTIME") else {}),
             )
@@ -149,7 +153,7 @@ class SandboxManager:
             **({"local_cdp_url": f"http://127.0.0.1:{local_port}"} if publish_local_cdp else {}),
         }
 
-    def stop(self, sandbox_id: str) -> None:
+    def stop(self, sandbox_id: str, *, capture_logs: bool = True) -> None:
         """Stop and remove a sandbox container."""
         info = self._sandboxes.get(sandbox_id)
         if not info:
@@ -159,7 +163,7 @@ class SandboxManager:
             container = self.client.containers.get(info.container_id)
             # Capture logs before destroying the container
             try:
-                logs = container.logs(tail=80, stdout=True, stderr=True).decode(errors="replace")
+                logs = container.logs(tail=80, stdout=True, stderr=True).decode(errors="replace") if capture_logs else ''
                 if logs.strip():
                     logger.info("Sandbox %s logs:\n%s", sandbox_id, logs)
             except Exception as log_err:
@@ -211,6 +215,9 @@ class SandboxManager:
         for row in db_rows:
             try:
                 container = self.client.containers.get(row["container_id"])
+                if container.labels.get("flowpilot-task"):
+                    dead.append(row["id"])
+                    continue
                 if container.status == "running":
                     info = SandboxInfo(
                         sandbox_id=row["id"],
@@ -238,6 +245,9 @@ class SandboxManager:
                 filters={"label": "flowpilot=sandbox"},
             )
             for container in containers:
+                # The task host reconciles these after legacy startup cleanup.
+                if container.labels.get("flowpilot-task"):
+                    continue
                 sandbox_id = container.labels.get("sandbox-id", "unknown")
                 if sandbox_id not in self._sandboxes:
                     logger.info("Cleaning up orphaned sandbox container: %s (%s)", container.name, sandbox_id)

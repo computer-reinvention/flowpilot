@@ -15,16 +15,21 @@ export function useAuth() {
     }
     try {
       const data = await apiFetch<{ user: User }>("/api/auth/me");
-      setUser(data.user);
-    } catch {
-      clearToken();
+      if (getToken() === token) setUser(data.user);
+    } catch (err) {
+      if (getToken() === token && !(err instanceof DOMException && err.name === "AbortError")) clearToken();
     } finally {
-      setLoading(false);
+      if (getToken() === token || !getToken()) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     verify();
+    const changed = () => { setUser(null); setError(null); setLoading(true); void verify(); };
+    const storage = (event: StorageEvent) => { if (event.key === "flowpilot_token" || event.key === null) changed(); };
+    window.addEventListener("flowpilot-auth-changed", changed);
+    window.addEventListener("storage", storage);
+    return () => { window.removeEventListener("flowpilot-auth-changed", changed); window.removeEventListener("storage", storage); };
   }, [verify]);
 
   const login = useCallback(async (email: string, password: string) => {

@@ -1,0 +1,70 @@
+"""Account/profile keyed private memory; never use caller supplied filesystem names."""
+import hashlib
+import json
+import re
+import shutil
+
+from ..repl import UserStore
+
+
+def input_atoms(value):
+    if isinstance(value, dict):
+        for item in value.values():
+            yield from input_atoms(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            yield from input_atoms(item)
+    elif value is not None and str(value):
+        yield str(value)
+
+
+def storage_key(principal, profile_id):
+    return hashlib.sha256(json.dumps([principal.account_id, profile_id], separators=(',', ':')).encode()).hexdigest()
+
+
+class ProfileStore(UserStore):
+    def __init__(self, settings, principal, profile_id):
+        super().__init__(settings.state_dir, storage_key(principal, profile_id))
+        self.retention_days = settings.history_retention_days
+        self.db.execute("DELETE FROM turns WHERE created_at < datetime('now', ?)",
+                        (f'-{self.retention_days} days',))
+        self.db.commit()
+
+    @staticmethod
+    def redact(text, inputs, limit=4000):
+        text = str(text or '')
+        values = sorted(set(input_atoms(inputs)), key=len, reverse=True)
+        if values:
+            # Single pass: short inputs must not repeatedly expand the redaction
+            # marker or redact an earlier replacement into exponential output.
+            text = re.sub('|'.join(re.escape(value) for value in values), '[redacted]', text)
+        return text[:limit]
+
+    def record_turn(self, task, inputs, result, metrics, *, private_inputs=False):
+        # Interaction values can appear anywhere in model output. Persist only
+        # redacted, bounded context; never store inputs or full tool transcripts.
+        def safe(text):
+            return self.redact(text, inputs)
+        self.db.execute('INSERT INTO turns(task,inputs,result,metrics) VALUES(?,?,?,?)',
+                        (safe(task), '{}', 'Private-input task ended; inspect current website state' if private_inputs else safe(result), json.dumps(metrics)))
+        self.db.execute("DELETE FROM turns WHERE created_at < datetime('now', ?)",
+                        (f'-{self.retention_days} days',))
+        self.db.execute('DELETE FROM turns WHERE id NOT IN (SELECT id FROM turns ORDER BY id DESC LIMIT 100)')
+        self.db.commit()
+
+
+def delete_memory(settings, principal, profile_id, before_delete=None):
+    store = ProfileStore(settings, principal, profile_id)
+    try:
+        if before_delete:
+            before_delete(store.path.name)
+        # Keep the lock inode until deletion completes: competing processes must
+        # not be able to open a replacement lock while this profile is removed.
+        for child in store.path.iterdir():
+            if child.name != 'session.lock':
+                if child.is_dir() and not child.is_symlink():
+                    shutil.rmtree(child)
+                else:
+                    child.unlink()
+    finally:
+        store.close()

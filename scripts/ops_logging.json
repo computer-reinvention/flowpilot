@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "disable_existing_loggers": false,
+  "handlers": {
+    "discard_request_details": {"class": "logging.NullHandler"}
+  },
+  "loggers": {
+    "uvicorn": {"handlers": ["discard_request_details"], "propagate": false},
+    "uvicorn.error": {"handlers": ["discard_request_details"], "propagate": false},
+    "uvicorn.access": {"handlers": ["discard_request_details"], "propagate": false},
+    "websockets": {"handlers": ["discard_request_details"], "propagate": false}
+  }
+}

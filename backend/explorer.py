@@ -24,7 +24,9 @@ from browser_use import Agent, Browser, ActionResult, Tools
 
 from . import db as _db
 from .models import Flow
-from .runner import _get_exploration_llm, _get_fast_llm
+from .runner import _get_exploration_llm, _get_fast_llm, _observation_policy
+from .observation import action_observation
+from .task_contracts import TaskFault
 from .programs import generate_program
 from .trace import trace
 
@@ -143,6 +145,8 @@ async def explore_flow(
     # Injected session-capture callback: async (browser) -> None
     # Lets callers (main.py) persist cookies without explorer knowing the user context.
     on_session_capture=None,
+    *,
+    observation_policy=None,
 ) -> None:
     """Run the exploration agent against a flow's entry_url."""
 
@@ -225,6 +229,30 @@ async def explore_flow(
             cdp_url=cdp_url,
             storage_state=ss_arg,
         )
+        observation_policy = _observation_policy(browser, observation_policy)
+
+        async def current_observation():
+            # Pi scopes the originating model-visible snapshot around generation
+            # and test callbacks. Do not replace it with a new DOM dump/capture.
+            policy = _observation_policy(browser, observation_policy)
+            origin = action_observation.get()
+            snapshot = (origin[2] if origin is not None and origin[0] is browser
+                        else await policy.observe(browser))
+            await policy.require_fresh(browser, snapshot)
+            return policy, snapshot
+
+        async def safe_reflex_callback(operation, callback, **args):
+            # Database/schema failures may contain SQL parameters or script/input
+            # values too. Keep the entire callback boundary safe, not just the
+            # provider/Runtime.evaluate await. Typed state faults still propagate.
+            try:
+                return await callback(**args)
+            except TaskFault:
+                raise
+            except Exception as exc:
+                trace('explorer.reflex_callback.fail', operation=operation, error_type=type(exc).__name__)
+                logger.warning('Explorer reflex callback failed; details withheld')
+                return ActionResult(error='Reflex operation failed; details withheld. Observe before repair; do not replay uncertain effects.')
 
         llm = _get_exploration_llm()
         fast_llm = _get_fast_llm()
@@ -295,41 +323,49 @@ async def explore_flow(
             tags: list[str] | None = None,
             pause_after_auth: bool = False,
         ) -> ActionResult:
+            return await safe_reflex_callback('generate', _generate_and_save_reflex,
+                                             name=name, description=description, tags=tags,
+                                             pause_after_auth=pause_after_auth)
+
+        async def _generate_and_save_reflex(
+            name: str,
+            description: str,
+            tags: list[str] | None = None,
+            pause_after_auth: bool = False,
+        ) -> ActionResult:
             nonlocal reflexes_saved
 
             # Get current stage info for context
             stage_title = "unknown"
-            stage_url = flow.entry_url
             if current_stage_id[0]:
                 for s in stages:
                     if s["id"] == current_stage_id[0]:
                         stage_title = s["title"]
-                        stage_url = s["url"]
                         break
 
             # Generate the script using the fast LLM (outside agent context)
-            gen_prompt = _REFLEX_GEN_PROMPT.format(
-                url=stage_url,
-                stage_title=stage_title,
-                description=description,
-            )
             try:
-                page = await browser.must_get_current_page()
-                from .runner import _DUMP_ELEMENTS_JS
-                elements = await page.evaluate(_DUMP_ELEMENTS_JS)
+                policy, snapshot = await current_observation()
                 script = await generate_program(fast_llm, {
                     "operation": "compile this explored stage for future replay",
                     "stage": stage_title, "description": description,
-                    "url": stage_url, "elements": elements,
+                    "url": snapshot.url, "elements": snapshot.elements,
                     "input_schema": flow.inputs,
                 })
+                # Generation may await a provider while the same URL hydrates or
+                # replaces controls. Never save a plan against a stale prompt.
+                await policy.require_fresh(browser, snapshot)
+            except TaskFault:
+                trace('explorer.generate_reflex.rejected')
+                raise
             except Exception as e:
-                logger.warning("Reflex generation failed for '%s': %s", name, e)
+                logger.warning("Reflex generation failed; details withheld")
+                trace('explorer.generate_reflex.fail', error_type=type(e).__name__)
                 return ActionResult(
-                    extracted_content=f"Reflex generation failed: {e}. Move on."
+                    error="Reflex generation failed; details withheld. Inspect before retrying."
                 )
 
-            trace("explorer.generate_reflex", name=name, description=description, prompt=gen_prompt, script=script)
+            trace("explorer.generate_reflex", script_bytes=len(script))
 
             pause_after = "auth" if pause_after_auth else None
             await _db.upsert_reflex(
@@ -350,7 +386,7 @@ async def explore_flow(
                         break
             await _persist_tree()
             return ActionResult(
-                extracted_content=f"Reflex '{name}' generated and saved. Move to next stage."
+                extracted_content="Reflex generated and saved. Observe before testing it."
             )
 
         # ── search_reflexes ──────────────────────────────────────────────
@@ -380,13 +416,16 @@ async def explore_flow(
             )
         )
         async def test_reflex(name: str) -> ActionResult:
+            return await safe_reflex_callback('test', _test_reflex, name=name)
+
+        async def _test_reflex(name: str) -> ActionResult:
             reflex = await _db.get_reflex(flow.domain, name, flow_id=flow.id)
             if not reflex:
-                return ActionResult(extracted_content=f"Reflex '{name}' not found.")
+                return ActionResult(error="Reflex not found.")
 
             script = reflex.get("script", "") if isinstance(reflex, dict) else getattr(reflex, "script", "")
             if not script:
-                return ActionResult(extracted_content=f"Reflex '{name}' has no script.")
+                return ActionResult(error="Reflex has no script.")
 
             # Build sample inputs from declared flow inputs so the reflex
             # runs with real-looking values rather than empty dict.
@@ -407,21 +446,26 @@ async def explore_flow(
                 else:
                     test_inputs[iname] = iname
 
-            trace("explorer.test_reflex.call", name=name, script=script, test_inputs=test_inputs, entry_url=flow.entry_url)
+            trace("explorer.test_reflex.call", script_bytes=len(script), input_count=len(test_inputs))
             try:
                 from .runner import _execute_reflex
-                ok, result = await _execute_reflex(script, test_inputs, flow.entry_url or "", browser)
+                policy, snapshot = await current_observation()
+                ok, result = await _execute_reflex(script, test_inputs, flow.entry_url or "", browser,
+                                                 observation_policy=policy, expected_observation=snapshot)
                 if not ok:
-                    raise RuntimeError(result)
-                trace("explorer.test_reflex.ok", name=name, result=str(result)[:200])
+                    trace("explorer.test_reflex.fail", outcome='unverified')
+                    return ActionResult(error="Reflex test failed; effects may be partial. Observe before a different repair plan.")
+                trace("explorer.test_reflex.ok")
                 return ActionResult(
-                    extracted_content=f"Reflex '{name}' PASSED with inputs {test_inputs}. Result: {str(result)[:200]}"
+                    extracted_content="Reflex test passed its script checks. Observe the current state before continuing."
                 )
+            except TaskFault:
+                trace("explorer.test_reflex.rejected")
+                raise
             except Exception as e:
-                error_msg = str(e)[:300]
-                trace("explorer.test_reflex.fail", name=name, error=error_msg)
+                trace("explorer.test_reflex.fail", error_type=type(e).__name__)
                 return ActionResult(
-                    extracted_content=f"Reflex '{name}' FAILED with inputs {test_inputs}: {error_msg}"
+                    error="Reflex test failed; details withheld. Effects may be partial; observe before repair."
                 )
 
         # ── declare_inputs ──────────────────────────────────────────────
@@ -627,7 +671,7 @@ async def explore_flow(
                                     "request_input_values": request_input_values,
                                     "request_confirmation": request_confirmation,
                                     "add_notes": add_notes,
-                                })
+                                }, observation_policy=observation_policy)
         else:
             agent = Agent(
                 task=task_prompt, llm=llm, browser=browser, tools=tools,
@@ -697,19 +741,21 @@ async def explore_flow(
         await _update_and_notify(
             {
                 "exploration_status": "failed",
-                "exploration_error": str(e),
+                "exploration_error": e.error.code.value if isinstance(e, TaskFault) else "Exploration failed; details withheld",
                 "exploration_notes": exploration_notes,
                 "exploration_tree": json.dumps(_build_tree()),
             }
         )
-        raise
+        if isinstance(e, TaskFault):
+            raise
+        raise RuntimeError("Exploration failed; details withheld") from None
     finally:
         if browser is not None:
             if on_session_capture:
                 try:
                     await on_session_capture(browser)
                 except Exception as e:
-                    logger.debug("Session capture callback failed: %s", e)
+                    logger.debug("Session capture callback failed; details withheld")
             try:
                 await browser.close()
             except Exception:
