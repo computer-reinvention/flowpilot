@@ -42,3 +42,11 @@ Own `backend/observation.py`, semantic changes in `backend/pi_browser.py`, obser
 ## Handoff / definition of done
 
 Export 000's observation policy factory with deterministic doubles and real-browser evidence. Existing Pi tests remain green, but completion additionally requires the dynamic-page scenarios above. Report remaining custom-JS/per-statement and third-party-site uncertainty honestly. No deployment or provider-account mutations are authorized.
+
+## Lane implementation evidence (incremental)
+
+Checkpoint 1: immutable policy factory and coherent shared Observation/ElementReference models; keyed structural/progress/freshness digests; replacement-instance/document detection; bounded convergence/deadline/unknown outcomes; duplicate identity rejection; task-local progress guard. Pi dispatch checks same-page freshness across serialized code-mode calls and requires explicit execute pre/postconditions. Real local Browser objects receive the policy by default; historical duck-typed clients without injection keep the compatibility path. Runner entry/exit and repair observations use the injected policy, preserve the original snapshot across model latency, and no longer trace raw scripts/inputs/DOM/repair prompts in the owned call sites.
+
+- `/Users/pgwork/Desktop/code/flowpilot/.venv/bin/python -m pytest tests/test_observation_policy.py tests/test_pi_browser.py -q`: 18 passed.
+- Installed browser-use 0.13.11 matches `uv.lock`; Dockerfile.backend uses `uv sync --frozen --no-dev`. No image build/version assertion yet. Installed DOM watchdog lines 286–289 use the fixed pending-request 0.3-second sleep, not DOM convergence. Pi does not call Agent replay/history matching.
+- Chromium behavioral verification remains pending at this checkpoint. Readiness is finite-window evidence (minimum twice the configured window, then a stable window), not prediction of arbitrary future updates. Cross-origin frames, shadow trees and oversized captures fail closed as unknown. No dependency or shared-contract edits.

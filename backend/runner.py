@@ -51,6 +51,14 @@ def _get_db():
 logger = logging.getLogger(__name__)
 
 
+def _observation_policy(browser, policy):
+    if policy is None and isinstance(browser, Browser):
+        from .observation import create_observation
+        from .task_settings import TaskSettings
+        return create_observation(TaskSettings.from_env())
+    return policy
+
+
 async def _async_cdp_get(host: str, port: int, path: str) -> dict | None:
     """Non-blocking CDP HTTP request — replaces http.client calls that block the event loop."""
     try:
@@ -125,6 +133,7 @@ async def _execute_reflex(
     browser_session,
     *,
     observation_policy=None,
+    expected_observation=None,
 ) -> tuple[bool, str]:
     """Execute a reflex JS script via the Actor API. No LLM calls.
 
@@ -133,9 +142,7 @@ async def _execute_reflex(
     compact DOM snapshot of interactive elements so the agent can
     immediately see what selectors are available and continue.
     """
-    if observation_policy is not None:
-        observation = await observation_policy.observe(browser_session)
-        await observation_policy.require_fresh(browser_session, observation)
+    observation_policy = _observation_policy(browser_session, observation_policy)
     page = await browser_session.must_get_current_page()
 
     # Navigate to entry_url if we're on a blank page
@@ -144,9 +151,14 @@ async def _execute_reflex(
             current_url = await page.get_url()
             if current_url in ("", "about:blank", "chrome://newtab/"):
                 await page.goto(entry_url)
-                await asyncio.sleep(1.5)
+                if observation_policy is None:
+                    await asyncio.sleep(1.5)
         except Exception:
             pass
+
+    if observation_policy is not None:
+        observation = expected_observation or await observation_policy.observe(browser_session)
+        await observation_policy.require_fresh(browser_session, observation)
 
     pre_url = ""
     try:
@@ -158,7 +170,7 @@ async def _execute_reflex(
     # LLMs generate 'async (inputs, ...) => { await ... }' which fails
     # the check. We bypass page.evaluate()'s validation and send the
     # expression directly to CDP Runtime.evaluate with awaitPromise=true.
-    trace("execute_reflex.call", script=script, inputs=inputs, entry_url=entry_url, pre_url=pre_url)
+    trace("execute_reflex.call", script_bytes=len(script), input_count=len(inputs))
 
     try:
         import json as _json
@@ -189,20 +201,32 @@ async def _execute_reflex(
             raise RuntimeError(f"Reflex reported failure: {value}")
         if isinstance(value, dict) and value.get("needs_human"):
             return False, "NEEDS_HUMAN: " + json.dumps(value)[:4000]
-        trace("execute_reflex.ok", script=script[:500], pre_url=pre_url)
+        if observation_policy is not None:
+            await observation_policy.after_action(browser_session, observation, 'reflex')
+        trace("execute_reflex.ok")
         return True, json.dumps(value, ensure_ascii=False)[:8000] if value is not None else "Reflex executed successfully"
     except Exception as e:
+        from .task_contracts import ErrorCode, TaskFault, task_error
+        if observation_policy is not None and isinstance(e, (TimeoutError, TaskFault)):
+            # Do not feed uncertain execution back into automatic repair/replay.
+            if isinstance(e, TaskFault):
+                raise
+            raise TaskFault(task_error(ErrorCode.INTERRUPTED, 'Script timed out; website effects are unknown; inspect before retrying')) from None
         # A changed URL does not establish that the script's remaining work ran.
         # Dump page state so the agent can pick up where the script stopped
         try:
-            fail_url = await page.get_url()
-            elements = await page.evaluate(_DUMP_ELEMENTS_JS)
+            if observation_policy is not None:
+                failure_observation = await observation_policy.observe(browser_session)
+                fail_url, elements = failure_observation.url, failure_observation.elements
+            else:
+                fail_url = await page.get_url()
+                elements = await page.evaluate(_DUMP_ELEMENTS_JS)
             context = f"URL: {fail_url}\nElements on page:\n{elements}"
         except Exception:
             context = "Could not read page state"
         err_str = str(e) or type(e).__name__
         result_msg = f"SCRIPT EXECUTION FAILED\nError: {err_str}\n{context}"
-        trace("execute_reflex.fail", error=err_str, context=context)
+        trace("execute_reflex.fail", error_type=type(e).__name__)
         return False, result_msg
 
 
@@ -226,20 +250,23 @@ async def _repair_reflex(
     This runs as a "subagent" — a single LLM call that doesn't pollute
     the main agent's conversation context.
     """
-    trace("repair_reflex.call", broken_script=broken_script, error_msg=error_msg, inputs=inputs, entry_url=entry_url)
+    observation_policy = _observation_policy(browser_session, observation_policy)
+    trace("repair_reflex.call", script_bytes=len(broken_script), input_count=len(inputs))
 
     for attempt in range(max_attempts):
-        if observation_policy is not None:
-            observation = await observation_policy.observe(browser_session)
-            await observation_policy.require_fresh(browser_session, observation)
         # Get fresh DOM state for the repair prompt
         try:
-            state = await browser_session.get_browser_state_summary(include_screenshot=False, cached=False)
-            if not state.dom_state:
-                return False, 'Cannot obtain stable browser state for repair', None
-            page = await browser_session.must_get_current_page()
-            current_url = await page.get_url()
-            elements = await page.evaluate(_DUMP_ELEMENTS_JS)
+            if observation_policy is not None:
+                observation = await observation_policy.observe(browser_session)
+                await observation_policy.require_fresh(browser_session, observation)
+                current_url, elements = observation.url, observation.elements
+            else:
+                state = await browser_session.get_browser_state_summary(include_screenshot=False, cached=False)
+                if not state.dom_state:
+                    return False, 'Cannot obtain browser state for repair', None
+                page = await browser_session.must_get_current_page()
+                current_url = await page.get_url()
+                elements = await page.evaluate(_DUMP_ELEMENTS_JS)
         except Exception:
             return False, "Cannot read page state for repair", None
 
@@ -271,7 +298,7 @@ async def _repair_reflex(
             logger.warning("Repair LLM call failed: %s", e)
             return False, f"Repair LLM call failed: {e}", None
 
-        trace("repair_reflex.llm_response", attempt=attempt + 1, prompt=repair_prompt, fixed_script=fixed_script)
+        trace("repair_reflex.llm_response", attempt=attempt + 1, script_bytes=len(fixed_script))
 
         # Try executing the fixed script
         success, msg = await _execute_reflex(
@@ -279,7 +306,7 @@ async def _repair_reflex(
             inputs=inputs,
             entry_url=entry_url,
             browser_session=browser_session,
-            **({'observation_policy': observation_policy} if observation_policy is not None else {}),
+            **({'observation_policy': observation_policy, 'expected_observation': observation} if observation_policy is not None else {}),
         )
 
         if success:
@@ -292,7 +319,7 @@ async def _repair_reflex(
         error_msg = msg
         logger.info("Repair attempt %d/%d failed: %s", attempt + 1, max_attempts, msg)
 
-    trace("repair_reflex.exhausted", max_attempts=max_attempts, last_error=error_msg[:500])
+    trace("repair_reflex.exhausted", max_attempts=max_attempts)
     return False, f"Repair failed after {max_attempts} attempts: {error_msg}", None
 
 
@@ -366,7 +393,7 @@ async def _generate_reflex(
     if not script:
         return False, "LLM returned empty script", None
 
-    trace("generate_reflex.llm_response", prompt=generate_prompt, script=script, task=flow.task)
+    trace("generate_reflex.llm_response", script_bytes=len(script))
 
     # Execute the generated script
     success, msg = await _execute_reflex(
