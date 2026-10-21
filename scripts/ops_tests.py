@@ -248,6 +248,9 @@ class OperationalTests(unittest.TestCase):
         self.assertEqual(sorted(f["id"] for f in unaccepted), ["CHROMIUM-BEHIND-STABLE", "CVE-2", "NODE-SECURITY-RELEASE-MISSED"])
         self.assertEqual(summary["sandbox"]["gated_accepted"], 1)
         self.assertEqual(summary["sandbox"]["by_severity"]["MEDIUM"], 1)  # reported, never gated
+        fixable = next(f for f in findings if f["id"] == "CVE-2")
+        justified = dict(entries[("CVE-1", "libx")], id="CVE-2", package="liby")
+        self.assertFalse(audit.accepted(fixable, {("CVE-2", "liby"): justified}))  # fix exists: never acceptable
         chromium = next(f for f in findings if f["package"] == "chromium")
         pinned = dict(entries[("CHROMIUM-BEHIND-STABLE", "chromium")], images=["sandbox"])
         self.assertTrue(audit.accepted(chromium, {("CHROMIUM-BEHIND-STABLE", "chromium"): pinned}))

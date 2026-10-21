@@ -177,6 +177,9 @@ def accepted(finding, entries):
     entry = entries.get((finding["id"], finding["package"]))
     if not entry or finding["image"] not in entry["images"]:
         return False
+    if finding["class"] == "os-pkgs" and finding["fixed"]:
+        return False  # a distro fix exists: rebuild/upgrade instead of accepting
+
     if finding["id"] in RUNTIME_IDS.values():
         return entry["installed"] == finding["installed"]
     return True
