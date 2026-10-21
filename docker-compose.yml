@@ -1,8 +1,20 @@
+name: flowpilot
+x-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
 networks:
   control:
     internal: true
   flowpilot_sandbox-net:
+    name: flowpilot_sandbox-net
     driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: fp-sandbox0
+    ipam:
+      config:
+        - subnet: 172.30.240.0/24
 
 services:
   docker-proxy:
@@ -11,27 +23,52 @@ services:
       CONTAINERS: 1
       POST: 1
       NETWORKS: 1
-      LOGS: 1
+      LOGS: 0
+      IMAGES: 0
+      INFO: 1
+      PING: 1
+      EXEC: 0
+      VOLUMES: 0
+      SERVICES: 0
+      SWARM: 0
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    privileged: true
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    logging: *bounded-logging
+    mem_limit: 128m
+    cpus: 0.25
+    pids_limit: 64
     networks:
       - control
 
   backend:
+    image: flowpilot-backend:${FLOWPILOT_REVISION:-local}
+    platform: ${FLOWPILOT_PLATFORM:-linux/amd64}
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 65s
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    logging: *bounded-logging
+    mem_limit: 3g
+    cpus: 2
+    pids_limit: 256
     build:
       context: .
       dockerfile: Dockerfile.backend
+      args:
+        REVISION: ${FLOWPILOT_REVISION:-unknown}
     ports:
       # Bind to localhost only — Caddy/nginx proxies inbound traffic.
-      # Change to "8080:8080" for local development without a reverse proxy.
       - "127.0.0.1:8080:8080"
     volumes:
       - ./profiles:/app/profiles
       - ./traces:/tmp/flowpilot-traces
+      # Subscription credentials are operator supplied, never copied automatically.
       - ./.pi-auth:/app/.pi-auth
     environment:
-      - FLOWPILOT_TRACE=${FLOWPILOT_TRACE:-1}
+      - FLOWPILOT_TRACE=${FLOWPILOT_TRACE:-0}
       - DOCKER_HOST=tcp://docker-proxy:2375
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
@@ -57,10 +94,33 @@ services:
       - OPENAI_FAST_MODEL=${OPENAI_FAST_MODEL:-}
       - PROFILES_DIR=/app/profiles
       - PROFILES_HOST_DIR=${PROFILES_HOST_DIR:-${PWD}/profiles}
-      - SANDBOX_NETWORK=flowpilot_flowpilot_sandbox-net
-      - JWT_SECRET=${JWT_SECRET:-}
+      - SANDBOX_NETWORK=flowpilot_sandbox-net
+      - JWT_SECRET=${JWT_SECRET:?Set a stable JWT_SECRET in restricted .env}
       - FLOWPILOT_BASE_URL=${FLOWPILOT_BASE_URL:-http://localhost:8080}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:8080,http://localhost:3000}
+      - WEB_CONCURRENCY=1
+      - FLOWPILOT_TASKS_ENABLED=${FLOWPILOT_TASKS_ENABLED:-false}
+      - FLOWPILOT_TASKS_MAX_ACTIVE_BROWSERS=${FLOWPILOT_TASKS_MAX_ACTIVE_BROWSERS:-2}
+      - FLOWPILOT_TASKS_MAX_ACCOUNT_BROWSERS=${FLOWPILOT_TASKS_MAX_ACCOUNT_BROWSERS:-1}
+      - FLOWPILOT_TASKS_MAX_BODY_BYTES=${FLOWPILOT_TASKS_MAX_BODY_BYTES:-65536}
+      - FLOWPILOT_TASKS_POLL_WAIT_SECONDS=${FLOWPILOT_TASKS_POLL_WAIT_SECONDS:-25}
+      - FLOWPILOT_TASKS_TASK_TIMEOUT_SECONDS=${FLOWPILOT_TASKS_TASK_TIMEOUT_SECONDS:-900}
+      - FLOWPILOT_TASKS_HUMAN_WAIT_SECONDS=${FLOWPILOT_TASKS_HUMAN_WAIT_SECONDS:-600}
+      - FLOWPILOT_TASKS_IDLE_SESSION_SECONDS=${FLOWPILOT_TASKS_IDLE_SESSION_SECONDS:-300}
+      - FLOWPILOT_TASKS_CANCELLATION_SECONDS=${FLOWPILOT_TASKS_CANCELLATION_SECONDS:-30}
+      - FLOWPILOT_TASKS_SHUTDOWN_SECONDS=${FLOWPILOT_TASKS_SHUTDOWN_SECONDS:-45}
+      - FLOWPILOT_TASKS_ASSISTANCE_TTL_SECONDS=${FLOWPILOT_TASKS_ASSISTANCE_TTL_SECONDS:-300}
+      - FLOWPILOT_TASKS_SANDBOX_MEMORY_MB=${FLOWPILOT_TASKS_SANDBOX_MEMORY_MB:-1024}
+      - FLOWPILOT_TASKS_SANDBOX_CPU_CORES=${FLOWPILOT_TASKS_SANDBOX_CPU_CORES:-1}
+      - FLOWPILOT_TASKS_SANDBOX_PIDS=${FLOWPILOT_TASKS_SANDBOX_PIDS:-256}
+      - FLOWPILOT_TASKS_SANDBOX_SHM_MB=${FLOWPILOT_TASKS_SANDBOX_SHM_MB:-256}
+      - FLOWPILOT_TASKS_READINESS_TIMEOUT_SECONDS=${FLOWPILOT_TASKS_READINESS_TIMEOUT_SECONDS:-10}
+      - FLOWPILOT_TASKS_READINESS_WINDOW_SECONDS=${FLOWPILOT_TASKS_READINESS_WINDOW_SECONDS:-0.5}
+      - FLOWPILOT_TASKS_NO_PROGRESS_LIMIT=${FLOWPILOT_TASKS_NO_PROGRESS_LIMIT:-3}
+      - FLOWPILOT_TASKS_HISTORY_RETENTION_DAYS=${FLOWPILOT_TASKS_HISTORY_RETENTION_DAYS:-30}
+      - FLOWPILOT_TASKS_TRACE_RETENTION_DAYS=${FLOWPILOT_TASKS_TRACE_RETENTION_DAYS:-7}
+      - FLOWPILOT_TASKS_API_REQUESTS_PER_MINUTE=${FLOWPILOT_TASKS_API_REQUESTS_PER_MINUTE:-120}
+      - FLOWPILOT_TASKS_LOGIN_REQUESTS_PER_MINUTE=${FLOWPILOT_TASKS_LOGIN_REQUESTS_PER_MINUTE:-10}
     depends_on:
       - docker-proxy
     networks:
