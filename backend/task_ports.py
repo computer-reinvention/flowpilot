@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import Any, AsyncIterator, Literal, Protocol
 
 from .task_contracts import (
-    AssistanceGrant, AssistanceRequest, BrowserInput, Contract, Identifier, Interaction,
+    AssistanceGrant, AssistanceRequest, BrowserInput, BrowserMetadata, Contract, Identifier, Interaction,
     InteractionResponse, PollRequest, Principal, ProfileCreate, ProfileList,
     ProfileView, TaskAdmission, TaskError, TaskResult, TaskStart, TaskState, TaskView,
 )
@@ -122,6 +122,15 @@ class TaskRepository(Protocol):
     async def save_capability(self, binding: AssistanceBinding) -> None: ...
     async def capability(self, digest: str, now: datetime) -> AssistanceBinding: ...
     async def revoke_capabilities(self, lease: Lease) -> None: ...
+    async def assistance_lease(self, principal: Principal, task_id: str, request: AssistanceRequest) -> Lease:
+        """Atomically authorize the owned active browser pause and return its execution lease.
+
+        Check task state, interaction ID/generation/expiry and the current execution
+        generation in the same transaction. Never substitute interaction generation
+        for lease generation. save_capability must repeat those checks at commit
+        because cancellation or resolution can race the lookup.
+        """
+        ...
 
 
 class TaskControl(Lifecycle, Protocol):
@@ -152,6 +161,9 @@ class TaskControl(Lifecycle, Protocol):
     async def save_capability(self, binding: AssistanceBinding) -> None: ...
     async def capability(self, digest: str, now: datetime) -> AssistanceBinding: ...
     async def revoke_capabilities(self, lease: Lease) -> None: ...
+    async def assistance_lease(self, principal: Principal, task_id: str, request: AssistanceRequest) -> Lease:
+        """Return only the repository-authorized current pause's fenced execution lease."""
+        ...
 
 
 class BrowserHandle(Protocol):
@@ -163,6 +175,9 @@ class BrowserHandle(Protocol):
     """
 
     async def screenshot(self) -> bytes: ...
+    async def metadata(self) -> BrowserMetadata:
+        """Read the current page URL and viewport while the human writer is authorized."""
+        ...
     def frames(self) -> AsyncIterator[bytes]: ...
     async def send_input(self, command: BrowserInput) -> None: ...
     async def release(self) -> None: ...
