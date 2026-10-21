@@ -3,7 +3,10 @@ import argparse
 import os
 from pathlib import Path
 import stat
+import shutil
 import sys
+import tempfile
+import urllib.request
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -47,11 +50,44 @@ def validate(env, *, hosted=True):
     return errors
 
 
+def runtime_checks(env):
+    errors = []
+    root = Path(env.get("PROFILES_DIR", "/app/profiles"))
+    try:
+        if not root.is_dir() or root.is_symlink():
+            raise ValueError("invalid state root")
+        if shutil.disk_usage(root).free < 1024 ** 3:
+            errors.append("DISK_LOW: at least 1 GiB free state space required")
+        with tempfile.TemporaryFile(dir=root) as probe:
+            probe.write(b"writability-check")
+            probe.flush()
+        for db in root.rglob("*.db"):
+            if not os.access(db, os.R_OK | os.W_OK):
+                errors.append("database permissions prevent read/write")
+                break
+    except Exception:
+        errors.append("state directory not writable")
+    host = env.get("DOCKER_HOST", "")
+    if host != "tcp://docker-proxy:2375":
+        errors.append("packaged Docker control must use private socket proxy")
+    else:
+        try:
+            with urllib.request.urlopen("http://docker-proxy:2375/_ping", timeout=3) as response:
+                if response.status != 200:
+                    raise ValueError("unavailable")
+        except Exception:
+            errors.append("private Docker proxy unavailable")
+    return errors
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--local", action="store_true", help="configuration-only; NOT hosted readiness")
+    parser.add_argument("--runtime", action="store_true", help="probe state writability/free space and private Docker ping")
     args = parser.parse_args()
     failures = validate(os.environ, hosted=not args.local)
+    if args.runtime:
+        failures.extend(runtime_checks(os.environ))
     for failure in failures:
         print("BLOCKER: " + failure)
     raise SystemExit(bool(failures))

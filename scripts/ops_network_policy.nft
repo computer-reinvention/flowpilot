@@ -24,7 +24,18 @@ table bridge flowpilot_guard {
     chain input {
         type filter hook input priority -200; policy accept;
         meta ibrname "fp-sandbox0" ct state established,related accept
+        meta ibrname "fp-sandbox0" ether type ip ip daddr @denied4 drop
+        # Public routed website packets traverse bridge input before IP forwarding.
+        meta ibrname "fp-sandbox0" ether type ip ip protocol tcp tcp dport { 80, 443 } accept
         meta ibrname "fp-sandbox0" ether type ip drop
         meta ibrname "fp-sandbox0" ether type ip6 drop
+    }
+}
+# Host-owned PUBLIC addresses are not covered by RFC1918 denial above.
+table inet flowpilot_host_guard {
+    chain input {
+        type filter hook input priority -200; policy accept;
+        iifname "fp-sandbox0" ct state established,related accept
+        iifname "fp-sandbox0" drop
     }
 }

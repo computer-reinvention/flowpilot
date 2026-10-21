@@ -1,5 +1,11 @@
-# Import this site explicitly into an existing operator-owned Caddyfile.
-# Do not enable global/debug/access logging: assistance paths AND queries are secrets.
+# Standalone candidate; MERGE global options and site with existing config manually.
+# Error logs can include request URI too, even with access logging disabled.
+{
+    log default {
+        exclude http.log.error
+    }
+}
+# Do not enable debug/access logging: assistance paths AND queries are secrets.
 {$FLOWPILOT_DOMAIN} {
     request_body {
         max_size 128KB
