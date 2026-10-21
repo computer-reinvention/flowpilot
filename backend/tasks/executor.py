@@ -131,7 +131,7 @@ class Executor:
                 cleanup_task.cancel()
                 if hasattr(runtime, 'quarantine'):
                     runtime.quarantine()
-            elif cleanup_task.exception() is not None:
+            elif cleanup_task.cancelled() or cleanup_task.exception() is not None:
                 pass
             if not stopped:
                 state, result = TaskState.INTERRUPTED, None

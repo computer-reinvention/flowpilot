@@ -101,6 +101,18 @@ async def test_failed_save_never_reports_completed(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_cancelled_cleanup_still_settles_recovery_failure(tmp_path):
+    class CancelledClose(Runtime):
+        def __init__(self, *args):
+            super().__init__(*args)
+            self.close.side_effect = asyncio.CancelledError
+    executor, bindings, _, _ = await setup_executor(tmp_path, CancelledClose)
+    await executor.execute(execution())
+    assert bindings.control.finish.call_args.args[2] == TaskState.FAILED
+    assert not executor.active
+
+
+@pytest.mark.asyncio
 async def test_interaction_uses_frozen_ports_and_fresh_inspection(tmp_path):
     bindings = bindings_double()
     runtime = ConversationRuntime(TaskSettings(state_dir=tmp_path), execution(), bindings)

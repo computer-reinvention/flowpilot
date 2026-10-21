@@ -84,6 +84,54 @@ async def conversation_smoke(settings):
     print('LANE002_CONVERSATION_EVIDENCE=' + json.dumps(metrics), flush=True)
 
 
+async def cancellation_smoke(settings):
+    from backend.tasks.executor import Executor
+    from backend.task_ports import Execution
+    from backend.task_contracts import TaskStart, TaskState
+    from tests.fixtures.browser_tasks.doubles import bindings_double, observation_fixture
+    bindings = bindings_double()
+    view = SimpleNamespace(state=TaskState.RUNNING, revision=2)
+    for method in ('get', 'progress', 'finish', 'release_browser'):
+        getattr(bindings.control, method).side_effect = None
+        getattr(bindings.control, method).return_value = view
+    for method in ('observe', 'require_fresh', 'after_action'):
+        getattr(bindings.observation, method).side_effect = None
+    bindings.observation.observe.return_value = observation_fixture()
+    started = asyncio.Event()
+    async def inference(task, system, definitions, dispatch, **kwargs):
+        await dispatch('navigate', {'url': 'http://lane002-smoke:8765'})
+        await dispatch('observe', {})
+        started.set()
+        await dispatch('execute', {'script': 'async () => { localStorage.setItem("cancelCounter","1"); await new Promise(r => setTimeout(r,60000)); localStorage.setItem("cancelCounter","2"); }'})
+        raise AssertionError('Cancelled model/script continued')
+    now = datetime.now(timezone.utc)
+    lease = Lease(principal=Principal(account_id='cancel'), task_id='cancel', session_id='s', profile_id='p', generation=1)
+    execution = Execution(lease=lease, revision=2, admitted_at=now, deadline=now+timedelta(seconds=90),
+                          request=TaskStart(task='Synthetic cancellation', idempotency_key='cancel123'))
+    executor = Executor(settings)
+    executor.bind(bindings)
+    await executor.startup()
+    with patch('backend.pi_browser.run_pi', inference):
+        task = asyncio.create_task(executor.execute(execution))
+        await asyncio.wait_for(started.wait(), 30)
+        runtime = next(iter(executor.active.values())).runtime
+        page = next(p for p in runtime.session.context.pages if p.url.startswith('http://lane002-smoke:8765'))
+        for _ in range(100):
+            if await page.evaluate('localStorage.getItem("cancelCounter")') == '1':
+                break
+            await asyncio.sleep(.01)
+        else:
+            raise AssertionError('Synthetic script did not start')
+        view.state = TaskState.CANCELLING
+        await executor.cancel(lease)
+        await asyncio.wait_for(task, 40)
+    state = bindings.control.finish.call_args.args[2]
+    assert state == TaskState.CANCELLED, bindings.control.finish.call_args
+    assert bindings.control.release_browser.call_args.kwargs['profile_saved']
+    assert not executor.active
+    print('LANE002_CANCEL_EVIDENCE=script-terminated,container-stopped,profile-saved,cancelled', flush=True)
+
+
 async def pid_benchmark():
     from playwright.async_api import async_playwright
     records = []
@@ -245,6 +293,7 @@ async def main():
                     finally:
                         store.close()
             await conversation_smoke(settings)
+            await cancellation_smoke(settings)
     site.shutdown()
     print('LANE002_DOCKER_EVIDENCE=' + json.dumps(results), flush=True)
 

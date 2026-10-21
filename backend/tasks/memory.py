@@ -25,6 +25,9 @@ class ProfileStore(UserStore):
     def __init__(self, settings, principal, profile_id):
         super().__init__(settings.state_dir, storage_key(principal, profile_id))
         self.retention_days = settings.history_retention_days
+        self.db.execute("DELETE FROM turns WHERE created_at < datetime('now', ?)",
+                        (f'-{self.retention_days} days',))
+        self.db.commit()
 
     @staticmethod
     def redact(text, inputs, limit=4000):

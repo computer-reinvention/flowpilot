@@ -220,6 +220,9 @@ class BrowserSession:
                 pause_after=excluded.pause_after,tags=excluded.tags''',
                 (site, name, description, script, 'auth' if pause_after_auth else None, json.dumps(tags or [])))
             self.store.db.commit()
+            if self.hosted:
+                self.store.db.execute('DELETE FROM reflexes WHERE rowid NOT IN (SELECT rowid FROM reflexes ORDER BY rowid DESC LIMIT 100)')
+                self.store.db.commit()
             metrics['saved'] += 1
             return ActionResult(extracted_content=f'Saved {site}/{name}')
 

@@ -107,6 +107,7 @@ class ConversationRuntime:
         self.lease, self.control = execution.lease, bindings.control
         self.session_factory = session_factory
         self.session = None
+        self.directory = None
         self.pause = None
         self.pause_generation = 0
         self.writer = asyncio.Lock()
@@ -117,7 +118,11 @@ class ConversationRuntime:
         self.owner = None
 
     async def open(self):
-        store = ProfileStore(self.settings, self.lease.principal, self.lease.profile_id)
+        try:
+            store = ProfileStore(self.settings, self.lease.principal, self.lease.profile_id)
+        except ValueError:
+            raise TaskFault(task_error(ErrorCode.CONFLICT, 'Profile is already open')) from None
+        self.directory = store.path
         if (store.path / 'recovery-required').exists():
             store.close()
             raise TaskFault(task_error(ErrorCode.PROFILE_RECOVERY_REQUIRED, 'Profile requires recovery'))
@@ -130,7 +135,15 @@ class ConversationRuntime:
         except BaseException:
             store.close()
             raise
-        await self.session.__aenter__()
+        try:
+            await self.session.__aenter__()
+        except BaseException:
+            # BrowserSession already runs failure cleanup. Never close a failed
+            # startup twice or turn a quarantined profile into a saved profile.
+            self.session = None
+            if (store.path / 'recovery-required').exists():
+                raise TaskFault(task_error(ErrorCode.PROFILE_RECOVERY_REQUIRED, 'Profile startup requires recovery')) from None
+            raise
 
     def page(self):
         pages = self.session.context.pages
@@ -252,8 +265,8 @@ class ConversationRuntime:
             await self.session.__aexit__(None, None, None)
 
     def quarantine(self):
-        if self.session:
-            (self.session.store.path / 'recovery-required').touch(mode=0o600)
+        if self.directory:
+            (self.directory / 'recovery-required').touch(mode=0o600)
 
 
 def create_runtime(settings, execution, bindings):
