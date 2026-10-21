@@ -1,21 +1,22 @@
 # Lane006 acceptance handoff
 
-**Harness proof, not service readiness.** Foundation: `0ccc06a005c3ff680110de6b66a6606a4e48d3d3`. No other lane was integrated. No production files, shared fixtures, provider credentials, deployment, Harp files or external websites were changed/used.
+**Harness proof, not service readiness.** Foundation: `0ccc06a005c3ff680110de6b66a6606a4e48d3d3`. The sole authorized integration is additive contract amendment `2201b5a`, cherry-picked as `2ff7646`; no implementation lane was integrated. No production repairs, shared fixture edits, provider credentials, deployment, Harp changes or external website effects occurred.
 
-## Proven at revision `473861d`
+## Proven at revision `a692441`
 
-- Dedicated suite: **61 passed**. Actual Chromium, local SQLite website counters, separate origins, cookie/storage restoration and separate contexts; selector replacement, stale references, delayed same-URL DOM, keyboard/drag/frame effects; lost mutation response and an actual owned Chrome process-group SIGKILL after durable effect.
+- Dedicated suite: **71 passed**; dedicated plus amended foundation contracts: **125 passed**. Actual Chromium, local SQLite website counters, separate origins, cookie/storage restoration and separate contexts; selector replacement, stale references, delayed same-URL DOM, keyboard/drag/frame effects; lost mutation response and an actual owned Chrome process-group SIGKILL after durable effect.
 - Frozen fixture consumption is independent of producer models. Actual HTTP scripted peers check the standalone client's identical-payload lost-response retry, retryable capacity/backoff and nonretryable conflict. These are **consumer tests**, not proof that the service deduplicates execution.
 - Real Uvicorn HTTP fail-closed checks run with **lifespan off**. Disabled task admission is 404; enabled/not-started admission is 503. Disabled health's HTTP 200 never becomes an acceptance pass. The legacy global Docker orphan sweep is deliberately not invoked.
 - Scanner detects plaintext, URL, escaped JSON and base64 canaries in files and SQLite/WAL. Empty, oversized, compressed or symlinked inputs create explicit gaps. Independent read-only bcrypt key verification has positive and negative self-tests.
-- Full repository suite at `8e6ce6e`: **227 passed, 12 explicit live skips, 1 failed**. Isolated rerun reproduces `tests/test_pi_agent.py::test_real_pi_host_rejects_unknown_model_without_provider_call`: expected `catalog does not contain`, actual `Pi exited without a result`. Ownership: Pi/agent integration (002/007). No cause is inferred; no repair attempted. Three additional harness tests were added afterward; final full-suite result is recorded in plan006 evidence if rerun.
+- Full repository suite at `a692441`: **241 passed, 12 explicit live skips, 1 failed**. Isolated earlier rerun and final full run reproduce `tests/test_pi_agent.py::test_real_pi_host_rejects_unknown_model_without_provider_call`: expected `catalog does not contain`, actual `Pi exited without a result`. Ownership: Pi/agent integration (002/007). No cause is inferred; no repair attempted.
+- Amendment consumer self-tests require successful public mint and `/state` with pause generation 9 and no lease field, validate current URL/viewport, require capability-only requests without forwarding the account key, and reject leaked execution identity, stale pause metadata and invalid viewport bounds. Strict peers prove the consumer only, not producer integration.
 
 ## Exact commands
 
 Run with cwd `/Users/pgwork/Desktop/code/flowpilot-worktrees/lane-006` (after integration, use that checkout as cwd instead):
 
 ```sh
-/Users/pgwork/Desktop/code/flowpilot/.venv/bin/python -m pytest tests/test_task_acceptance_contract.py tests/test_task_acceptance_browser.py tests/test_task_acceptance_security.py tests/test_task_acceptance_baseline.py -q
+/Users/pgwork/Desktop/code/flowpilot/.venv/bin/python -m pytest tests/test_task_acceptance_contract.py tests/test_task_acceptance_browser.py tests/test_task_acceptance_security.py tests/test_task_acceptance_baseline.py tests/test_task_acceptance_assistance.py -q
 /Users/pgwork/Desktop/code/flowpilot/.venv/bin/python scripts/verify_task_system.py --offline
 ```
 
@@ -30,6 +31,8 @@ After the parent supplies an **assembled, disposable local service using determi
 For host-native browsers, omit `--site-browser-host`. The site binds host loopback only. Docker Desktop's `host.docker.internal` must map back to those two ephemeral listeners; Linux needs a separately configured disposable forwarding topology. A mapping failure is a failure, not grounds to mock the browser. A readiness-only probe omits `--deterministic-local` and creates no accounts/tasks.
 
 The service scenarios sign up/log in two run-labelled accounts, create ordinary API keys, check once-only disclosure, create two owned profiles, reject foreign/forged authority, concurrently retry admission, require exact website counters and an owned follow-up from a fresh HTTP transport, exercise secret-question receipts and decline, cancel a browser pause and require capability expiry/late-response rejection, then revoke the key. No SDK/backend imports. These integrated scenario drivers **have not yet passed against real peers**. Their natural-language tasks require a deterministic local inference implementation; they must fail rather than invent interaction states when a peer does not implement a case.
+
+The amendment target additionally requires two successful public mint/state cycles on **different pause generations within the same uninterrupted task**, URL/viewport metadata and no exposed lease generation; foreign-owner and stale-generation mint rejection; remint revocation; actual wall-clock expiry; and concurrent mint/resolve/cancel followed by rejection of every minted capability's state and late input. Launch the disposable service with `FLOWPILOT_TASKS_ASSISTANCE_TTL_SECONDS=3` to exercise expiry within the bounded 10-second test window (longer TTL reports that check blocked). A public HTTP scheduling race is not deterministic proof of the `assistance_lease` lookup→`save_capability` commit race: that stronger requirement stays blocked pending a separately supplied owned failpoint. The harness never substitutes pause generation for the private execution lease.
 
 For a **read-only copy** of this run's DB/history/logs/results/unpacked traces, populate environment variables in memory (do not put secrets in arguments or tracked files):
 
@@ -61,7 +64,8 @@ Security runners exit 1 for an observed check failure and 2 for unresolved accep
 | Directory suffix | Meaning |
 | --- | --- |
 | `ce16c6112b6442db97be8b4b83752fd8` | Earlier offline harness checkpoint, 58 passed |
-| `c9912c4efb8449ce92ecf2dcb1108428` | Current offline harness checkpoint, 61 passed |
+| `c9912c4efb8449ce92ecf2dcb1108428` | Pre-amendment offline harness checkpoint, 61 passed |
+| `bd02374d18f24cdbb8bd01cd5eb1ece9` | Post-amendment offline harness checkpoint, 71 passed; all integrated requirements remain blocked |
 | `3d835f2fbf8a4ea287e446ddce6d5593` | Actual HTTP baseline, lifecycle off; readiness 503 `starting`, acceptance **blocked**, exit 2 |
 | `22c56a200586422dbd2024a14e4aaf3b` | Scanner CLI self-test on safe synthetic file; coverage incomplete, exit 2 |
 | `fe9c62e3083740be8d24b518c71686a7` | Scanner CLI **deliberately injected synthetic leak**, correctly failed, exit 1; not a production leak |
