@@ -22,9 +22,9 @@ from backend.task_settings import TaskSettings
 PAGE = b'''<!doctype html><title>lane007 synthetic observation</title>
 <body><main><button id="action" onclick="window.right++;document.querySelector('#result').textContent='Receipt '+window.right">Submit</button>
 <input id="field" value="initial"><input id="secret" type="password" value="fixture-secret">
-<output id="result" data-result>Total $5</output><time id="clock">0</time></main>
+<output id="result" data-result>Total $5</output><time id="clock" data-observation-volatile="timestamp">0</time></main>
 <script>window.right=0;window.wrong=0;window.noops=0;
-setInterval(()=>document.querySelector('#clock').textContent=Date.now(),20);
+window.clockTimer=setInterval(()=>document.querySelector('#clock').textContent=Date.now(),20);
 </script></body>'''
 
 

@@ -169,12 +169,6 @@ async def _execute_reflex(
         observation = expected_observation or await observation_policy.observe(browser_session)
         await observation_policy.require_fresh(browser_session, observation)
 
-    pre_url = ""
-    try:
-        pre_url = await page.get_url()
-    except Exception:
-        pass
-
     # browser-use's page.evaluate() validates that scripts start with '('.
     # LLMs generate 'async (inputs, ...) => { await ... }' which fails
     # the check. We bypass page.evaluate()'s validation and send the
@@ -304,7 +298,7 @@ async def _repair_reflex(
                 "input_names": list(inputs),
             })
         except Exception as e:
-            logger.warning("Repair LLM call failed: %s", e)
+            logger.warning("Repair LLM call failed; details withheld")
             return False, f"Repair LLM call failed: {e}", None
 
         trace("repair_reflex.llm_response", attempt=attempt + 1, script_bytes=len(fixed_script))
@@ -326,7 +320,7 @@ async def _repair_reflex(
         # Update error for next attempt
         broken_script = fixed_script
         error_msg = msg
-        logger.info("Repair attempt %d/%d failed: %s", attempt + 1, max_attempts, msg)
+        logger.info("Repair attempt %d/%d failed", attempt + 1, max_attempts)
 
     trace("repair_reflex.exhausted", max_attempts=max_attempts)
     return False, f"Repair failed after {max_attempts} attempts: {error_msg}", None

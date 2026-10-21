@@ -33,11 +33,12 @@ CAPTURE_JS = r"""() => {
   const key = Symbol.for('flowpilot.observation.v1');
   const state = window[key] || (window[key] = {nodes: new WeakMap(), next: 0});
   const token = node => {
-    if (!state.nodes.has(node)) state.nodes.set(node, crypto.randomUUID());
+    if (!state.nodes.has(node)) state.nodes.set(node,
+      Array.from(crypto.getRandomValues(new Uint8Array(16)), b=>b.toString(16).padStart(2,'0')).join(''));
     return state.nodes.get(node);
   };
   const clean = s => String(s || '').replace(/\s+/g, ' ').trim();
-  const controls = [], content = [], nodes = [], docs = [];
+  const controls = [], content = [], display = [], nodes = [], docs = [];
   let unknown = false, busy = false, size = 0;
   const visible = el => {
     const style = el.ownerDocument.defaultView.getComputedStyle(el);
@@ -53,13 +54,16 @@ CAPTURE_JS = r"""() => {
       if (++count > 12000 || size > 96000 || controls.length >= 2000) { unknown = true; break; }
       if (el.nodeType === Node.TEXT_NODE) {
         const p = el.parentElement;
-        // Only an explicit <time> or data-observation-volatile="timestamp"
+        // Only an explicit data-observation-volatile="timestamp"
         // timestamp is ignored, and never inside a control/result/form field.
         if (p && visible(p) && !p.closest('script,style,noscript') &&
-            !(p.closest('time,[data-observation-volatile="timestamp"]') &&
-              !p.closest('button,a,input,select,textarea,[role],[data-result]'))) {
+            !(p.closest('[data-observation-volatile="timestamp"]') &&
+              !p.closest('button,a,input,select,textarea,[role],[data-result],output,label,form'))) {
           const text = clean(el.textContent);
-          if (text) { content.push([frame, text]); size += text.length; }
+          if (text) {
+            content.push([frame, text]); size += text.length;
+            if (!p.closest('textarea,[contenteditable="true"],[data-private]')) display.push([frame, text]);
+          }
         }
       } else if (el.nodeType === Node.ELEMENT_NODE && visible(el)) {
         if (el.shadowRoot) unknown = true; // no silently partial shadow tree
@@ -70,13 +74,18 @@ CAPTURE_JS = r"""() => {
           } catch (_) { unknown = true; }
         }
         if (el.matches('a,button,input,select,textarea,[role],[contenteditable="true"],[onclick],[tabindex]')) {
+          const labelled = (el.getAttribute('aria-labelledby') || '').split(/\s+/).filter(Boolean)
+            .map(id => clean(doc.getElementById(id)?.textContent)).join(' ');
           const identity = [frame, el.tagName, el.id, el.getAttribute('name'),
             el.getAttribute('type'), el.getAttribute('role'), el.getAttribute('aria-label'),
-            el.matches('textarea,[contenteditable="true"]') ? '' : clean(el.textContent), el.getAttribute('href')];
+            el.matches('textarea,[contenteditable="true"]') ? '' : clean(el.textContent), el.getAttribute('href'),
+            labelled, Array.from(el.labels || [], label=>clean(label.textContent))];
           const value = 'value' in el ? String(el.value) : null;
-          controls.push({identity, status: [!!el.disabled, el.getAttribute('aria-disabled'),
+          controls.push({identity, status: [el.matches(':disabled'), el.getAttribute('aria-disabled'),
             el.getAttribute('aria-expanded'), el.getAttribute('aria-checked'),
-            !!el.checked, value], label: identity.slice(1, 7).filter(Boolean).join(' ') +
+            !!el.checked, value, el.getAttribute('aria-selected'), el.getAttribute('aria-pressed'),
+            el.getAttribute('aria-invalid'), !!el.readOnly, !!el.required, el.selectedIndex ?? null],
+            label: identity.slice(1, 7).filter(Boolean).join(' ') +
             ' ' + identity[7].slice(0, 160)});
           nodes.push(token(el));
         }
@@ -84,7 +93,7 @@ CAPTURE_JS = r"""() => {
     } while ((el = tree.nextNode()));
   };
   walk(document, 'top');
-  return {url: location.href, docs, controls, content, nodes, busy, unknown};
+  return {url: location.href, docs, controls, content, display, nodes, busy, unknown};
 }"""
 
 
@@ -133,6 +142,12 @@ class ObservationPolicy:
         elements = '\n'.join(lines)
         if len(elements) > 24000:
             readiness = 'unknown'
+        else:
+            # Text is from the same capture, never a later unrelated DOM read.
+            # Form values are digest-only. Page text is ephemeral/untrusted and
+            # intentionally not included in safe metrics or persistence.
+            text = '\n'.join(f'{frame}: {text}' for frame, text in raw.get('display', ()))
+            elements += '\nPage text (bounded; form values omitted):\n' + text[:max(0, 23950 - len(elements))]
         return Observation(snapshot_id=snapshot_id, url=raw['url'], target_id=target,
                            document_id=document, elements=elements[:24000], references=refs,
                            structural_fingerprint=structural, progress_fingerprint=progress,

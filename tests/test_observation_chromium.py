@@ -254,3 +254,144 @@ async def test_volatile_optout_does_not_hide_result_or_control_state(local_brows
     await page.evaluate("() => { action.textContent='Changed action'; }")
     with pytest.raises(TaskFault):
         await p.require_fresh(browser, current)
+
+
+async def test_actual_reflex_timeout_never_becomes_success_or_automatic_replay(local_browser, monkeypatch):
+    browser, page, url = local_browser
+    monkeypatch.setenv('REFLEX_TIMEOUT_SECONDS', '0.08')
+    with pytest.raises(TaskFault) as exc:
+        await runner._execute_reflex('async()=>{window.right++;await new Promise(()=>{});return true;}',
+                                    {}, url, browser, observation_policy=policy())
+    assert exc.value.error.code == ErrorCode.INTERRUPTED
+    assert await page.evaluate('() => window.right') == '1'
+
+
+async def test_pi_checkpoint_cancellation_prevents_queued_effect(local_browser, monkeypatch):
+    browser, page, url = local_browser
+    checkpoint = AsyncMock()
+    async def agent(task, system, tools, dispatch, **kwargs):
+        await dispatch('observe', {})
+        checkpoint.side_effect = asyncio.CancelledError
+        await dispatch('execute', dict(script='async()=>action.click()',
+                                      precondition='async()=>true', postcondition='async()=>true'))
+    monkeypatch.setattr(pi_browser, 'run_pi', agent)
+    with pytest.raises(asyncio.CancelledError):
+        await pi_browser.drive_browser(browser, 'cancel', {}, url, SimpleNamespace(checkpoint=checkpoint),
+                                       None, None, None, observation_policy=policy())
+    assert await page.evaluate('() => window.right') == '0'
+
+
+async def test_accessible_label_and_aria_selection_are_meaningful(local_browser):
+    browser, page, _ = local_browser
+    await page.evaluate('''() => {
+      const clock=document.querySelector('#clock'); clearInterval(window.clockTimer);
+      clock.textContent='Task label'; action.setAttribute('aria-labelledby','clock');
+      action.setAttribute('aria-selected','false');
+    }''')
+    p = policy()
+    before = await p.observe(browser)
+    assert before.readiness == 'ready'
+    await page.evaluate("() => action.setAttribute('aria-selected','true')")
+    with pytest.raises(TaskFault):
+        await p.require_fresh(browser, before)
+    before = await p.observe(browser)
+    await page.evaluate("() => document.querySelector('#clock').textContent='Changed task label'")
+    with pytest.raises(TaskFault):
+        await p.require_fresh(browser, before)
+    # A task's unmarked <time> delivery date is not treated as timestamp noise.
+    await page.evaluate("() => { const date=document.createElement('time'); date.id='delivery'; date.textContent='2026-11-01'; document.body.append(date); }")
+    before = await p.observe(browser)
+    await page.evaluate("() => document.querySelector('#delivery').textContent='2026-12-01'")
+    with pytest.raises(TaskFault):
+        await p.require_fresh(browser, before)
+
+
+async def test_owned_trace_calls_exclude_scripts_inputs_and_dom(local_browser, monkeypatch):
+    from backend import observation
+    browser, page, url = local_browser
+    events = []
+    def trace(name, **kwargs):
+        events.append([name, kwargs])
+    monkeypatch.setattr(runner, 'trace', trace)
+    monkeypatch.setattr(observation, 'trace', trace)
+    ok, _ = await runner._execute_reflex("async(inputs)=>{return inputs.secret;}",
+                                       {'secret': 'unique-fixture-secret'}, url, browser,
+                                       observation_policy=policy())
+    assert ok
+    recorded = json.dumps(events)
+    assert 'unique-fixture-secret' not in recorded
+    assert 'async(inputs)' not in recorded
+    assert 'fixture-secret' not in recorded
+    assert 'Total $5' not in recorded
+    assert 'observation.result' in recorded
+
+
+async def test_human_wait_deadline_stops_driver_without_spending_turn_budget(local_browser, monkeypatch):
+    browser, page, url = local_browser
+    p = create_observation(TaskSettings(readiness_window_seconds=0.08, readiness_timeout_seconds=0.4,
+                                       human_wait_seconds=1, assistance_ttl_seconds=1))
+    async def human(reason, category):
+        await asyncio.sleep(20)
+    async def agent(task, system, tools, dispatch, **kwargs):
+        # Mimic Pi's separate tool task, whose ordinary errors would otherwise be
+        # swallowed and offered to the model for as many as 50 more turns.
+        async def tool_call():
+            try:
+                await dispatch('human_help', {'reason': 'fixture wait'})
+            except TaskFault:
+                pass
+        child = asyncio.create_task(tool_call())
+        try:
+            await asyncio.sleep(20)  # actual host waits on stdout, not this child
+        finally:
+            await asyncio.gather(child, return_exceptions=True)
+    monkeypatch.setattr(pi_browser, 'run_pi', agent)
+    start = time.monotonic()
+    with pytest.raises(TaskFault) as exc:
+        await pi_browser.drive_browser(browser, 'wait', {}, url, SimpleNamespace(checkpoint=AsyncMock()),
+                                       human, None, None, observation_policy=p)
+    assert exc.value.error.code == ErrorCode.INTERRUPTED
+    assert time.monotonic() - start < 2
+    assert await page.evaluate('() => window.right') == '0'
+
+
+async def test_meaningful_dom_convergence_without_busy_or_network_idle(local_browser):
+    browser, page, _ = local_browser
+    await page.evaluate("() => setTimeout(()=>{result.textContent='Hydrated without busy marker';},100)")
+    p = policy(timeout=0.4)
+    a = await p.observe(browser)
+    assert a.readiness == 'ready'
+    assert 'Hydrated without busy marker' in a.elements
+    await page.evaluate("() => {window.churn=setInterval(()=>{result.textContent=String(Date.now());},10);}")
+    b = await p.observe(browser)
+    assert b.readiness == 'timeout'
+    with pytest.raises(TaskFault):
+        await p.require_fresh(browser, b)
+
+
+async def test_default_local_pi_uses_native_policy_without_repl_changes(local_browser, monkeypatch):
+    browser, page, url = local_browser
+    monkeypatch.setenv('FLOWPILOT_TASKS_READINESS_WINDOW_SECONDS', '0.05')
+    monkeypatch.setenv('FLOWPILOT_TASKS_READINESS_TIMEOUT_SECONDS', '0.4')
+    async def agent(task, system, tools, dispatch, **kwargs):
+        execute = next(t for t in tools if t['name'] == 'execute')
+        assert 'precondition' in execute['inputSchema']['required']
+        snapshot = await dispatch('observe', {})
+        assert snapshot['readiness'] == 'ready'
+        assert 'references' in snapshot and 'Total $5' in snapshot['elements']
+        await dispatch('complete', {'verify': 'async()=>window.right===0', 'summary': 'Default checked'})
+    monkeypatch.setattr(pi_browser, 'run_pi', agent)
+    assert await pi_browser.drive_browser(browser, 'local default', {}, url,
+                                         SimpleNamespace(checkpoint=AsyncMock()), None, None, None) == 'Default checked'
+
+
+async def test_generated_reflex_cannot_mask_stale_prompt_snapshot(local_browser, monkeypatch):
+    browser, page, url = local_browser
+    async def generate(*_):
+        await page.evaluate('() => { const el=action.cloneNode(true); el.onclick=()=>window.wrong++; action.replaceWith(el); }')
+        return 'async()=>{action.click();return true;}'
+    monkeypatch.setattr(runner, 'generate_program', generate)
+    with pytest.raises(TaskFault):
+        await runner._generate_reflex(SimpleNamespace(entry_url=url, task='synthetic'), {}, browser, None,
+                                      observation_policy=policy())
+    assert await page.evaluate('() => window.wrong') == '0'
