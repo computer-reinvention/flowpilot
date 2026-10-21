@@ -9,6 +9,7 @@ from ..task_contracts import (
     ErrorCode, PollRequest, TaskFault, TaskMetrics, TaskResult, TaskState, TERMINAL_STATES, task_error,
 )
 from .memory import delete_memory
+from .browser_adapter import host_key
 from .runtime import create_runtime, stale
 
 
@@ -186,9 +187,10 @@ class Executor:
         # resources. Preserve archives and quarantine uncertain live profiles.
         def reconcile():
             manager = self.manager_factory(str(self.settings.state_dir))
-            for container in manager.client.containers.list(all=True, filters={'label': 'flowpilot-task=1'}):
+            for container in manager.client.containers.list(all=True, filters={
+                    'label': ['flowpilot-task=1', f'task-host={host_key(self.settings)}']}):
                 labels = container.labels
-                if labels.get('flowpilot-task') != '1':
+                if labels.get('flowpilot-task') != '1' or labels.get('task-host') != host_key(self.settings):
                     continue
                 profile = labels.get('profile-key', '')
                 if len(profile) != 64 or any(c not in '0123456789abcdef' for c in profile):
@@ -211,9 +213,10 @@ class Executor:
         def remove_artifacts(profile_key):
             manager = self.manager_factory(str(self.settings.state_dir))
             containers = manager.client.containers.list(all=True, filters={
-                'label': ['flowpilot-task=1', f'profile-key={profile_key}']})
+                'label': ['flowpilot-task=1', f'profile-key={profile_key}', f'task-host={host_key(self.settings)}']})
             for container in containers:
                 if (container.labels.get('flowpilot-task') == '1'
+                        and container.labels.get('task-host') == host_key(self.settings)
                         and container.labels.get('profile-key') == profile_key):
                     container.stop(timeout=5)
                     container.remove(force=True)

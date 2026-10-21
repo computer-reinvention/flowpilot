@@ -11,6 +11,8 @@ from pathlib import Path
 import tempfile
 import threading
 import sys
+import os
+import signal
 from unittest.mock import patch
 
 from backend.task_contracts import Principal
@@ -104,6 +106,64 @@ async def pid_benchmark():
     print('LANE002_PID_BENCHMARK=' + json.dumps(records), flush=True)
 
 
+async def crash_smoke(recover=False):
+    """Two separate containers/processes share ONLY the dedicated /state mount."""
+    from playwright.async_api import async_playwright
+    from backend.task_contracts import TaskFault
+    from backend.tasks.executor import Executor
+    from backend.tasks.runtime import ConversationRuntime
+    from backend.task_ports import Execution
+    from backend.task_contracts import TaskStart
+    from tests.fixtures.browser_tasks.doubles import bindings_double
+    settings = TaskSettings(state_dir=Path('/state'))
+    lease = Lease(principal=Principal(account_id='crash'), profile_id='crash', task_id='crash', session_id='s', generation=1)
+    metadata = settings.state_dir / 'crash.json'
+    async with async_playwright() as playwright:
+        if not recover:
+            site = ThreadingHTTPServer(('0.0.0.0', 8765), Site)
+            threading.Thread(target=site.serve_forever, daemon=True).start()
+            store = ProfileStore(settings, lease.principal, lease.profile_id)
+            sandbox = TaskSandbox(store.path, store.path.name, settings=settings, lease=lease)
+            _, websocket = await sandbox.start()
+            browser = await playwright.chromium.connect_over_cdp(websocket)
+            page = await browser.contexts[0].new_page()
+            await page.goto('http://lane002-smoke:8765')
+            await page.evaluate('localStorage.setItem("mutationCount", "1")')
+            metadata.write_text(json.dumps({'websocket': websocket, 'container_id': sandbox.info['container_id'],
+                                             'profile': store.path.name}))
+            print('LANE002_CRASH_MUTATION=1; SIGKILL before cleanup', flush=True)
+            os.kill(os.getpid(), signal.SIGKILL)
+        else:
+            info = json.loads(metadata.read_text())
+            browser = await playwright.chromium.connect_over_cdp(info['websocket'])
+            page = next(p for p in browser.contexts[0].pages if p.url.startswith('http://lane002-smoke:8765'))
+            assert await page.evaluate('localStorage.getItem("mutationCount")') == '1'
+            def forbidden_engine(*args):
+                raise AssertionError('Recovery must not replay an engine')
+            bindings = bindings_double()
+            executor = Executor(settings, runtime_factory=forbidden_engine)
+            executor.bind(bindings)
+            await executor.startup()
+            await executor.recover(())
+            assert (settings.state_dir / info['profile'] / 'recovery-required').exists()
+            manager = executor.manager_factory(str(settings.state_dir))
+            container = manager.client.containers.get(info['container_id'])
+            container.reload()
+            assert container.status == 'exited'
+            now = datetime.now(timezone.utc)
+            execution = Execution(lease=lease, revision=2, admitted_at=now, deadline=now+timedelta(seconds=30),
+                                  request=TaskStart(task='Never replay', idempotency_key='no-replay1'))
+            runtime = ConversationRuntime(settings, execution, bindings)
+            try:
+                await runtime.open()
+            except TaskFault as exc:
+                assert exc.error.code == 'profile_recovery_required'
+            else:
+                raise AssertionError('Recovery-required profile reopened')
+            await executor.delete_profile(lease.principal, lease.profile_id)
+            print('LANE002_CRASH_RECOVERY=stopped,quarantined,no-engine-replay,profile-deletion-cleaned-artifact', flush=True)
+
+
 class Site(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -172,4 +232,7 @@ async def main():
 
 
 if __name__ == '__main__':
-    asyncio.run(pid_benchmark() if '--pids' in sys.argv else main())
+    if '--crash' in sys.argv or '--recover' in sys.argv:
+        asyncio.run(crash_smoke(recover='--recover' in sys.argv))
+    else:
+        asyncio.run(pid_benchmark() if '--pids' in sys.argv else main())

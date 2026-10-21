@@ -165,13 +165,14 @@ class BrowserSession:
             raise RuntimeError('Use async with BrowserSession(...) before ask()')
         if self._asking:
             raise RuntimeError('This session already has an active request')
-        inputs = inputs or {}
+        inputs = {} if inputs is None else inputs
         stored_inputs = json.dumps(inputs)
         started = time.monotonic()
         metrics = {'model_turns': 0, 'tool_calls': 0, 'reused': 0, 'saved': 0,
                    'replay_failures': 0, 'human_seconds': 0.0}
         ask_task = asyncio.current_task()
         human_cancelled = False
+        private_inputs = False
 
         async def handoff(*args, **kwargs):
             from .handoff import HandoffCancelled
@@ -205,6 +206,8 @@ class BrowserSession:
                 return ActionResult(error='Expected a bounded async arrow function')
             if self.hosted:
                 from .tasks.memory import input_atoms
+                if private_inputs:
+                    return ActionResult(error='Save parameterized scripts before collecting private transient inputs')
                 # Known task/interaction inputs must remain parameterized, not
                 # become credentials embedded in durable personal scripts.
                 metadata = json.dumps([name, description, script, tags])
@@ -242,7 +245,7 @@ class BrowserSession:
                 if ok and fixed:
                     if self.hosted:
                         from .tasks.memory import input_atoms
-                        if any(v in fixed for v in input_atoms(inputs)):
+                        if private_inputs or any(v in fixed for v in input_atoms(inputs)):
                             # The repaired script already ran, but it is not safe
                             # to persist credential-bearing generated source.
                             return ActionResult(extracted_content=detail)
@@ -300,6 +303,7 @@ class BrowserSession:
                 metrics['human_seconds'] += time.monotonic() - pause
 
         async def request_input_values(fields_json: str):
+            nonlocal private_inputs
             try:
                 fields = json.loads(fields_json)
                 if not isinstance(fields, list) or not fields or any(
@@ -313,6 +317,7 @@ class BrowserSession:
                 return ActionResult(extracted_content='User handled this in the browser. Inspect current state and continue without repeating completed actions.')
             if not isinstance(response.get('values'), dict) or any(f['name'] not in response['values'] for f in fields):
                 return ActionResult(error='Response must contain values for all requested fields')
+            private_inputs = True
             inputs.update(response['values'])
             return ActionResult(extracted_content=json.dumps(response['values']))
 
@@ -354,7 +359,7 @@ class BrowserSession:
             metrics['agent_seconds'] = round(metrics['wall_seconds'] - metrics['human_seconds'], 2)
             metrics['human_seconds'] = round(metrics['human_seconds'], 2)
             if hasattr(self.store, 'record_turn'):
-                self.store.record_turn(request, inputs, result or error, metrics)
+                self.store.record_turn(request, inputs, result or error, metrics, private_inputs=private_inputs)
             else:
                 self.store.db.execute('INSERT INTO turns(task,inputs,result,metrics) VALUES(?,?,?,?)',
                                      (request, stored_inputs, result or error, json.dumps(metrics)))

@@ -26,16 +26,20 @@ class ProfileStore(UserStore):
         super().__init__(settings.state_dir, storage_key(principal, profile_id))
         self.retention_days = settings.history_retention_days
 
-    def record_turn(self, task, inputs, result, metrics):
+    @staticmethod
+    def redact(text, inputs, limit=4000):
+        text = str(text or '')
+        for value in sorted(set(input_atoms(inputs)), key=len, reverse=True):
+            text = text.replace(value, '[redacted]')
+        return text[:limit]
+
+    def record_turn(self, task, inputs, result, metrics, *, private_inputs=False):
         # Interaction values can appear anywhere in model output. Persist only
         # redacted, bounded context; never store inputs or full tool transcripts.
         def safe(text):
-            text = str(text or '')
-            for value in sorted(set(input_atoms(inputs)), key=len, reverse=True):
-                text = text.replace(value, '[redacted]')
-            return text[:4000]
+            return self.redact(text, inputs)
         self.db.execute('INSERT INTO turns(task,inputs,result,metrics) VALUES(?,?,?,?)',
-                        (safe(task), '{}', safe(result), json.dumps(metrics)))
+                        (safe(task), '{}', 'Private-input task ended; inspect current website state' if private_inputs else safe(result), json.dumps(metrics)))
         self.db.execute("DELETE FROM turns WHERE created_at < datetime('now', ?)",
                         (f'-{self.retention_days} days',))
         self.db.execute('DELETE FROM turns WHERE id NOT IN (SELECT id FROM turns ORDER BY id DESC LIMIT 100)')

@@ -1,10 +1,15 @@
 """Docker-network-only browser transport. No host CDP ports or help listener."""
 import asyncio
+import hashlib
 import ipaddress
 import tarfile
 
 from ..repl_sandbox import ChatSandbox
 from ..sandbox import CDP_CONTAINER_PORT, SANDBOX_NETWORK
+
+
+def host_key(settings):
+    return hashlib.sha256(str(settings.state_dir.resolve()).encode()).hexdigest()
 
 
 class TaskSandbox(ChatSandbox):
@@ -44,6 +49,7 @@ class TaskSandbox(ChatSandbox):
         self.info = self.manager.start(
             user_id=self.user, settings=self.settings,
             task_labels={'flowpilot-task': '1', 'task-id': self.lease.task_id,
+                         'task-host': host_key(self.settings),
                          'session-id': self.lease.session_id, 'profile-key': self.user,
                          'lease-generation': str(self.lease.generation)},
             profile_archive=str(self.archive) if self.archive.exists() else None)

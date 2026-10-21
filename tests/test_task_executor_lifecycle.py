@@ -141,9 +141,11 @@ async def test_old_browser_pause_is_rejected(tmp_path):
 @pytest.mark.asyncio
 async def test_recover_never_replays_and_only_stops_task_profiles(tmp_path):
     from backend.tasks.memory import storage_key
+    from backend.tasks.browser_adapter import host_key
     request = execution()
     profile = storage_key(request.lease.principal, request.lease.profile_id)
-    task = MagicMock(labels={'flowpilot-task': '1', 'profile-key': profile})
+    task = MagicMock(labels={'flowpilot-task': '1', 'profile-key': profile,
+                            'task-host': host_key(TaskSettings(state_dir=tmp_path))})
     invalid = MagicMock(labels={'flowpilot-task': '1', 'profile-key': '../escape'})
     manager = MagicMock()
     manager.client.containers.list.return_value = [task, invalid]
@@ -195,10 +197,11 @@ async def test_human_resume_drains_inflight_input_and_releases_keys(tmp_path):
 @pytest.mark.asyncio
 async def test_recover_refuses_a_profile_opened_by_another_process(tmp_path):
     from backend.tasks.memory import ProfileStore
+    from backend.tasks.browser_adapter import host_key
     request = execution()
     settings = TaskSettings(state_dir=tmp_path)
     store = ProfileStore(settings, request.lease.principal, request.lease.profile_id)
-    task = MagicMock(labels={'flowpilot-task': '1', 'profile-key': store.path.name})
+    task = MagicMock(labels={'flowpilot-task': '1', 'profile-key': store.path.name, 'task-host': host_key(settings)})
     manager = MagicMock()
     manager.client.containers.list.return_value = [task]
     executor = Executor(settings, manager_factory=lambda *args: manager)

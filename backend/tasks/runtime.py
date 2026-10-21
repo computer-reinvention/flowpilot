@@ -216,7 +216,10 @@ class ConversationRuntime:
     async def run(self):
         self.owner = asyncio.current_task()
         await self.open()
-        return await self.session.ask(self.execution.request.task, dict(self.execution.request.inputs))
+        inputs = dict(self.execution.request.inputs)
+        result = await self.session.ask(self.execution.request.task, inputs)
+        result['answer'] = self.session.store.redact(result['answer'], inputs, limit=32000)
+        return result
 
     async def stop_writers(self):
         self.fenced = True
