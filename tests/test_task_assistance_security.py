@@ -198,7 +198,7 @@ async def test_every_frozen_command_and_drain_before_shared_response():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("condition", ["forged", "expired", "revoked", "generation", "foreign_profile", "running"])
+@pytest.mark.parametrize("condition", ["forged", "expired", "revoked", "generation", "execution_generation", "foreign_profile", "running"])
 async def test_invalid_capabilities_fail_all_http_endpoints(condition):
     host, bindings, handle, state = scenario()
     await host.startup()
@@ -213,6 +213,8 @@ async def test_invalid_capabilities_fail_all_http_endpoints(condition):
         state["view"] = state["view"].model_copy(update={"interaction": state["view"].interaction.model_copy(update={"generation": 4})})
     elif condition == "foreign_profile":
         state["view"] = state["view"].model_copy(update={"profile_id": "foreign"})
+    elif condition == "execution_generation":
+        state["lease"] = state["lease"].model_copy(update={"generation": 8})
     else:
         state["view"] = state["view"].model_copy(update={"state": TaskState.RUNNING, "interaction": None})
     try:
@@ -332,7 +334,7 @@ async def test_shared_response_conflict_is_not_a_second_viewer_resolution():
         await host.shutdown()
 
 
-@pytest.mark.parametrize("condition", ["revoked", "expired", "generation", "running"])
+@pytest.mark.parametrize("condition", ["revoked", "expired", "generation", "execution_generation", "running"])
 def test_stream_binary_jpeg_and_expiry_while_already_connected(condition):
     host, bindings, handle, state = scenario()
 
@@ -344,6 +346,8 @@ def test_stream_binary_jpeg_and_expiry_while_already_connected(condition):
             state["binding"] = state["binding"].model_copy(update={"expires_at": datetime.now(timezone.utc) - timedelta(seconds=1)})
         elif condition == "generation":
             state["view"] = state["view"].model_copy(update={"interaction": state["view"].interaction.model_copy(update={"generation": 4})})
+        elif condition == "execution_generation":
+            state["lease"] = state["lease"].model_copy(update={"generation": 8})
         else:
             state["view"] = state["view"].model_copy(update={"state": TaskState.RUNNING, "interaction": None})
         await asyncio.sleep(10)
