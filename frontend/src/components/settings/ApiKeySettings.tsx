@@ -28,6 +28,7 @@ interface ApiKeySettingsProps {
   apiKeys: ApiKey[];
   loading: boolean;
   error?: string | null;
+  onRefresh: () => Promise<void>;
   onCreate: (name: string) => Promise<ApiKey>;
   onDelete: (id: string) => Promise<void>;
 }
@@ -85,7 +86,7 @@ function RevealKeyDialog({ apiKey, onClose }: { apiKey: ApiKey; onClose: () => v
   );
 }
 
-export function ApiKeySettings({ apiKeys, loading, error, onCreate, onDelete }: ApiKeySettingsProps) {
+export function ApiKeySettings({ apiKeys, loading, error, onRefresh, onCreate, onDelete }: ApiKeySettingsProps) {
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
@@ -123,6 +124,7 @@ export function ApiKeySettings({ apiKeys, loading, error, onCreate, onDelete }: 
       <h1 className="text-lg font-semibold">Account API keys</h1>
       <p className="text-sm">All keys have this account's authority, not separate tenant identities. Revocation prevents future requests; it does not implicitly cancel admitted tasks. Newly created plaintext is shown once, only here.</p>
       {(error || revokeError) && <p role="alert" className="text-destructive">{error || revokeError}</p>}
+      <Button variant="outline" disabled={loading} onClick={() => void onRefresh()}>Refresh API keys</Button>
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-muted-foreground">

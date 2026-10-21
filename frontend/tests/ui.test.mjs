@@ -12,7 +12,7 @@ const { cases } = JSON.parse(await readFile(new URL('../../tests/fixtures/browse
 const fixture = name => structuredClone(cases.find(c => c.name === name).response);
 test('account/key/profile/task DOM experience against local frozen HTTP fixtures', { timeout: 90000 }, async () => {
   let account = 'a', key = null, revokeFails = true, listFails = false, stale = false;
-  let task = fixture('question'), lastStart, lastResponse, admissions = 0;
+  let task = fixture('question'), lastStart, lastResponse, admissions = 0, uncertain = true, uncertainStart;
   const profiles = [];
   const server = createServer(async (req, res) => {
     const path = new URL(req.url, 'http://localhost').pathname;
@@ -35,7 +35,11 @@ test('account/key/profile/task DOM experience against local frozen HTTP fixtures
       if (req.method === 'POST') { profiles.push({ ...fixture('create_profile'), profile_id: `profile_${profiles.length}`, label: data.label }); return send(201, profiles.at(-1)); }
       return send(200, { items: account === 'a' ? profiles : [] });
     }
-    if (path === '/api/v1/browser-tasks') { admissions++; lastStart = data; task = fixture('question'); return send(202, fixture('admit')); }
+    if (path === '/api/v1/browser-tasks') {
+      admissions++; lastStart = data;
+      if (uncertain) { uncertain = false; uncertainStart = data; return send(503, { error: { code: 'unavailable', message: 'Unavailable', retryable: true } }); }
+      task = fixture('question'); return send(202, fixture('admit'));
+    }
     if (path === '/api/v1/browser-tasks/task_demo') return account === 'a' ? send(200, task) : send(404, fixture('foreign_task'));
     if (path.endsWith('/respond')) {
       lastResponse = data;
@@ -90,12 +94,13 @@ test('account/key/profile/task DOM experience against local frozen HTTP fixtures
     await evaluate(`document.querySelector('button[aria-label="Revoke Test client"]').click()`); await click('Delete'); await contains('Revocation failed');
     revokeFails = false;
     await evaluate(`document.querySelector('button[aria-label="Revoke Test client"]').click()`); await click('Delete'); await contains('No API keys yet');
-    listFails = true; await click('Browser tasks'); await click('API Keys'); await contains('Account API keys');
-    // List is account-scoped and fetched once per dashboard, not per navigation.
+    listFails = true; await click('Refresh API keys'); await contains('Key list temporarily unavailable');
+    listFails = false; await click('Refresh API keys'); await contains('No API keys yet');
     await click('Browser tasks');
     await fill('input[aria-label="New profile label"]', 'Isolated one'); await click('Create isolated profile'); await contains('profile_0');
     await fill('input[aria-label="New profile label"]', 'Isolated two'); await click('Create isolated profile'); await contains('profile_1');
-    await fill('textarea', 'Read the synthetic catalogue'); await click('Start task'); await contains('Choose a date');
+    await fill('textarea', 'Read the synthetic catalogue'); await click('Start task'); await contains('Admission may have succeeded');
+    await click('Retry same admission'); await contains('Choose a date'); assert.deepEqual(lastStart, uncertainStart);
     assert.equal(lastStart.profile_id, undefined); assert.equal(lastStart.session_id, undefined); assert.ok(lastStart.idempotency_key);
     task.interaction.fields[0].kind = 'secret'; await click('Refresh status / profiles');
     await fill('section form input', 'synthetic-private-value'); await click('Send answer privately'); await contains('Submit the synthetic form?');
@@ -119,7 +124,7 @@ test('account/key/profile/task DOM experience against local frozen HTTP fixtures
     listFails = false; await fill('#login-email', 'b@example.test'); await fill('#login-password', 'synthetic-password'); await click('Log in'); await contains('Start a task / follow-up');
     assert.ok(!(await text()).includes('Isolated one'));
     await fill('form.flex input', 'task_demo'); await click('Reattach'); await contains('not_found');
-    assert.ok(!(await text()).includes('Choose a date')); assert.equal(admissions, 3);
+    assert.ok(!(await text()).includes('Choose a date')); assert.equal(admissions, 4);
   } finally {
     ws?.close(); chrome.kill(); await new Promise(resolve => chrome.once('exit', resolve));
     server.closeAllConnections(); await new Promise(resolve => server.close(resolve));

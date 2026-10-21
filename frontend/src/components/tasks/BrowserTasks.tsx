@@ -82,7 +82,7 @@ export function BrowserTasks({ onKeys }: { onKeys: () => void }) {
         </select>
       </label>}
       {mode === "session" && <p>Explicit session reuse: {task?.session_id} / profile {task?.profile_id}</p>}
-      <Button disabled={!api.ready || api.busy || !!api.pending || (mode === "session" && (!task || active)) || (mode === "profile" && !profile)}>Start task</Button>
+      <Button disabled={!api.ready || api.busy || !!api.pending || (mode === "session" && (!task || active)) || (mode === "profile" && !api.profiles.some(p => p.profile_id === profile && p.state === "available"))}>Start task</Button>
       {api.pending && <div role="alert" className="space-y-2">
         <p>Admission may have succeeded. Do not submit a new task. Retry the identical request/key: <code>{api.pending.idempotency_key}</code>. This recovery request is memory-only; keep the task ID after admission.</p>
         <Button type="button" disabled={api.busy} onClick={() => void api.retry()}>Retry same admission</Button>

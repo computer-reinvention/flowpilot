@@ -259,6 +259,7 @@ function AccountDashboard({ auth }: { auth: ReturnType<typeof useAuth> }) {
               apiKeys={apiKeys.apiKeys}
               loading={apiKeys.loading}
               error={apiKeys.error}
+              onRefresh={apiKeys.refetch}
               onCreate={apiKeys.createApiKey}
               onDelete={apiKeys.deleteApiKey}
             />

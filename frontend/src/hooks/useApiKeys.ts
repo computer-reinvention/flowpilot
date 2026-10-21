@@ -8,10 +8,11 @@ export function useApiKeys(enabled = true) {
   const [error, setError] = useState<string | null>(null);
 
   const fetchApiKeys = useCallback(async () => {
+    setLoading(true);
     setError(null);
     try {
       const data = await apiFetch<ApiKey[]>("/api/v1/api-keys");
-      setApiKeys(data);
+      setApiKeys(data.map(({ key: _secret, ...metadata }) => metadata));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch API keys");
       setApiKeys([]);

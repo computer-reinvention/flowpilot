@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getToken } from "@/lib/api";
-import { BrowserTaskClient, TASKS, pauseKey, terminal, viewerPath } from "@/lib/browserTasks";
+import { BrowserTaskClient, TASKS, TaskHttpError, pauseKey, terminal, viewerPath } from "@/lib/browserTasks";
 import type { Grant, Profile, Start, TaskView } from "@/lib/browserTasks";
 
 export function useBrowserTasks() {
@@ -89,7 +89,12 @@ export function useBrowserTasks() {
   async function start(body: Start) {
     await action(async api => {
       setPending(body);
-      const admission = await api.start(body);
+      let admission;
+      try { admission = await api.start(body); }
+      catch (err) {
+        if (err instanceof TaskHttpError && err.status >= 400 && err.status < 500 && alive.current) setPending(null);
+        throw err;
+      }
       if (!alive.current) return;
       setPending(null);
       selected.current = admission.task_id; current.current = null; setTask(null); setGrant(null); setTaskId(admission.task_id);
@@ -139,7 +144,11 @@ export function useBrowserTasks() {
       await refreshProfiles();
     }),
     deleteProfile: (id: string) => action(async api => {
-      await api.request(`${TASKS}/profiles/${encodeURIComponent(id)}`, "DELETE");
+      try { await api.request(`${TASKS}/profiles/${encodeURIComponent(id)}`, "DELETE"); }
+      catch (err) {
+        if (err instanceof TaskHttpError && err.code === "conflict") throw new Error("Profile is busy or changed. Finish/cancel its active task, refresh profiles, then retry deletion.");
+        throw err;
+      }
       await refreshProfiles();
     }),
   };
