@@ -98,7 +98,7 @@ Verified commands, with this worktree as cwd:
   implementation. Legacy short-password response regression found by the broad gate
   was corrected while still in implementation; original auth tests now pass.
 
-### Final adversarial audit: failed criterion requiring an implementation repair pass
+### Original adversarial audit: failed criterion, subsequently repaired below
 
 **Criterion:** foreign/missing object IDs use `not_found`, not a different envelope.
 
@@ -119,8 +119,9 @@ owned-but-incompatible pair. Add HTTP/SQLite foreign-and-missing pair regression
 cases. No shared-contract amendment is required.
 
 The independent-verification workflow forbids silently repairing a discovered
-failure; this criterion remains open pending a separately authorized repair pass.
-Passing automated checks above do not supersede this observed failure.
+failure. This criterion was left open until the integrator separately authorized
+the focused repair pass recorded below. The original passing automated checks did
+not supersede this observed failure.
 
 ### Integration boundaries and remaining risks
 
@@ -133,5 +134,56 @@ Passing automated checks above do not supersede this observed failure.
   private viewer transport remain peer-owned and require assembled lane006 checks.
 - No real browser/provider credentials, external website effects, deployment,
   cloud/live mutation, Harp edits, merges or parent-session moves were performed.
-- Overall lane verdict: **failed final audit on the single error-precedence criterion
-  above**; all recorded automated local gates pass. No unresolved frozen-port conflict.
+- Original lane verdict before repair: **failed final audit on the single
+  error-precedence criterion above** despite passing automated local gates.
+
+### Authorized focused repairs and final read-only verification
+
+The integrator explicitly authorized a new implementation pass for the paired-ID
+ownership defect, and separately authorized closing legacy auth/key response cache
+gaps. No unrelated production repair or shared-contract change was made.
+
+- `daa5503` — `Repository.admit` ownership-resolves explicit `profile_id` inside
+  the admission transaction before comparing it to an owned session's profile.
+  Foreign and missing IDs now produce byte-identical sanitized HTTP 404 envelopes;
+  two owned incompatible objects still conflict, and a valid matching pair succeeds.
+- `d700ebf` — scoped `auth.SensitiveRoute` preserves existing `no-store` success/
+  validation handling and adds it to HTTP errors, early body/rate-limit errors and
+  sanitized internal errors. Existing status and Retry-After headers are preserved.
+  No frontend, task bootstrap or broad middleware change was needed.
+
+Regression evidence:
+
+- Before the ownership fix: both SQLite parameterizations (busy and settled owned
+  sessions) and the actual HTTP route regression failed with conflict instead of
+  not_found: **3 failed**. After the fix: **3 passed**.
+- Rejected foreign/missing/incompatible admissions leave complete SQLite dumps and
+  transient request maps unchanged: no capacity reservation, idempotency binding,
+  profile generation/lease mutation or new session. The same rejected request key
+  can subsequently admit a valid matching pair exactly once.
+- Before the cache fix: the route regression confirmed signup/login/me/key-create/
+  list/revoke success responses were already no-store, then failed on unauthenticated
+  `/api/auth/me` lacking the header. After repair, coverage includes 200, 400, 401,
+  404, 409, 422, 429 and sanitized 500 responses, including early bounds failures.
+  Key metadata lists contain neither the raw key nor its hash; credential/error
+  canaries are absent from error bodies and captured logs.
+
+Final commands (same isolated worktree and shared virtualenv interpreter):
+
+- `python -m pytest tests/test_task_control_repository.py
+  tests/test_task_control_http.py tests/test_task_control_recovery.py
+  tests/test_task_control_assistance.py tests/test_auth.py -q`:
+  **41 passed** (33 lane tests plus 8 legacy auth tests).
+- `python -m pytest -q`: **204 passed, 12 explicit live skips**.
+- `python -m compileall -q backend/tasks backend/auth.py backend/main.py`:
+  passed.
+- `git diff --check 0ccc06a..HEAD`: passed.
+- Read-only final review of both production commit diffs and changed-path inventory:
+  only the named auth and repository repairs, dedicated tests and this plan's
+  evidence were changed. No newly observed failing criterion or frozen-port conflict.
+
+Final verdict: **conditionally verified**. The named defects are repaired and all
+safe local gates pass. Assembled browser/profile/runtime/viewer behavior and the
+explicitly skipped live checks remain lane006 integration obligations; no live
+service mutation or deployment was performed. All prior commits and the approved
+assistance amendment are preserved.
