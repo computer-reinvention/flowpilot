@@ -134,7 +134,7 @@ async def cancellation_smoke(settings):
     from backend.task_contracts import TaskStart, TaskState
     from tests.fixtures.browser_tasks.doubles import bindings_double, observation_fixture
     bindings = bindings_double()
-    view = SimpleNamespace(state=TaskState.RUNNING, revision=2)
+    view = SimpleNamespace(state=TaskState.RUNNING, revision=2, task_id='cancel', session_id='s', profile_id='p')
     for method in ('get', 'progress', 'finish', 'release_browser'):
         getattr(bindings.control, method).side_effect = None
         getattr(bindings.control, method).return_value = view
@@ -263,7 +263,8 @@ async def crash_smoke(recover=False):
             for method in ('get', 'progress'):
                 getattr(bindings.control, method).side_effect = None
                 from backend.task_contracts import TaskState
-                getattr(bindings.control, method).return_value = SimpleNamespace(state=TaskState.RUNNING, revision=2)
+                getattr(bindings.control, method).return_value = SimpleNamespace(state=TaskState.RUNNING, revision=2,
+                    task_id=lease.task_id, session_id=lease.session_id, profile_id=lease.profile_id)
             for method in ('observe', 'require_fresh', 'after_action'):
                 getattr(bindings.observation, method).side_effect = None
             bindings.observation.observe.return_value = observation_fixture()

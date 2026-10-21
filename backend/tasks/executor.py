@@ -1,6 +1,7 @@
 """Single-host task execution. Claimed executions are never replayed on restart."""
 import asyncio
 import fcntl
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -11,6 +12,9 @@ from ..task_contracts import (
 from .memory import delete_memory
 from .browser_adapter import host_key
 from .runtime import create_runtime, stale
+
+
+DISPATCH_RECEIPT_LIMIT = 256
 
 
 @dataclass
@@ -28,7 +32,9 @@ class Executor:
         self.runtime_factory, self.manager_factory = runtime_factory, manager_factory
         self.bindings = None
         self.active = {}
-        self.seen = set()
+        # Optimization only. Durable claim-revision CAS, not cache membership,
+        # is the authority to dispatch. Active/preflight entries are pinned apart.
+        self.seen = OrderedDict()
         self.ready = False
 
     def bind(self, bindings):
@@ -58,42 +64,64 @@ class Executor:
         lease = execution.lease
         key = self._key(lease)
         if key in self.seen:
+            self.seen.move_to_end(key)
             return
-        # No await before registration: duplicated dispatch cannot start work twice.
-        self.seen.add(key)
-        runtime = self.runtime_factory(self.settings, execution, self.bindings)
-        active = Active(execution, runtime)
+        if key in self.active:
+            return
+        # Pin before the first await, including the DB preflight. Cache eviction
+        # must never lose an active writer or allow a concurrent second dispatch.
+        active = Active(execution, None)
         self.active[key] = active
+        authorized = False
+        try:
+            view = await self.bindings.control.get(lease.principal, lease.task_id, PollRequest())
+            if (view.state != TaskState.RUNNING or view.revision != execution.revision
+                    or (view.task_id, view.session_id, view.profile_id) != (lease.task_id, lease.session_id, lease.profile_id)):
+                return
+            # The frozen mutation port atomically validates the FULL lease,
+            # including execution generation, AND consumes the original claim
+            # revision. Never substitute the latest fetched revision: that would
+            # authorize replay of an evicted, already-dispatched Execution.
+            await self.bindings.control.progress(lease, execution.revision, 'Starting private browser')
+            authorized = True
+            await self._execute_authorized(execution, active)
+        finally:
+            self.active.pop(key, None)
+            active.settled.set()
+            if authorized:
+                self.seen[key] = None
+                while len(self.seen) > DISPATCH_RECEIPT_LIMIT:
+                    self.seen.popitem(last=False)
+
+    async def _execute_authorized(self, execution, active):
+        lease = execution.lease
+        runtime = None
         state, result, error = TaskState.FAILED, None, None
         saved, stopped = False, False
         try:
-            view = await self.bindings.control.get(lease.principal, lease.task_id, PollRequest())
-            if view.state in TERMINAL_STATES:
-                return
-            if view.state == TaskState.CANCELLING:
-                active.cancelled = True
-                state = TaskState.CANCELLED
-            else:
-                await self.bindings.control.progress(lease, view.revision, 'Starting private browser')
-                if active.cancelled:
-                    raise asyncio.CancelledError
-                remaining = (execution.deadline - datetime.now(timezone.utc)).total_seconds()
-                if remaining <= 0:
-                    raise TimeoutError
-                active.worker = asyncio.create_task(runtime.run())
-                done, _ = await asyncio.wait({active.worker}, timeout=remaining)
-                if not done:
-                    raise TimeoutError
-                answer = active.worker.result()
-                if active.cancelled:
-                    raise asyncio.CancelledError
-                result = TaskResult(answer=answer['answer'], metrics=TaskMetrics(**{
-                    k: v for k, v in answer.get('metrics', {}).items() if k in TaskMetrics.model_fields}))
-                state = TaskState.COMPLETED
+            if not self.ready:
+                raise TaskFault(task_error(ErrorCode.INTERRUPTED, 'Executor stopped during dispatch preflight'))
+            if active.cancelled:
+                raise asyncio.CancelledError
+            remaining = (execution.deadline - datetime.now(timezone.utc)).total_seconds()
+            if remaining <= 0:
+                raise TimeoutError
+            runtime = self.runtime_factory(self.settings, execution, self.bindings)
+            active.runtime = runtime
+            active.worker = asyncio.create_task(runtime.run())
+            done, _ = await asyncio.wait({active.worker}, timeout=remaining)
+            if not done:
+                raise TimeoutError
+            answer = active.worker.result()
+            if active.cancelled:
+                raise asyncio.CancelledError
+            result = TaskResult(answer=answer['answer'], metrics=TaskMetrics(**{
+                k: v for k, v in answer.get('metrics', {}).items() if k in TaskMetrics.model_fields}))
+            state = TaskState.COMPLETED
         except asyncio.CancelledError:
             state = TaskState.CANCELLED if active.cancelled else TaskState.INTERRUPTED
             error = None if active.cancelled else task_error(ErrorCode.INTERRUPTED, 'Execution interrupted; inspect website state before a new task')
-            if runtime.declined:
+            if runtime is not None and runtime.declined:
                 state = TaskState.FAILED
                 error = task_error(ErrorCode.CONFLICT, 'Confirmation declined; no further actions authorized')
         except TimeoutError:
@@ -111,6 +139,10 @@ class Executor:
             # that suppresses CancelledError (unlike wait_for cancellation).
             async def cleanup():
                 nonlocal stopped, saved
+                if runtime is None:
+                    # No runtime was constructed: no model/browser writer exists.
+                    stopped = saved = True
+                    return
                 runtime.fenced = True
                 if active.worker and not active.worker.done():
                     active.worker.cancel()
@@ -142,25 +174,22 @@ class Executor:
                 error = task_error(ErrorCode.PROFILE_RECOVERY_REQUIRED, 'Profile save failed; retained state requires recovery')
             if not saved and hasattr(runtime, 'quarantine'):
                 runtime.quarantine()
-            try:
-                view = await self.bindings.control.get(lease.principal, lease.task_id, PollRequest())
-                if view.state not in TERMINAL_STATES:
-                    if view.state == TaskState.CANCELLING and stopped and saved:
-                        state, result, error = TaskState.CANCELLED, None, None
-                    elif view.state == TaskState.CANCELLING:
-                        state, result = TaskState.INTERRUPTED, None
-                    await self.bindings.control.finish(lease, view.revision, state, result=result, error=error)
-                await self.bindings.control.release_browser(lease, profile_saved=saved)
-            finally:
-                self.active.pop(key, None)
-                active.settled.set()
+            view = await self.bindings.control.get(lease.principal, lease.task_id, PollRequest())
+            if view.state not in TERMINAL_STATES:
+                if view.state == TaskState.CANCELLING and stopped and saved:
+                    state, result, error = TaskState.CANCELLED, None, None
+                elif view.state == TaskState.CANCELLING:
+                    state, result = TaskState.INTERRUPTED, None
+                await self.bindings.control.finish(lease, view.revision, state, result=result, error=error)
+            await self.bindings.control.release_browser(lease, profile_saved=saved)
 
     async def cancel(self, lease):
         active = self.active.get(self._key(lease))
         if active is None or active.execution.lease != lease:
             return
         active.cancelled = True
-        active.runtime.fenced = True
+        if active.runtime is not None:
+            active.runtime.fenced = True
         deadline = asyncio.get_running_loop().time() + self.settings.cancellation_seconds
         if active.worker:
             active.worker.cancel()
@@ -179,13 +208,13 @@ class Executor:
 
     async def browser(self, lease, interaction_id, generation):
         active = self.active.get(self._key(lease))
-        if active is None or active.execution.lease != lease:
+        if active is None or active.execution.lease != lease or active.runtime is None:
             raise stale()
         return await active.runtime.browser(interaction_id, generation)
 
     async def release_human(self, lease, interaction_id, generation):
         active = self.active.get(self._key(lease))
-        if active is None or active.execution.lease != lease:
+        if active is None or active.execution.lease != lease or active.runtime is None:
             raise stale()
         await active.runtime.release_human(interaction_id, generation)
 
