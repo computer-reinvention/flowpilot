@@ -241,6 +241,19 @@ async def explore_flow(
             await policy.require_fresh(browser, snapshot)
             return policy, snapshot
 
+        async def safe_reflex_callback(operation, callback, **args):
+            # Database/schema failures may contain SQL parameters or script/input
+            # values too. Keep the entire callback boundary safe, not just the
+            # provider/Runtime.evaluate await. Typed state faults still propagate.
+            try:
+                return await callback(**args)
+            except TaskFault:
+                raise
+            except Exception as exc:
+                trace('explorer.reflex_callback.fail', operation=operation, error_type=type(exc).__name__)
+                logger.warning('Explorer reflex callback failed; details withheld')
+                return ActionResult(error='Reflex operation failed; details withheld. Observe before repair; do not replay uncertain effects.')
+
         llm = _get_exploration_llm()
         fast_llm = _get_fast_llm()
         tools = Tools()
@@ -305,6 +318,16 @@ async def explore_flow(
             )
         )
         async def generate_and_save_reflex(
+            name: str,
+            description: str,
+            tags: list[str] | None = None,
+            pause_after_auth: bool = False,
+        ) -> ActionResult:
+            return await safe_reflex_callback('generate', _generate_and_save_reflex,
+                                             name=name, description=description, tags=tags,
+                                             pause_after_auth=pause_after_auth)
+
+        async def _generate_and_save_reflex(
             name: str,
             description: str,
             tags: list[str] | None = None,
@@ -393,6 +416,9 @@ async def explore_flow(
             )
         )
         async def test_reflex(name: str) -> ActionResult:
+            return await safe_reflex_callback('test', _test_reflex, name=name)
+
+        async def _test_reflex(name: str) -> ActionResult:
             reflex = await _db.get_reflex(flow.domain, name, flow_id=flow.id)
             if not reflex:
                 return ActionResult(error="Reflex not found.")
@@ -720,7 +746,9 @@ async def explore_flow(
                 "exploration_tree": json.dumps(_build_tree()),
             }
         )
-        raise
+        if isinstance(e, TaskFault):
+            raise
+        raise RuntimeError("Exploration failed; details withheld") from None
     finally:
         if browser is not None:
             if on_session_capture:
