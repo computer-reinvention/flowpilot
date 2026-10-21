@@ -8,6 +8,8 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import HTMLResponse, Response
 import uvicorn
 
+from .tasks.interaction_transport import release_controls
+
 
 class HandoffCancelled(RuntimeError):
     pass
@@ -172,10 +174,7 @@ class HandoffServer:
     async def release_inputs(self):
         if self.context.pages:
             page = self.context.pages[-1]
-            for key in list(self.held_keys):
-                await page.keyboard.up(key)
-            for button in list(self.held_buttons):
-                await page.mouse.up(button=button)
+            await release_controls(page, self.held_keys, self.held_buttons)
         self.held_keys.clear()
         self.held_buttons.clear()
 
