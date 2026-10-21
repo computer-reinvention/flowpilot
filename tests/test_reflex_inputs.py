@@ -215,3 +215,22 @@ def test_legacy_store_migrates_and_catalogs_referenced_inputs(tmp_path):
                                     'failures': 0, 'inputs': None, 'referenced_inputs': ['query']}]
     finally:
         store.close()
+
+
+async def test_hosted_save_checks_task_values_not_declared_schema(tmp_path, monkeypatch):
+    session = _session(tmp_path, monkeypatch, hosted=True, handoff_factory=object, on_question=AsyncMock(),
+                       observation_policy=object())
+    declared = [{'name': 'origin', 'type': 'string'}]
+
+    async def drive(browser, task, inputs, entry, control, human, replay, save, **kwargs):
+        # The `inputs` keyword declares a schema; it must not replace the task
+        # values used to reject scripts embedding user-supplied data.
+        assert (await save('search', 'Search', 'async (inputs) => inputs.origin', inputs=declared)).error is None
+        leaked = await save('leak', 'Search', "async () => 'Reykjavik'", inputs=declared)
+        assert leaked.error == 'Parameterize input values before saving scripts'
+        return 'done'
+    monkeypatch.setattr(repl, 'drive_browser', drive)
+    try:
+        await session.ask('trains', {'origin': 'Reykjavik'})
+    finally:
+        session.store.close()

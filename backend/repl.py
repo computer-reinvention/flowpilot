@@ -179,6 +179,7 @@ class BrowserSession:
         if self._asking:
             raise RuntimeError('This session already has an active request')
         inputs = {} if inputs is None else inputs
+        task_inputs = inputs  # callbacks below take their own `inputs` arguments
         stored_inputs = json.dumps(inputs)
         started = time.monotonic()
         metrics = {'model_turns': 0, 'tool_calls': 0, 'reused': 0, 'saved': 0,
@@ -234,7 +235,7 @@ class BrowserSession:
                 # Known task/interaction inputs must remain parameterized, not
                 # become credentials embedded in durable personal scripts.
                 metadata = json.dumps([name, description, script, tags, fields])
-                if any(v in metadata for v in input_atoms(inputs)):
+                if any(v in metadata for v in input_atoms(task_inputs)):
                     return ActionResult(error='Parameterize input values before saving scripts')
                 if len(name) > 128 or len(description) > 2000 or len(tags or []) > 32 or len(json.dumps(tags)) > 4000:
                     return ActionResult(error='Script metadata exceeds persistence bounds')
@@ -257,7 +258,7 @@ class BrowserSession:
         def bound_inputs(name, row, call_inputs):
             # Declared reflexes receive exactly their declared inputs: call values,
             # then task/interaction values, then documented defaults.
-            return bind_inputs(name, json.loads(row['inputs']) if row['inputs'] else None, call_inputs, inputs)
+            return bind_inputs(name, json.loads(row['inputs']) if row['inputs'] else None, call_inputs, task_inputs)
 
         async def bind(name, call_inputs=None):
             row = lookup(await domain(), name)
@@ -308,7 +309,7 @@ class BrowserSession:
                 if ok and fixed:
                     if self.hosted:
                         from .tasks.memory import input_atoms
-                        if private_inputs or any(v in fixed for v in input_atoms(inputs)) or any(
+                        if private_inputs or any(v in fixed for v in input_atoms(task_inputs)) or any(
                                 v in fixed for v in input_atoms(stage_inputs)):
                             # The repaired script already ran, but it is not safe
                             # to persist credential-bearing generated source.
