@@ -37,6 +37,20 @@ def test_retry_fixture_is_same_receipt_and_decline_is_explicit():
     assert policy["assistance"]["ordinary_status_contains_link"] is False
 
 
+def test_standalone_client_lost_admission_response_retries_identical_payload():
+    admitted = copy.deepcopy(CASES[0])
+    lost = {**admitted, "drop_response": True}
+    with scripted_peer([lost, admitted]) as url:
+        assert Client(url).start_retry(admitted["request"]) == admitted["response"]
+
+
+def test_standalone_client_does_not_retry_nonretryable_conflict():
+    conflict = next(case for case in CASES if case["name"] == "conflicting_retry")
+    with scripted_peer([conflict]) as url:
+        with pytest.raises(AssertionError):
+            Client(url).start_retry(CASES[0]["request"])
+
+
 @pytest.mark.parametrize("mutation", ["terminal", "revision", "interaction", "error", "result", "owner"])
 def test_oracle_rejects_broken_state(mutation):
     original = next(case["response"] for case in CASES if case["name"] == "completed")

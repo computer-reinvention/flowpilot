@@ -26,6 +26,9 @@ def scripted_peer(exchanges):
                 assert (self.command, self.path) == (case["method"], case["path"])
                 if "request" in case and self.command != "GET":
                     assert body == case["request"]
+                if case.get("drop_response"):
+                    self.close_connection = True
+                    return
                 data = b"" if case.get("response") is None else json.dumps(case["response"]).encode()
                 self.send_response(case["status"])
                 self.send_header("Content-Type", "application/json")

@@ -2,6 +2,7 @@
 
 import ipaddress
 import json
+import http.client
 import time
 import urllib.error
 import urllib.parse
@@ -63,6 +64,28 @@ class Client:
         admission(reply.body)
         ordinary_safe(reply.body)
         return reply.body
+
+    def start_retry(self, body, attempts=3):
+        """Retry HTTP admission, never issue a new website task/key after uncertainty."""
+        assert 1 <= attempts <= 5 and body.get("idempotency_key")
+        for attempt in range(attempts):
+            try:
+                reply = self.request("POST", PREFIX, body)
+            except (urllib.error.URLError, http.client.RemoteDisconnected, TimeoutError, ConnectionError):
+                if attempt + 1 == attempts:
+                    raise
+                continue
+            if reply.status == 202:
+                admission(reply.body)
+                ordinary_safe(reply.body)
+                return reply.body
+            error(reply.status, reply.body, reply.headers)
+            if not reply.body["error"]["retryable"] or attempt + 1 == attempts:
+                raise AssertionError(f"admission HTTP {reply.status}")
+            delay = reply.body["error"].get("retry_after_seconds", 1)
+            if delay > 5:
+                raise TimeoutError("server backoff exceeds bounded admission retry budget")
+            time.sleep(delay)
 
     def get(self, task_id):
         reply = self.request("GET", f"{PREFIX}/{task_id}")
