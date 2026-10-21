@@ -53,7 +53,8 @@ class Control:
         leases = await self.repository.interrupt_active()
         await asyncio.wait_for(self.bindings.executor.recover(leases), self.settings.shutdown_seconds)
         for lease in leases:
-            # No port result attests a saved profile after an unknown crash.
+            # If recover attested a saved profile via release_browser, this is
+            # an idempotent no-op. Otherwise conservatively quarantine it.
             await self.repository.release_browser(lease, profile_saved=False)
         self.accepting = True
 
@@ -99,7 +100,12 @@ class Control:
         return admission
 
     async def _unknown(self, lease):
-        await self.repository.interrupt_one(lease)
+        try:
+            await self.repository.interrupt_one(lease)
+        except TaskFault as fault:
+            if fault.error.code == ErrorCode.NOT_FOUND:
+                return  # a released terminal profile/history was deleted
+            raise
         # Keep the reservation when cleanup fails; recovery evidence is durable.
         try:
             await asyncio.wait_for(self.bindings.executor.recover((lease,)), self.settings.cancellation_seconds)
@@ -115,7 +121,13 @@ class Control:
             if view.state not in TERMINAL_STATES:
                 await self._unknown(execution.lease)
         except asyncio.CancelledError:
-            await self._unknown(execution.lease)
+            try:
+                view = await self.repository.get(execution.lease.principal, execution.lease.task_id)
+                if view.state not in TERMINAL_STATES:
+                    await self._unknown(execution.lease)
+            except TaskFault as fault:
+                if fault.error.code != ErrorCode.NOT_FOUND:
+                    raise
             raise
         except Exception:
             await self._unknown(execution.lease)
@@ -158,6 +170,9 @@ class Control:
                 if key[0] == lease.task_id and not waiter.done():
                     waiter.cancel()
             self._stops.pop(lease.task_id, None)
+            execution = self._executions.get(lease.task_id)
+            if execution and not execution[1].done():
+                execution[1].cancel()
 
     async def respond(self, principal, task_id, interaction_id, response):
         return await self._durable(self._respond(principal, task_id, interaction_id, response))

@@ -3,7 +3,7 @@ import sqlite3
 
 import pytest
 
-from backend.task_contracts import Principal, TaskStart, TaskFault, TaskState
+from backend.task_contracts import Principal, TaskStart, TaskFault, TaskState, TaskResult
 from backend.task_settings import TaskSettings
 
 
@@ -58,3 +58,51 @@ def test_factories_do_not_touch_disk(tmp_path):
     control = create_control(settings)
     assert not settings.state_dir.exists()
     assert not control.accepting and control.repository is None
+
+
+@pytest.mark.asyncio
+async def test_old_duplicate_release_cannot_quarantine_new_profile_lease(tmp_path):
+    from backend.tasks.repository import Repository
+    repo = Repository(TaskSettings(state_dir=tmp_path), b'x' * 32)
+    await repo.initialize()
+    owner = Principal(account_id='owner')
+    first = await repo.admit(owner, TaskStart(task='first', idempotency_key='release-first-001'))
+    execution = await repo.claim(owner, first.task_id)
+    await repo.transition(execution.lease, execution.revision, TaskState.COMPLETED, result=TaskResult(answer='done'))
+    await repo.release_browser(execution.lease, profile_saved=True)
+    second = await repo.admit(owner, TaskStart(task='second', session_id=first.session_id, idempotency_key='release-second-001'))
+    await repo.release_browser(execution.lease, profile_saved=False)
+    assert (await repo.list_profiles(owner)).items[0].state == 'leased'
+    second_execution = await repo.claim(owner, second.task_id)
+    assert second_execution.lease.generation > execution.lease.generation
+
+
+@pytest.mark.asyncio
+async def test_recover_can_attest_saved_profile_through_release_port(tmp_path, monkeypatch):
+    from backend.tasks.repository import Repository
+    from backend.tasks.control import create_control
+    from backend import auth
+    from dataclasses import replace
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location('release_doubles', Path(__file__).parent / 'fixtures/browser_tasks/doubles.py')
+    doubles = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(doubles)
+    monkeypatch.setenv('JWT_SECRET', 'synthetic-test-secret-' * 3)
+    monkeypatch.setattr(auth, 'JWT_SECRET', 'synthetic-test-secret-' * 3)
+    settings = TaskSettings(state_dir=tmp_path)
+    repo = Repository(settings, b'x' * 32)
+    await repo.initialize()
+    owner = Principal(account_id='owner')
+    first = await repo.admit(owner, TaskStart(task='first', idempotency_key='recovery-first-001'))
+    await repo.claim(owner, first.task_id)
+    control = create_control(settings)
+    peers = doubles.bindings_double()
+    async def recover(leases):
+        for lease in leases:
+            await control.release_browser(lease, profile_saved=True)
+    peers.executor.recover.side_effect = recover
+    control.bind(replace(peers, control=control))
+    await control.startup()
+    assert (await control.list_profiles(owner)).items[0].state == 'available'
+    await control.shutdown()

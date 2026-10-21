@@ -264,6 +264,8 @@ class Repository:
                 row = self._row(db, lease.principal, lease.task_id)
                 if self._lease(row) != lease:
                     fail(ErrorCode.STALE_GENERATION)
+                if not row['reserved']:
+                    return  # idempotent; an old release must not poison reuse
                 if row['state'] not in {str(s) for s in TERMINAL_STATES}:
                     fail(ErrorCode.CONFLICT, 'Active tasks retain their reservation')
                 db.execute('UPDATE bt_tasks SET reserved=0 WHERE id=?', (lease.task_id,))

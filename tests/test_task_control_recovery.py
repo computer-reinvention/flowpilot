@@ -80,3 +80,37 @@ async def test_process_crash_fences_and_never_redispatches(tmp_path, monkeypatch
     assert await control.repository.claim(leases[0].principal, view.task_id) is None
     assert (await control.list_profiles(leases[0].principal)).items[0].state == 'recovery_required'
     await control.shutdown()
+
+
+async def persisted_control_plane_fixture(root):
+    """Reusable lane-owned seed for integration tests: real SQLite, no peers.
+
+    Returns (repository, principal, views_by_state). Callers may copy the closed
+    database/WAL set or invoke startup against root to exercise reconciliation.
+    All data is synthetic. No shared foundation fixture is modified.
+    """
+    from datetime import timedelta
+    from backend.task_contracts import Interaction, TaskStart, TaskState
+    from backend.tasks.repository import Repository, now
+    repository = Repository(TaskSettings(state_dir=root, max_active_browsers=3, max_account_browsers=3), b'x' * 32)
+    await repository.initialize()
+    principal = Principal(account_id='fixture_owner')
+    views = {}
+    for state in ('running', 'paused', 'interrupted'):
+        admission = await repository.admit(principal, TaskStart(task='Synthetic fixture', idempotency_key='fixture-' + state))
+        execution = await repository.claim(principal, admission.task_id)
+        if state == 'paused':
+            await repository.transition(execution.lease, execution.revision, TaskState.WAITING_FOR_BROWSER, interaction=Interaction(interaction_id='fixture_pause', generation=1, kind='browser', message='Synthetic pause', expires_at=now() + timedelta(seconds=60)))
+        if state == 'interrupted':
+            await repository.interrupt_one(execution.lease)
+            await repository.release_browser(execution.lease, profile_saved=False)
+        views[state] = await repository.get(principal, admission.task_id)
+    return repository, principal, views
+
+
+@pytest.mark.asyncio
+async def test_reusable_persisted_state_fixture(tmp_path):
+    repository, principal, views = await persisted_control_plane_fixture(tmp_path)
+    assert {view.state for view in views.values()} == {'running', 'waiting_for_browser', 'interrupted'}
+    for state, view in views.items():
+        assert await repository.get(principal, view.task_id) == view

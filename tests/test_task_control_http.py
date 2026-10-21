@@ -328,3 +328,101 @@ async def test_loopback_tcp_client_signup_key_task_and_cancel(system):
         server.should_exit = True
         await asyncio.wait_for(job, 5)
         sock.close()
+
+
+@pytest.mark.asyncio
+async def test_profiles_create_list_cross_owner_pairs_and_failed_delete(system):
+    client, control, bindings, starts, host = system
+    headers, _, _ = await key_for(client)
+    body = {'label': 'Explicit private profile', 'idempotency_key': 'profile-create-001'}
+    created = await client.post(API_PREFIX + '/profiles', headers=headers, json=body)
+    assert created.status_code == 201
+    assert (await client.post(API_PREFIX + '/profiles', headers=headers, json=body)).json() == created.json()
+    assert (await client.post(API_PREFIX + '/profiles', headers=headers, json={**body, 'label': 'Changed'})).status_code == 409
+    profile_id = created.json()['profile_id']
+    foreign, _, _ = await key_for(client, 'other@example.test')
+    assert (await client.get(API_PREFIX + '/profiles', headers=foreign)).json()['items'] == []
+    assert (await client.delete(API_PREFIX + '/profiles/' + profile_id, headers=foreign)).status_code == 404
+    first = await admit(client, headers)
+    mismatch = await client.post(API_PREFIX, headers=headers, json={'task': 'x', 'idempotency_key': 'pair-mismatch-001', 'session_id': first['session_id'], 'profile_id': profile_id})
+    assert mismatch.status_code == 409
+    bindings.executor.delete_profile.side_effect = RuntimeError('CANARY-RAW-FAILURE')
+    # TaskHost masks arbitrary runtime exceptions; retrying deletion remains safe.
+    transport = httpx.ASGITransport(app=client._transport.app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url='http://test') as caller:
+        failure = await caller.delete(API_PREFIX + '/profiles/' + profile_id, headers=headers)
+    assert failure.status_code == 503 and 'CANARY' not in failure.text
+    profiles = (await client.get(API_PREFIX + '/profiles', headers=headers)).json()['items']
+    assert next(p for p in profiles if p['profile_id'] == profile_id)['state'] == 'recovery_required'
+    blocked = await client.post(API_PREFIX, headers=headers, json={'task': 'x', 'idempotency_key': 'deleted-profile-001', 'profile_id': profile_id})
+    assert blocked.status_code == 409
+    bindings.executor.delete_profile.side_effect = None
+    assert (await client.delete(API_PREFIX + '/profiles/' + profile_id, headers=headers)).status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_dispatch_and_stop_failures_are_interrupted_not_replayed(system):
+    client, control, bindings, starts, host = system
+    headers, _, _ = await key_for(client)
+    bindings.executor.execute.side_effect = RuntimeError('CANARY-PROVIDER-CREDENTIAL')
+    receipt = await admit(client, headers)
+    async with asyncio.timeout(3):
+        while (await client.get(receipt['status_url'], headers=headers)).json()['state'] != 'interrupted':
+            await asyncio.sleep(.01)
+    status = await client.get(receipt['status_url'], headers=headers)
+    assert 'CANARY' not in status.text
+    assert await admit(client, headers) == receipt
+    assert bindings.executor.execute.await_count == 1
+    async with asyncio.timeout(3):
+        while (await client.get(API_PREFIX + '/profiles', headers=headers)).json()['items'][0]['state'] == 'leased':
+            await asyncio.sleep(.01)
+    assert (await client.get(API_PREFIX + '/profiles', headers=headers)).json()['items'][0]['state'] == 'recovery_required'
+    stop_wait = asyncio.Event()
+    async def parked(execution):
+        starts.append(execution)
+        await stop_wait.wait()
+    bindings.executor.execute.side_effect = parked
+    second = await admit(client, headers, idempotency_key='stop-failure-001')
+    await wait_started(starts)
+    bindings.executor.cancel.side_effect = RuntimeError('CANARY-STOP-FAILURE')
+    assert (await client.post(second['status_url'] + '/cancel', headers=headers)).json()['state'] == 'cancelling'
+    async with asyncio.timeout(3):
+        while (await client.get(second['status_url'], headers=headers)).json()['state'] != 'interrupted':
+            await asyncio.sleep(.01)
+
+
+@pytest.mark.asyncio
+async def test_current_affirmative_approval_only_and_stale_responses(system):
+    client, control, bindings, starts, host = system
+    headers, _, _ = await key_for(client)
+    receipt = await admit(client, headers)
+    await wait_started(starts)
+    lease = starts[0].lease
+    confirmation = Interaction(interaction_id='approve', generation=1, kind='confirmation', message='Commit synthetic change?', action_id='action_one', expires_at=now() + timedelta(seconds=30))
+    wait = asyncio.create_task(control.wait_for_interaction(lease, confirmation))
+    async with asyncio.timeout(2):
+        while (await client.get(receipt['status_url'], headers=headers)).json()['state'] != 'waiting_for_confirmation':
+            await asyncio.sleep(.01)
+    path = receipt['status_url'] + '/interactions/approve/respond'
+    response = {'generation': 1, 'idempotency_key': 'approve-response-001', 'kind': 'confirmation', 'confirmed': True}
+    assert (await client.post(path, headers=headers, json={**response, 'generation': 2})).status_code == 409
+    assert (await client.post(path, headers=headers, json=response)).status_code == 202
+    assert (await wait).confirmed
+    await control.require_approval(lease, 'approve', 1, 'action_one')
+    with pytest.raises(TaskFault):
+        await control.require_approval(lease, 'approve', 1, 'action_two')
+    await client.post(receipt['status_url'] + '/cancel', headers=headers)
+    with pytest.raises(TaskFault):
+        await control.require_approval(lease, 'approve', 1, 'action_one')
+
+
+@pytest.mark.asyncio
+async def test_shutdown_closes_admission_before_executor_cleanup(system):
+    client, control, bindings, starts, host = system
+    headers, jwt, _ = await key_for(client)
+    principal = Principal(account_id=auth.decode_token(jwt['Authorization'][7:]))
+    await host.shutdown()
+    with pytest.raises(TaskFault) as failure:
+        await control.start(principal, TaskStart(task='x', idempotency_key='shutdown-001'))
+    assert failure.value.error.code == 'shutdown'
+    assert (await client.post(API_PREFIX, headers=headers, json={'task': 'x', 'idempotency_key': 'shutdown-002'})).status_code == 503
