@@ -219,6 +219,25 @@ class Repository:
                 return self._write(db, row, TaskState.CANCELLING)
         return await self._run(operation)
 
+    async def validate_pending_response(self, principal, task_id, interaction_id, response):
+        """Read-only preflight before disturbing a live human writer.
+
+        Final resolve repeats validation; this is not a reservation or a decision.
+        In particular, an already-bound response key must not drain another pause.
+        """
+        def operation():
+            with self.transaction() as db:
+                row = self._row(db, principal, task_id)
+                before = TaskView.model_validate_json(row['view'])
+                if not before.interaction or before.interaction.interaction_id != interaction_id:
+                    fail(ErrorCode.STALE_GENERATION, 'Interaction is no longer active')
+                response.validate_for(before.interaction, now())
+                prior = db.execute('SELECT 1 FROM bt_idempotency WHERE owner=? AND operation=? AND key=?',
+                                   (principal.account_id, 'respond', response.idempotency_key)).fetchone()
+                if prior:
+                    fail(ErrorCode.CONFLICT, 'Idempotency key is already bound to another response')
+        return await self._run(operation)
+
     async def resolve(self, principal, task_id, interaction_id, response):
         def operation():
             with self.transaction() as db:

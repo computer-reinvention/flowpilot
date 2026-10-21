@@ -512,3 +512,43 @@ async def test_legacy_auth_and_key_responses_never_cache_secrets_or_errors(syste
     monkeypatch.setattr(auth, 'authenticate', failed_authenticate)
     unavailable = await no_store('post', '/api/auth/login', 500, json={'email': 'cache@example.test', 'password': 'synthetic'})
     assert 'CANARY' not in unavailable.text and 'CANARY' not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_api_browser_response_drains_before_resolving_and_deduplicates(system):
+    client, control, bindings, starts, host = system
+    headers, _, _ = await key_for(client)
+    receipt = await admit(client, headers)
+    await wait_started(starts)
+    lease = starts[0].lease
+    interaction = Interaction(interaction_id='api_pause', generation=7, kind='browser', message='Synthetic pause', expires_at=now() + timedelta(seconds=30))
+    waiting = asyncio.create_task(control.wait_for_interaction(lease, interaction))
+    async with asyncio.timeout(2):
+        while (await client.get(receipt['status_url'], headers=headers)).json()['state'] != 'waiting_for_browser':
+            await asyncio.sleep(.01)
+    releasing = asyncio.Event()
+    drained = asyncio.Event()
+    async def release(*args):
+        releasing.set()
+        await drained.wait()
+    bindings.executor.release_human.side_effect = release
+    body = {'generation': 7, 'idempotency_key': 'api-release-001', 'kind': 'browser', 'browser_resolved': True}
+    path = receipt['status_url'] + '/interactions/api_pause/respond'
+    reply = asyncio.create_task(client.post(path, headers=headers, json=body))
+    try:
+        await asyncio.wait_for(releasing.wait(), 2)
+        assert not reply.done() and not waiting.done()
+        assert (await client.get(receipt['status_url'], headers=headers)).json()['state'] == 'waiting_for_browser'
+        drained.set()
+        response = await reply
+        assert response.status_code == 202 and response.json()['state'] == 'running'
+        assert (await waiting).browser_resolved
+        assert (await client.post(path, headers=headers, json=body)).json() == response.json()
+        bindings.executor.release_human.assert_awaited_once_with(lease, interaction.interaction_id, 7)
+        bindings.executor.browser.assert_not_awaited()
+    finally:
+        drained.set()
+        await asyncio.gather(reply, return_exceptions=True)
+        if not waiting.done():
+            waiting.cancel()
+        await asyncio.gather(waiting, return_exceptions=True)
