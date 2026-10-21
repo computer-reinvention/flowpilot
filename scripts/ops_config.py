@@ -1,9 +1,11 @@
 """Non-secret hosted preflight. Exit nonzero on missing security prerequisites."""
 import argparse
 import ipaddress
+import json
 import os
 from pathlib import Path
 import stat
+import re
 import shutil
 import sys
 import tempfile
@@ -93,14 +95,27 @@ def runtime_checks(env):
     return errors
 
 
+def diagnostics(env):
+    revision = env.get("FLOWPILOT_REVISION", "unknown")
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", revision):
+        revision = "invalid"
+    provider = env.get("LLM_PROVIDER", "gemini")
+    if provider not in {"gemini", "claude", "anthropic", "openai", "codex"}:
+        provider = "invalid"
+    return {"revision": revision, "provider": provider, "jwt_present": bool(env.get("JWT_SECRET")), "tasks_enabled": env.get("FLOWPILOT_TASKS_ENABLED", "false").lower() in {"true", "1", "yes"}, "worker_count": 1}
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--local", action="store_true", help="configuration-only; NOT hosted readiness")
     parser.add_argument("--runtime", action="store_true", help="probe state writability/free space and private Docker ping")
+    parser.add_argument("--diagnostics", action="store_true", help="emit bounded non-secret build/config identity")
     args = parser.parse_args()
     failures = validate(os.environ, hosted=not args.local)
     if args.runtime:
         failures.extend(runtime_checks(os.environ))
+    if args.diagnostics:
+        print(json.dumps(diagnostics(os.environ), sort_keys=True))
     for failure in failures:
         print("BLOCKER: " + failure)
     raise SystemExit(bool(failures))

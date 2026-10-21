@@ -41,6 +41,10 @@ bash -n deploy
 # Placeholder is ONLY for structural Compose validation, never for a service:
 JWT_SECRET=structural-check-not-a-deploy-key docker compose config --quiet
 python scripts/ops_context_check.py
+python scripts/ops_asgi_rehearsal.py
+# Built, uniquely labelled fixtures only; no Compose/deploy operations:
+python scripts/ops_backend_rehearsal.py
+python scripts/ops_sandbox_smoke.py
 ```
 
 `ops_context_check.py` builds synthetic canaries and scans saved image contents/layers;
@@ -109,6 +113,14 @@ reverse-proxy errors can log secret URIs. Do not enable debug/request logs, CDN/
 request capture, tracing or external analytics without equivalent redaction for BOTH
 capability path segments and queries. Losing request error logs is intentional; use
 opaque metrics and `/health/browser-tasks` for operations.
+
+`scripts/ops_logging.json` also discards Uvicorn/websockets protocol/access/error
+loggers: WebSocket accept/reject messages can carry capability paths even when HTTP
+access logging is disabled. This deliberately trades raw server tracebacks for
+confidentiality. Application task/executor logs still require their owners' sanitized
+logging contract; this file is not a generic secret scrubber for arbitrary app logs.
+The ASGI rehearsal uses the packaged logging config and proves exact/oversized and
+fragmented receive bounds against a fake application without any provider calls.
 
 Uvicorn trusts forwarded headers only from explicit individual addresses (loopback
 by default); `FLOWPILOT_TRUSTED_PROXY_IPS` accepts only loopback or the packaged
@@ -216,6 +228,15 @@ still requires frontend-owner review. npm proposes a breaking shadcn change; thi
 lane did **not** run `npm audit fix`, change locks or accept that risk for the user.
 Python/OS/Chromium CVE inventory is not yet independently cleared. Image pins and
 successful builds must not be described as a clean security scan.
+
+All four Linux/amd64 production build stages (frontend, agent, complete backend,
+sandbox) built successfully locally. Backend and sandbox image sizes in the initial
+build were ~674MB and ~577MB respectively; these are packaging observations, not
+disk-capacity guarantees. The real ASGI boundary rehearsal passed inside the backend
+image as well as the local Python environment; uvicorn emits a deprecation warning
+for the legacy websockets implementation. The frozen dependency revision currently
+honors its assembled receive limit; any uvicorn upgrade must rerun the fragmented
+message test rather than assuming future alias behavior is unchanged.
 
 No live provider calls, real accounts, credentials, infrastructure installation,
 certificate issuance, deployments, host firewall changes or peer files were used.

@@ -36,4 +36,5 @@ extension/
 .pytest_cache/
 # This is source code, not a persisted browser-profile directory.
 !frontend/src/components/profiles/
+frontend/src/components/profiles/*
 !frontend/src/components/profiles/*.tsx

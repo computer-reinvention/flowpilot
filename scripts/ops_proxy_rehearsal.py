@@ -30,7 +30,10 @@ def main():
             else:
                 self.send_response(200)
                 self.end_headers()
-                self.wfile.write(b"fixture")
+                try:
+                    self.wfile.write(b"fixture")
+                except BrokenPipeError:
+                    pass  # Expected when Caddy aborts an oversized request body.
 
         def do_POST(self):
             self.rfile.read(int(self.headers.get("Content-Length", "0")))
