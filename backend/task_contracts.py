@@ -365,11 +365,14 @@ class Acknowledgement(Contract):
     accepted: Literal[True] = True
 
 
-class AssistanceState(Contract):
-    interaction: Interaction
+class BrowserMetadata(Contract):
     url: HttpUrl
     viewport_width: int = Field(ge=1, le=16_384)
     viewport_height: int = Field(ge=1, le=16_384)
+
+
+class AssistanceState(BrowserMetadata):
+    interaction: Interaction
 
 
 class Readiness(Contract):
