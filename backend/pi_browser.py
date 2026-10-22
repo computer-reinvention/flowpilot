@@ -48,12 +48,14 @@ def request_literals(source, request):
     found = []
     for match in _STRING.finditer(source):
         literal = next(group for group in match.groups() if group is not None).strip()
-        words = re.sub(r'[^\w:]+', ' ', literal.lower()).split()
-        phrases = (' '.join(words[i:i + n]) for n in (2, 3, 4) for i in range(len(words) - n + 1))
-        if set(_NUMBER.findall(' '.join(words))) & numbers or any(
-                len(phrase) >= 8 and f' {phrase} ' in f' {names} ' for phrase in phrases):
-            if literal not in found:
-                found.append(literal)
+        # Regex alternatives are separate values: /airport|terminal/ is not "airport terminal".
+        for part in literal.split('|'):
+            words = re.sub(r'[^\w:]+', ' ', part.lower()).split()
+            phrases = (' '.join(words[i:i + n]) for n in (2, 3, 4) for i in range(len(words) - n + 1))
+            if set(_NUMBER.findall(' '.join(words))) & numbers or any(
+                    len(phrase) >= 8 and f' {phrase} ' in f' {names} ' for phrase in phrases):
+                if literal not in found:
+                    found.append(literal)
     return found
 
 
@@ -153,7 +155,12 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
         # last script step, which usually reads the result.
         kept = [step for index, step in enumerate(steps)
                 if step['type'] == 'navigate' or step.get('changed') or (scripts and index == scripts[-1])]
-        if save_reflex is None or not any(step['type'] == 'script' for step in kept) or recording['replayed']:
+        # Of consecutive navigations only the last matters (earlier ones were guesses).
+        kept = [step for index, step in enumerate(kept)
+                if not (step['type'] == 'navigate' and index + 1 < len(kept) and kept[index + 1]['type'] == 'navigate')]
+        useful = any(step['type'] == 'script' for step in kept) or any(
+            step['type'] == 'navigate' and re.search(r'\{[A-Za-z_]\w*\}', step['url']) for step in kept)
+        if save_reflex is None or not useful or recording['replayed']:
             return None
         kept = [{key: value for key, value in step.items() if key != 'changed'} for step in kept]
         from .session import is_secret_field

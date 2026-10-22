@@ -13,6 +13,8 @@ const send = message => process.stdout.write(JSON.stringify(message) + '\n');
 const pending = new Map();
 let sequence = 0;
 let running = false;
+const finished = new Set();  // finishing tools that returned without error
+
 function invoke(name, args, signal) {
   return new Promise((resolve, reject) => {
     const id = String(++sequence);
@@ -26,6 +28,7 @@ function invoke(name, args, signal) {
     pending.set(id, {
       settle(message) {
         signal?.removeEventListener('abort', abort);
+        if (!message.error) finished.add(name);
         message.error ? reject(new Error(message.error)) : resolve(message.result);
       },
     });
@@ -62,6 +65,14 @@ async function run(config) {
   });
   try {
     await agent.prompt(config.task);
+    const finishing = ['complete', 'finish_exploration', 'request_confirmation'];
+    const ended = agent.state.messages.filter(m => m.role === 'assistant').at(-1);
+    if (ended && !['error', 'aborted'].includes(ended.stopReason) && turns < (config.maxTurns || 50)
+        && config.tools.some(t => t.name === 'complete') && !finishing.some(name => finished.has(name))) {
+      // The model answered in text without finishing: one reminder, not a failed task.
+      await agent.prompt('You stopped without calling complete. If you have the answer, call complete now with a verify check '
+        + 'and the full answer as summary; if you were blocked, call complete explaining what blocked you.');
+    }
     const last = agent.state.messages.filter(m => m.role === 'assistant').at(-1);
     if (!last || ['error', 'aborted'].includes(last.stopReason)) {
       throw new Error(last?.errorMessage || 'Agent did not produce a result');
