@@ -155,6 +155,11 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
         # last script step, which usually reads the result.
         kept = [step for index, step in enumerate(steps)
                 if step['type'] == 'navigate' or step.get('changed') or (scripts and index == scripts[-1])]
+        # A navigation after script steps jumps to a page those steps produced; its URL
+        # carries that run's derived values (IDs, coordinates), so replaying it would show
+        # the old request's results. Only navigations before the first script step are kept.
+        first_script = next((index for index, step in enumerate(kept) if step['type'] == 'script'), len(kept))
+        kept = [step for index, step in enumerate(kept) if step['type'] == 'script' or index < first_script]
         # Of consecutive navigations only the last matters (earlier ones were guesses).
         kept = [step for index, step in enumerate(kept)
                 if not (step['type'] == 'navigate' and index + 1 < len(kept) and kept[index + 1]['type'] == 'navigate')]
