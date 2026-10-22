@@ -120,7 +120,7 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
              "Pass inputs keyed by the stage's declared input names (listed with each saved script). "
              "A result with error_code invalid_input means the script did NOT run and nothing was repaired: supply the "
              "missing/invalid values and call again. Calling the same stage again with different inputs is a new action.",
-             {"name": string, "inputs": CALL_SCHEMA}, ["name"], human=True),
+             {"name": string, "inputs": CALL_SCHEMA}, ["name"], human=True) | {"codemode": True},
         tool("save_reflex", "Save a reusable action stage, not just the final observation. Declare every input the script reads in inputs and document starting state, outputs and next stage in description. Follow the reusable workflow contract; label extraction-only helpers explicitly.",
              {"name": string, "description": string, "script": string, "inputs": FIELDS_SCHEMA,
               "tags": {"type": "array", "items": string}, "pause_after_auth": {"type": "boolean"}}, ["name", "description", "script"]),
@@ -436,6 +436,14 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                  "REUSE FIRST: if saved scripts exist for the site, open it and run them with run_reflex and this request's values "
                  "before exploring by hand; fall back to exploring only for a stage that fails. "
                  "Submit a search in one stage and return; read the results in the next stage after observing the new page. "
+"
+                 "SPEED: every tool call costs a model turn, so do more per call. Fill all fields of a form in one stage when they "
+"
+                 "are on the same page; do independent work inside a stage concurrently (Promise.all); wait for elements or results "
+"
+                 "by polling a condition every 100-200 ms with a short cap, never with fixed sleeps. Chain known stages (saved "
+"
+                 "scripts via run_reflex, then observe, then the next stage) in a single codemode program instead of one call per turn. "
                  "Inspect before acting. Prefer direct URLs with query parameters when a site supports them. "
                  "On long pages, read the part you need with observe find or part instead of leaving the page. "
                  "Use codemode for bounded multi-tool work and return compact results. "

@@ -1,0 +1,22 @@
+[
+ {"name": "cab", "runs": ["cold", "warm"], "timeout_seconds": 600,
+  "task": "Book a cab from Chhatrapati Shivaji Maharaj International Airport Terminal 2, Mumbai to Bandra Kurla Complex, Mumbai, on 23 October 2026 at 10:00. Find the available cab options with fares, choose the cheapest, and ask me to confirm before booking anything."},
+ {"name": "cab_new_trip", "profile_of": "cab", "runs": ["warm"], "timeout_seconds": 600,
+  "task": "Book a cab from Chhatrapati Shivaji Maharaj International Airport Terminal 2, Mumbai to Powai, Mumbai, on 24 October 2026 at 14:30. Find the available cab options with fares, choose the cheapest, and ask me to confirm before booking anything."},
+ {"name": "flight", "runs": ["cold", "warm"], "timeout_seconds": 600,
+  "task": "Find me a flight: one-way, economy, 1 adult, from Mumbai (BOM) to Delhi (DEL) on 12 November 2026. Use a public flight search site such as Google Flights. Report the 3 cheapest nonstop options with airline, departure/arrival times and price in INR, plus the source URL. Do not book anything."},
+ {"name": "flight_new_route", "profile_of": "flight", "runs": ["warm"], "timeout_seconds": 600,
+  "task": "Find me a flight: one-way, economy, 2 adults, from Bengaluru (BLR) to Hyderabad (HYD) on 20 November 2026. Use a public flight search site such as Google Flights. Report the 3 cheapest nonstop options with airline, departure/arrival times and price in INR, plus the source URL. Do not book anything."},
+ {"name": "shopping", "runs": ["cold", "warm"], "timeout_seconds": 600,
+  "task": "On amazon.in, find the 3 best-rated wireless earbuds priced under ₹2,000 (at least 4 stars). Report each one's name, price, rating and number of ratings, plus the product URLs. Do not add anything to the cart."},
+ {"name": "shopping_new_query", "profile_of": "shopping", "runs": ["warm"], "timeout_seconds": 600,
+  "task": "On amazon.in, find the 3 best-rated portable Bluetooth speakers priced under ₹3,000 (at least 4 stars). Report each one's name, price, rating and number of ratings, plus the product URLs. Do not add anything to the cart."},
+ {"name": "hotel", "runs": ["cold", "warm"], "timeout_seconds": 600,
+  "task": "Find hotels in North Goa for 2 adults, checking in 12 November 2026 and checking out 14 November 2026. Report the 3 cheapest with a guest rating of 8 or higher: name, total price for the stay in INR, rating, and the source URL. Do not book anything."},
+ {"name": "hotel_new_city", "profile_of": "hotel", "runs": ["warm"], "timeout_seconds": 600,
+  "task": "Find hotels in Jaipur for 2 adults, checking in 5 December 2026 and checking out 7 December 2026. Report the 3 cheapest with a guest rating of 8 or higher: name, total price for the stay in INR, rating, and the source URL. Do not book anything."},
+ {"name": "train", "runs": ["cold", "warm"], "timeout_seconds": 600,
+  "task": "Find trains from Mumbai CSMT to Pune on 6 November 2026. Report the 3 earliest departures after 06:00 with train number and name, departure and arrival times, and the 3A or Chair Car fare if shown, plus the source URL. Do not book anything."},
+ {"name": "train_new_route", "profile_of": "train", "runs": ["warm"], "timeout_seconds": 600,
+  "task": "Find trains from New Delhi to Jaipur on 9 December 2026. Report the 3 earliest departures after 06:00 with train number and name, departure and arrival times, and the 3A or Chair Car fare if shown, plus the source URL. Do not book anything."}
+]

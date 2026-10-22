@@ -154,7 +154,10 @@ class BrowserSession:
                 port, websocket_path = (profile / 'DevToolsActivePort').read_text().splitlines()[:2]
                 self.cdp_url = f'http://127.0.0.1:{port}'
                 self.cdp_websocket_url = f'ws://127.0.0.1:{port}{websocket_path}'
-            self.browser = (self.browser_factory or Browser)(cdp_url=self.cdp_websocket_url, keep_alive=True)
+            # Match the sandbox window (1280x800); browser-use otherwise forces 1920x1080,
+            # which costs renderer memory and raster time on every page.
+            self.browser = (self.browser_factory or Browser)(cdp_url=self.cdp_websocket_url, keep_alive=True,
+                                                           viewport={'width': 1280, 'height': 800})
             await self.browser.start()
             from .handoff import HandoffServer
             self.handoff = (self.handoff_factory or HandoffServer)(self.context, self.cdp_websocket_url, self.user, self.on_handoff)

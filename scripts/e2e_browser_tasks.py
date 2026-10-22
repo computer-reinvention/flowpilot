@@ -113,6 +113,14 @@ def run(api, scenario, profile_id=None, session_id=None):
             break
         if view.get("interaction") and view["state"].startswith("waiting_for"):
             respond(api, view, scenario, log)
+    if view is None or view.get("state") not in TERMINAL:
+        # Over budget: cancel and wait, so the next run gets the profile and browser slot.
+        api.call("POST", f"/api/v1/browser-tasks/{task_id}/cancel")
+        for _ in range(30):
+            status, view = api.call("GET", f"/api/v1/browser-tasks/{task_id}")
+            if status == 200 and view["state"] in TERMINAL:
+                break
+            time.sleep(2)
     elapsed = time.monotonic() - started
     for entry in log:
         entry["t"] = round(entry["t"] - started, 2)
@@ -140,17 +148,21 @@ def main():
     api = Api(args.base_url, account_key(args.base_url, args.email, password))
     scenarios = json.loads(Path(args.scenarios).read_text())
     results = []
+    profiles = {}  # scenario name -> profile its runs used
     for scenario in scenarios:
         if args.only and scenario["name"] not in args.only:
             continue
         runs = scenario.get("runs", ["cold"])
-        profile_id = None
+        # "profile_of" runs a different request in another scenario's profile, so its
+        # saved stages must generalize to new values rather than replay old ones.
+        profile_id = profiles.get(scenario.get("profile_of"))
         for label in runs:
             print(f"== {scenario['name']} [{label}]", flush=True)
             # Warm runs reuse the cold run's profile so saved reflexes and cookies apply.
             result = run(api, scenario, profile_id=profile_id if label != "cold" else None)
             result["run"] = label
             profile_id = result.get("profile_id") or profile_id
+            profiles[scenario["name"]] = profile_id
             results.append(result)
             answer = ((result.get("result") or {}).get("answer") or "")[:600]
             pause = result.get('seconds_to_first_pause')

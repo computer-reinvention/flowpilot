@@ -51,7 +51,8 @@ async function run(config) {
   }));
   let turns = 0;
   const agent = new Agent({
-    initialState: { model, systemPrompt: config.system, tools: [...direct, code.tool] },
+    initialState: { model, systemPrompt: config.system, tools: [...direct, code.tool],
+      ...(config.thinkingLevel ? { thinkingLevel: config.thinkingLevel } : {}) },
     streamFn: models.streamSimple.bind(models), toolExecution: 'sequential',
     getApiKey: () => process.env.FLOWPILOT_MODEL_KEY || undefined,
     finishTurn: () => ++turns >= (config.maxTurns || 50) ? { action: 'end' } : undefined,

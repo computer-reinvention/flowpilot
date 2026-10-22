@@ -71,6 +71,7 @@ services:
       - FLOWPILOT_TRACE=${FLOWPILOT_TRACE:-0}
       # Operator debugging only: tool calls with page text; keep empty for real users.
       - FLOWPILOT_AGENT_TRACE_FILE=${FLOWPILOT_AGENT_TRACE_FILE:-}
+      - FLOWPILOT_AGENT_EFFORT=${FLOWPILOT_AGENT_EFFORT:-}
       - FLOWPILOT_SIGNUP_EMAILS=${FLOWPILOT_SIGNUP_EMAILS:-}
       - DOCKER_HOST=tcp://docker-proxy:2375
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
