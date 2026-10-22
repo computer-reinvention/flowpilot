@@ -4,7 +4,7 @@ import tempfile
 
 from playwright.async_api import async_playwright
 
-from backend.repl import BrowserSession
+from backend.session import BrowserSession
 
 
 FIXTURE = '''<style>body{height:2500px}#drag{width:300px;height:100px;background:lightblue}</style>

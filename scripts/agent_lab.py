@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)  # the dedicated FlowPilot key wins over shell variables
 
 from backend import pi_browser  # noqa: E402
-from backend.repl import BrowserSession  # noqa: E402
+from backend.session import BrowserSession  # noqa: E402
 from backend.task_settings import TaskSettings  # noqa: E402
 from backend.observation import create_observation  # noqa: E402
 

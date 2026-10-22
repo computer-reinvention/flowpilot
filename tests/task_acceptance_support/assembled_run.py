@@ -320,7 +320,7 @@ def pin_sandbox_image():
 def build_app(audit_holder):
     from fastapi import FastAPI
     from backend import auth, db, main, pi_browser
-    from backend.repl import BrowserSession
+    from backend.session import BrowserSession
     from backend.task_bootstrap import install_task_api
     from backend.task_ports import TaskBindings
     from backend.task_settings import TaskSettings

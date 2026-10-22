@@ -7,7 +7,7 @@ import re
 import shutil
 from contextlib import contextmanager
 
-from ..repl import UserStore
+from ..session import UserStore
 from ..task_contracts import ErrorCode, TaskFault, task_error
 
 

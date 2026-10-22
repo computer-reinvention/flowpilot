@@ -167,7 +167,8 @@ def selector_repair_generator(calls):
 
 async def prove_script_reuse_repair(state_dir, *, hosted=False):
     """Run the gate; return sanitized counters. Raises AssertionError on any violation."""
-    from backend import llm as llm_module, pi_browser, repl, runner
+    from backend import llm as llm_module, pi_browser, runner
+    from backend.session import BrowserSession
     from backend.observation import create_observation
     from backend.task_contracts import ErrorCode, TaskFault
     from backend.task_settings import TaskSettings
@@ -181,7 +182,7 @@ async def prove_script_reuse_repair(state_dir, *, hosted=False):
     try:
         async with rail_browser() as (browser, url, site):
             options = dict(hosted=True, handoff_factory=object, on_question=AsyncMock()) if hosted else {}
-            session = repl.BrowserSession('r2-gate', state_dir, verbose=False, observation_policy=policy, **options)
+            session = BrowserSession('r2-gate', state_dir, verbose=False, observation_policy=policy, **options)
             session.browser = browser
             try:
                 A = {'origin': 'Berlin', 'destination': 'London', 'date': '2026-11-02', 'passengers': 2}

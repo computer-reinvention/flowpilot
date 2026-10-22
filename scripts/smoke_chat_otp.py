@@ -4,7 +4,7 @@ import tempfile
 
 from dotenv import load_dotenv
 
-from backend.repl import BrowserSession
+from backend.session import BrowserSession
 from scripts.smoke_handoff import HTML
 
 

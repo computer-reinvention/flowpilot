@@ -5,15 +5,15 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from backend import repl
+from backend import session as agent_session
 
 
-async def test_repl_repairs_and_persists_in_original_scope(tmp_path, monkeypatch):
+async def test_session_repairs_and_persists_in_original_scope(tmp_path, monkeypatch):
     from backend import runner, llm
-    session = repl.BrowserSession('repair-user', tmp_path, verbose=False)
+    session = agent_session.BrowserSession('repair-user', tmp_path, verbose=False)
     page = SimpleNamespace(get_url=AsyncMock(return_value='https://example.com'))
     session.browser = SimpleNamespace(must_get_current_page=AsyncMock(return_value=page))
-    monkeypatch.setattr(repl, '_execute_reflex', AsyncMock(return_value=(False, 'stale selector')))
+    monkeypatch.setattr(agent_session, '_execute_reflex', AsyncMock(return_value=(False, 'stale selector')))
     async def repair(**kwargs):
         assert kwargs['inputs'] == {'date': '2026-10-21'}
         page.get_url.return_value = 'https://other.test/results'
@@ -25,7 +25,7 @@ async def test_repl_repairs_and_persists_in_original_scope(tmp_path, monkeypatch
         await save('search', 'search', 'async()=>{}', tags=['search'])
         assert not (await replay('search')).error
         return 'done'
-    monkeypatch.setattr(repl, 'drive_browser', drive)
+    monkeypatch.setattr(agent_session, 'drive_browser', drive)
     try:
         result = await session.ask('search', {'date': '2026-10-21'})
         row = session.store.db.execute('SELECT * FROM reflexes').fetchone()
@@ -40,19 +40,19 @@ async def test_repl_repairs_and_persists_in_original_scope(tmp_path, monkeypatch
 
 
 @pytest.mark.parametrize('failure', ['NEEDS_AUTH: login', 'NEEDS_HUMAN: captcha'])
-async def test_repl_human_boundary_bypasses_repair(tmp_path, monkeypatch, failure):
+async def test_session_human_boundary_bypasses_repair(tmp_path, monkeypatch, failure):
     from backend import runner
-    session = repl.BrowserSession('human-user', tmp_path, verbose=False, human_help=AsyncMock())
+    session = agent_session.BrowserSession('human-user', tmp_path, verbose=False, human_help=AsyncMock())
     session.browser = SimpleNamespace(must_get_current_page=AsyncMock(return_value=SimpleNamespace(
         get_url=AsyncMock(return_value='https://example.com'))))
-    monkeypatch.setattr(repl, '_execute_reflex', AsyncMock(return_value=(False, failure)))
+    monkeypatch.setattr(agent_session, '_execute_reflex', AsyncMock(return_value=(False, failure)))
     repair = AsyncMock()
     monkeypatch.setattr(runner, '_repair_reflex', repair)
     async def drive(browser, task, inputs, entry, control, human, replay, save, **kwargs):
         await save('login', 'login', 'async()=>{}')
         await replay('login')
         return 'assisted'
-    monkeypatch.setattr(repl, 'drive_browser', drive)
+    monkeypatch.setattr(agent_session, 'drive_browser', drive)
     try:
         await session.ask('login')
         repair.assert_not_awaited()
@@ -62,20 +62,20 @@ async def test_repl_human_boundary_bypasses_repair(tmp_path, monkeypatch, failur
 
 
 def test_user_memory_isolation_and_lock(tmp_path):
-    alice = repl.UserStore(tmp_path, 'alice')
-    bob = repl.UserStore(tmp_path, 'bob')
+    alice = agent_session.UserStore(tmp_path, 'alice')
+    bob = agent_session.UserStore(tmp_path, 'bob')
     try:
         alice.db.execute("INSERT INTO reflexes(domain,name,description,script) VALUES('example.com','search','Search','async () => {}')")
         alice.db.commit()
         assert len(alice.scripts()) == 1
         assert bob.scripts() == []
         with pytest.raises(ValueError, match='already has'):
-            repl.UserStore(tmp_path, 'alice')
+            agent_session.UserStore(tmp_path, 'alice')
         with pytest.raises(ValueError, match='User must'):
-            repl.UserStore(tmp_path, '../alice')
+            agent_session.UserStore(tmp_path, '../alice')
     finally:
         alice.close(); bob.close()
-    reopened = repl.UserStore(tmp_path, 'alice')
+    reopened = agent_session.UserStore(tmp_path, 'alice')
     try:
         assert reopened.scripts()[0]['name'] == 'search'
     finally:
@@ -83,11 +83,11 @@ def test_user_memory_isolation_and_lock(tmp_path):
 
 
 async def test_replay_scoped_to_user_and_site_with_metrics(tmp_path, monkeypatch):
-    session = repl.BrowserSession('alice', tmp_path, verbose=False)
+    session = agent_session.BrowserSession('alice', tmp_path, verbose=False)
     page = SimpleNamespace(get_url=AsyncMock(return_value='https://example.com/cart'))
     session.browser = SimpleNamespace(must_get_current_page=AsyncMock(return_value=page))
     execute = AsyncMock(return_value=(True, 'done'))
-    monkeypatch.setattr(repl, '_execute_reflex', execute)
+    monkeypatch.setattr(agent_session, '_execute_reflex', execute)
     async def drive(browser, task, inputs, entry, control, human, replay, save, on_event, interaction_tools):
         on_event({'type':'metric', 'name':'model_turn'})
         await save('add', 'Add product', 'async () => {}')
@@ -95,7 +95,7 @@ async def test_replay_scoped_to_user_and_site_with_metrics(tmp_path, monkeypatch
         page.get_url.return_value = 'https://other.test/cart'
         assert (await replay('add')).error
         return 'Cart ready'
-    monkeypatch.setattr(repl, 'drive_browser', drive)
+    monkeypatch.setattr(agent_session, 'drive_browser', drive)
     try:
         result = await session.ask('Add milk', {'product':'milk'})
         assert result['metrics']['reused'] == 1
@@ -108,9 +108,9 @@ async def test_replay_scoped_to_user_and_site_with_metrics(tmp_path, monkeypatch
 
 
 async def test_failure_recorded_without_success_claim(tmp_path, monkeypatch):
-    session = repl.BrowserSession('alice', tmp_path, verbose=False)
+    session = agent_session.BrowserSession('alice', tmp_path, verbose=False)
     session.browser = object()
-    monkeypatch.setattr(repl, 'drive_browser', AsyncMock(side_effect=RuntimeError('failed stage')))
+    monkeypatch.setattr(agent_session, 'drive_browser', AsyncMock(side_effect=RuntimeError('failed stage')))
     try:
         with pytest.raises(RuntimeError, match='failed stage'):
             await session.ask('Do the task')
@@ -120,13 +120,13 @@ async def test_failure_recorded_without_success_claim(tmp_path, monkeypatch):
 
 
 async def test_original_reflex_pause_and_input_confirmation_primitives(tmp_path, monkeypatch):
-    session = repl.BrowserSession('alice', tmp_path, verbose=False)
+    session = agent_session.BrowserSession('alice', tmp_path, verbose=False)
     session.browser = SimpleNamespace(must_get_current_page=AsyncMock(return_value=SimpleNamespace(
         get_url=AsyncMock(return_value='https://example.com'))))
     session.handoff = SimpleNamespace(request=AsyncMock(return_value={}))
     session.on_question = AsyncMock(side_effect=[{'values': {'city': 'Oslo'}}, {'confirmed': False}])
     execute = AsyncMock(return_value=(True, 'done'))
-    monkeypatch.setattr(repl, '_execute_reflex', execute)
+    monkeypatch.setattr(agent_session, '_execute_reflex', execute)
     async def drive(browser, task, inputs, entry, control, human, replay, save, **kwargs):
         await save('auth', 'Login', 'async () => {}', tags=['login'], pause_after_auth=True)
         await replay('auth')
@@ -136,7 +136,7 @@ async def test_original_reflex_pause_and_input_confirmation_primitives(tmp_path,
         assert inputs['city'] == 'Oslo'
         assert 'Do NOT proceed' in (await tools['request_confirmation']('Order?')).extracted_content
         return 'User declined'
-    monkeypatch.setattr(repl, 'drive_browser', drive)
+    monkeypatch.setattr(agent_session, 'drive_browser', drive)
     try:
         await session.ask('Do something')
         execute.assert_awaited_once()
@@ -149,26 +149,84 @@ async def test_original_reflex_pause_and_input_confirmation_primitives(tmp_path,
 
 
 async def test_otp_uses_chat_and_is_not_saved_in_inputs(tmp_path, monkeypatch):
-    session = repl.BrowserSession('alice', tmp_path, verbose=False)
+    session = agent_session.BrowserSession('alice', tmp_path, verbose=False,
+                                           on_question=AsyncMock(return_value={'values': {'otp': '246810'}}))
     session.browser = object()
     session.handoff = SimpleNamespace(request=AsyncMock())
-    monkeypatch.setattr('builtins.input', lambda prompt: '246810')
     async def drive(*args, **kwargs):
         result = await kwargs['interaction_tools']['request_input_values']('[{"name":"otp","label":"SMS code"}]')
         assert json.loads(result.extracted_content)['otp'] == '246810'
         return 'Verified'
-    monkeypatch.setattr(repl, 'drive_browser', drive)
+    monkeypatch.setattr(agent_session, 'drive_browser', drive)
     try:
-        await session.ask('Sign in')
+        result = await session.ask('Sign in')
         session.handoff.request.assert_not_awaited()
         assert '246810' not in session.store.history()[0]['inputs']
+        assert result['secrets'] == ['246810']
     finally:
         session.store.close()
 
 
+async def test_plain_answers_are_not_secrets(tmp_path, monkeypatch):
+    session = agent_session.BrowserSession('alice', tmp_path, verbose=False,
+                                           on_question=AsyncMock(return_value={'values': {'word': 'Tiger', 'pw': 'hunter2'}}))
+    session.browser = object()
+    async def drive(*args, **kwargs):
+        await kwargs['interaction_tools']['request_input_values'](
+            '[{"name":"word","label":"Search word"},{"name":"pw","label":"Password","type":"text"}]')
+        return 'Searched Tiger'
+    monkeypatch.setattr(agent_session, 'drive_browser', drive)
+    try:
+        assert (await session.ask('Search'))['secrets'] == ['hunter2']
+    finally:
+        session.store.close()
+
+
+async def test_question_without_client_port_fails_instead_of_reading_stdin(tmp_path, monkeypatch):
+    monkeypatch.setattr('builtins.input', lambda prompt: pytest.fail('session read stdin'))
+    session = agent_session.BrowserSession('alice', tmp_path, verbose=False)
+    session.browser = object()
+    async def drive(*args, **kwargs):
+        await kwargs['interaction_tools']['request_confirmation']('Book it?')
+    monkeypatch.setattr(agent_session, 'drive_browser', drive)
+    try:
+        with pytest.raises(RuntimeError, match='on_question'):
+            await session.ask('Book')
+    finally:
+        session.store.close()
+
+
+async def test_client_can_answer_a_question_by_taking_the_browser(tmp_path, monkeypatch):
+    session = agent_session.BrowserSession('alice', tmp_path, verbose=False,
+                                           on_question=AsyncMock(return_value={'use_browser': True}))
+    session.browser = object()
+    session.handoff = SimpleNamespace(request=AsyncMock())
+    async def drive(*args, **kwargs):
+        result = await kwargs['interaction_tools']['request_input_values']('[{"name":"otp"}]')
+        assert 'handled this in the browser' in result.extracted_content
+        return 'done'
+    monkeypatch.setattr(agent_session, 'drive_browser', drive)
+    try:
+        await session.ask('Sign in')
+        session.handoff.request.assert_awaited_once()
+    finally:
+        session.store.close()
+
+
+@pytest.mark.parametrize('field,secret', [
+    ({'name': 'otp'}, True), ({'name': 'code', 'label': 'Code'}, True),
+    ({'name': 'x', 'label': 'SMS code'}, True), ({'name': 'pin'}, True),
+    ({'name': 'card', 'kind': 'secret'}, True), ({'name': 'word', 'label': 'Search word'}, False),
+    ({'name': 'address', 'label': 'Delivery address'}, False), ({'name': 'passengers'}, False),
+    ({'name': 'spinner', 'label': 'Spinning class'}, False),
+])
+def test_secret_field_classification(field, secret):
+    assert agent_session.is_secret_field(field) is secret
+
+
 async def test_human_cancel_stops_owner_not_just_tool(tmp_path, monkeypatch):
     from backend.handoff import HandoffCancelled
-    session = repl.BrowserSession('alice', tmp_path, verbose=False)
+    session = agent_session.BrowserSession('alice', tmp_path, verbose=False)
     session.browser = object()
     session.handoff = SimpleNamespace(request=AsyncMock(side_effect=HandoffCancelled('cancel')))
     async def drive(browser, task, inputs, entry, control, human, replay, save, **kwargs):
@@ -180,7 +238,7 @@ async def test_human_cancel_stops_owner_not_just_tool(tmp_path, monkeypatch):
         await asyncio.create_task(dispatch())
         await asyncio.sleep(1)
         pytest.fail('Cancelled run continued')
-    monkeypatch.setattr(repl, 'drive_browser', drive)
+    monkeypatch.setattr(agent_session, 'drive_browser', drive)
     try:
         with pytest.raises(RuntimeError, match='Human cancelled'):
             await session.ask('Login')

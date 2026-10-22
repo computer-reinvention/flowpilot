@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from backend import pi_browser, repl, runner
+from backend import pi_browser, runner, session as agent_session
 from backend.reflex_inputs import (ReflexInputError, bind_inputs, catalog_entry, normalize_fields,
                                    referenced_inputs)
 
@@ -142,17 +142,17 @@ def _browser():
 
 
 def _session(tmp_path, monkeypatch, url='https://trains.example/search', **kwargs):
-    session = repl.BrowserSession('binder', tmp_path, verbose=False, **kwargs)
+    session = agent_session.BrowserSession('binder', tmp_path, verbose=False, **kwargs)
     page = SimpleNamespace(get_url=AsyncMock(return_value=url))
     session.browser = SimpleNamespace(must_get_current_page=AsyncMock(return_value=page))
     return session
 
 
-async def test_repl_binds_declared_inputs_and_never_repairs_input_errors(tmp_path, monkeypatch):
+async def test_session_binds_declared_inputs_and_never_repairs_input_errors(tmp_path, monkeypatch):
     from backend import llm
     session = _session(tmp_path, monkeypatch)
     execute = AsyncMock(return_value=(True, '{"success": true}'))
-    monkeypatch.setattr(repl, '_execute_reflex', execute)
+    monkeypatch.setattr(agent_session, '_execute_reflex', execute)
     repair = AsyncMock()
     monkeypatch.setattr(runner, '_repair_reflex', repair)
     monkeypatch.setattr(llm, 'get_llm', lambda role: role)
@@ -169,7 +169,7 @@ async def test_repl_binds_declared_inputs_and_never_repairs_input_errors(tmp_pat
         assert not (await replay('search', {'origin': 'Berlin', 'destination': 'London', 'passengers': 2})).error
         assert not (await replay('search', {'origin': 'Paris', 'destination': 'Amsterdam'})).error
         return 'done'
-    monkeypatch.setattr(repl, 'drive_browser', drive)
+    monkeypatch.setattr(agent_session, 'drive_browser', drive)
     try:
         result = await session.ask('trains', {'token': 'secret-otp'})
         scripts = session.store.scripts()
@@ -185,9 +185,9 @@ async def test_repl_binds_declared_inputs_and_never_repairs_input_errors(tmp_pat
     assert scripts[0]['inputs'][0] == {'name': 'origin', 'type': 'string', 'required': True}
 
 
-async def test_repl_partial_effects_are_not_auto_repaired(tmp_path, monkeypatch):
+async def test_session_partial_effects_are_not_auto_repaired(tmp_path, monkeypatch):
     session = _session(tmp_path, monkeypatch)
-    monkeypatch.setattr(repl, '_execute_reflex', AsyncMock(return_value=(
+    monkeypatch.setattr(agent_session, '_execute_reflex', AsyncMock(return_value=(
         False, f'SCRIPT EXECUTION FAILED\nError: missing\nEFFECTS: {runner.PARTIAL_EFFECTS} - changed')))
     repair = AsyncMock()
     monkeypatch.setattr(runner, '_repair_reflex', repair)
@@ -197,7 +197,7 @@ async def test_repl_partial_effects_are_not_auto_repaired(tmp_path, monkeypatch)
         detail = (await replay('add')).error
         assert 'Do not replay this stage automatically' in detail
         return 'inspected'
-    monkeypatch.setattr(repl, 'drive_browser', drive)
+    monkeypatch.setattr(agent_session, 'drive_browser', drive)
     try:
         result = await session.ask('add fare')
     finally:
@@ -214,7 +214,7 @@ def test_legacy_store_migrates_and_catalogs_referenced_inputs(tmp_path):
         successes INTEGER DEFAULT 0, failures INTEGER DEFAULT 0, PRIMARY KEY(domain,name));
         INSERT INTO reflexes(domain,name,description,script) VALUES('a.test','old','Old','async (inputs) => inputs.query');''')
     db.commit(); db.close()
-    store = repl.UserStore(tmp_path, 'legacy')
+    store = agent_session.UserStore(tmp_path, 'legacy')
     try:
         assert store.scripts() == [{'domain': 'a.test', 'name': 'old', 'description': 'Old', 'successes': 0,
                                     'failures': 0, 'inputs': None, 'referenced_inputs': ['query']}]
@@ -234,7 +234,7 @@ async def test_hosted_save_checks_task_values_not_declared_schema(tmp_path, monk
         leaked = await save('leak', 'Search', "async () => 'Reykjavik'", inputs=declared)
         assert leaked.error == 'Parameterize input values before saving scripts'
         return 'done'
-    monkeypatch.setattr(repl, 'drive_browser', drive)
+    monkeypatch.setattr(agent_session, 'drive_browser', drive)
     try:
         await session.ask('trains', {'origin': 'Reykjavik'})
     finally:

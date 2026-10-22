@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from backend import repl
+from backend import session as agent_session
 from backend.task_contracts import Principal
 from backend.task_settings import TaskSettings
 from backend.tasks.memory import ProfileStore
@@ -18,7 +18,7 @@ async def test_hosted_private_question_never_uses_stdin_or_persists_response(tmp
     monkeypatch.setattr('builtins.input', no_stdin)
     settings = TaskSettings(state_dir=tmp_path)
     store = ProfileStore(settings, Principal(account_id='alice'), 'p')
-    session = repl.BrowserSession(store.path.name, store=store, hosted=True, verbose=False,
+    session = agent_session.BrowserSession(store.path.name, store=store, hosted=True, verbose=False,
                                   handoff_factory=lambda *args: channel_double(),
                                   on_question=AsyncMock(return_value={'values': {'otp': '246810'}}),
                                   observation_policy=bindings_double().observation)
@@ -31,7 +31,7 @@ async def test_hosted_private_question_never_uses_stdin_or_persists_response(tmp
         assert (await save('login', 'Use input', 'async (inputs) => inputs.otp')).error
         # Even transformed model responses are not persisted after private input.
         return 'Code characters: 2 4 6 8 1 0'
-    monkeypatch.setattr(repl, 'drive_browser', inference)
+    monkeypatch.setattr(agent_session, 'drive_browser', inference)
     inputs = {}
     try:
         result = await session.ask('Sign in', inputs)
@@ -47,7 +47,7 @@ async def test_hosted_private_question_never_uses_stdin_or_persists_response(tmp
 
 def test_hosted_session_requires_ports_without_opening_browser(tmp_path):
     with pytest.raises(ValueError, match='require interaction and observation'):
-        repl.BrowserSession('alice', tmp_path, hosted=True)
+        agent_session.BrowserSession('alice', tmp_path, hosted=True)
 
 
 @pytest.mark.asyncio
@@ -65,7 +65,7 @@ async def test_missing_completion_never_becomes_success(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_hosted_failed_replay_does_not_automatically_retry_uncertain_effects(tmp_path, monkeypatch):
     store = ProfileStore(TaskSettings(state_dir=tmp_path), Principal(account_id='alice'), 'p')
-    session = repl.BrowserSession(store.path.name, store=store, hosted=True, verbose=False,
+    session = agent_session.BrowserSession(store.path.name, store=store, hosted=True, verbose=False,
                                   handoff_factory=lambda *args: channel_double(), on_question=AsyncMock(),
                                   observation_policy=bindings_double().observation)
     session.browser = SimpleNamespace(must_get_current_page=AsyncMock(return_value=SimpleNamespace(
@@ -75,16 +75,23 @@ async def test_hosted_failed_replay_does_not_automatically_retry_uncertain_effec
     store.db.commit()
     execute = AsyncMock(return_value=(False, 'Script mutated then failed'))
     repair = AsyncMock()
-    monkeypatch.setattr(repl, '_execute_reflex', execute)
+    monkeypatch.setattr(agent_session, '_execute_reflex', execute)
     monkeypatch.setattr('backend.runner._repair_reflex', repair)
     async def inference(*args, **kwargs):
         result = await args[6]('add')
         assert 'Effects may be partial' in result.error
         return 'Inspected partial effects; no retry authorized'
-    monkeypatch.setattr(repl, 'drive_browser', inference)
+    monkeypatch.setattr(agent_session, 'drive_browser', inference)
     try:
         await session.ask('Synthetic mutation')
         execute.assert_awaited_once()
         repair.assert_not_awaited()
     finally:
         store.close()
+
+
+def test_source_urls_are_cited_valid_and_deduplicated():
+    from backend.tasks.runtime import source_urls
+    answer = ('See https://en.wikipedia.org/wiki/Tiger_(film). Also (https://example.com/a), '
+              'https://example.com/a again, https://en.wikipedia.org/wiki/[redacted] and http://bad url.')
+    assert source_urls(answer) == ['https://en.wikipedia.org/wiki/Tiger_(film)', 'https://example.com/a', 'http://bad']

@@ -1,9 +1,10 @@
 """Live task adaptation and serialized, generation-fenced human browser access."""
 import asyncio
 from datetime import datetime, timedelta, timezone
+import re
 from uuid import uuid4
 
-from ..repl import BrowserSession
+from ..session import BrowserSession
 from ..task_contracts import (
     BrowserMetadata, ErrorCode, InputField, Interaction, InteractionKind, PollRequest, TaskFault,
     TaskState, task_error,
@@ -14,6 +15,30 @@ from .memory import ProfileStore
 
 def stale():
     return TaskFault(task_error(ErrorCode.STALE_GENERATION, 'Browser pause is no longer active'))
+
+
+URL = re.compile(r'https?://[^\s<>"\'`]+')
+
+
+def source_urls(answer, limit=64):
+    """The http(s) URLs the answer cites, in order, deduplicated and valid."""
+    from pydantic import HttpUrl, TypeAdapter, ValidationError
+    adapter, found = TypeAdapter(HttpUrl), []
+    for match in URL.findall(answer):
+        url = match.rstrip('.,;:!?]}*_')
+        # Keep balanced parentheses (wiki/Tiger_(film)), drop a closing one from prose.
+        while url.endswith(')') and url.count(')') > url.count('('):
+            url = url[:-1].rstrip('.,;:!?]}*_')
+        if '[redacted]' in match or len(url) > 2048 or url in found:
+            continue
+        try:
+            adapter.validate_python(url)
+        except ValidationError:
+            continue
+        found.append(url)
+        if len(found) == limit:
+            break
+    return found
 
 
 class HumanBrowser:
@@ -324,7 +349,11 @@ class ConversationRuntime:
             if self.interruption_error is not None:
                 raise TaskFault(self.interruption_error) from None
             raise
-        result['answer'] = self.session.store.redact(result['answer'], inputs, limit=32000)
+        # Hide caller-supplied inputs and secret answers (OTPs, passwords); plain
+        # answers the owner typed, like a search word, stay readable.
+        hidden = [dict(self.execution.request.inputs), result.pop('secrets', [])]
+        result['answer'] = self.session.store.redact(result['answer'], hidden, limit=32000)
+        result['source_urls'] = source_urls(result['answer'])
         return result
 
     async def stop_writers(self):

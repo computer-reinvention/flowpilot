@@ -143,7 +143,7 @@ class Executor:
             answer = active.worker.result()
             if active.cancelled:
                 raise asyncio.CancelledError
-            result = TaskResult(answer=answer['answer'], metrics=TaskMetrics(**{
+            result = TaskResult(answer=answer['answer'], source_urls=answer.get('source_urls', ()), metrics=TaskMetrics(**{
                 k: v for k, v in answer.get('metrics', {}).items() if k in TaskMetrics.model_fields}))
             state = TaskState.COMPLETED
         except asyncio.CancelledError:

@@ -9,7 +9,7 @@ import tempfile
 from dotenv import load_dotenv
 from playwright.async_api import async_playwright
 
-from backend.repl import BrowserSession
+from backend.session import BrowserSession
 
 
 HTML = '''<title>OTP fixture</title><h1>Verification required</h1>

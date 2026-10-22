@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 
-from backend.repl import BrowserSession
+from backend.session import BrowserSession
 
 
 async def main():

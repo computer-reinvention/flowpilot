@@ -403,7 +403,7 @@ def test_execution_and_capabilities_are_lease_generation_bound():
 
 
 async def test_local_repl_keeps_defaults_and_accepts_transport_injection(tmp_path):
-    from backend.repl import BrowserSession
+    from backend.session import BrowserSession
 
     default = BrowserSession("local_demo", state_dir=tmp_path)
     assert default.handoff_factory is None

@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import time
 
-from backend.repl import BrowserSession
+from backend.session import BrowserSession
 
 
 async def visit(session):
