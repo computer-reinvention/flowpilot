@@ -41,7 +41,8 @@ FIELDS_SCHEMA = {
 CALL_SCHEMA = {
     'type': 'object',
     'description': ("Values for the stage's declared inputs, keyed by input name, resolved from the "
-                    "user's request (e.g. {\"origin\": \"Berlin\", \"date\": \"2026-11-02\"}). "
+                    "user's request (e.g. {\"origin\": \"Berlin\", \"date\": \"2026-11-02\"}). Names are descriptive "
+                    "words of 3+ letters (pickup, drop, query), never single letters. "
                     'Declared inputs not given here fall back to task input values, then defaults.'),
 }
 

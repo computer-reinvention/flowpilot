@@ -15,6 +15,16 @@ def tool(name, description, properties, required=(), human=False):
                             "required": list(required), "additionalProperties": False}}
 
 
+def as_function(source):
+    """Accept a verify written as a function, a `return ...` body or a bare expression."""
+    text = str(source).strip().rstrip(';')
+    if re.match(r'^(async\s*)?(\([^)]*\)|\w+)\s*=>', text) or text.startswith(('async function', 'function')):
+        return text
+    if re.match(r'^(return|const|let|var|if)\b', text):
+        return 'async (inputs, entryUrl) => { ' + text + ' }'
+    return 'async (inputs, entryUrl) => (' + text + ')'
+
+
 def fill_template(url, values):
     """Substitute {key} placeholders in a URL with URL-encoded input values."""
     from urllib.parse import quote
@@ -150,8 +160,10 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
         tool("execute", "Execute async (inputs, entryUrl) => {...} in the browser. Return concise observations. Bounded to 30 seconds. "
              "Pass every request value the script uses (place, date, time, quantity, query) in inputs and read it as "
              "inputs.<key>; a script containing one literally is rejected. Give a one-line description of the step: steps "
-             "that work are recorded and saved as a reflex for the next request.",
-             {"script": string, "description": string, "inputs": CALL_SCHEMA}, ["script", "description"]),
+             "that work are recorded and saved as a reflex for the next request. Set read_only to true for a script that only "
+             "reads the page (extracting results): it runs even while the page is still loading content.",
+             {"script": string, "description": string, "inputs": CALL_SCHEMA, "read_only": {"type": "boolean"}},
+             ["script", "description"]),
         tool("run_reflex", "Run a stored stage by name with the input values you resolved from the user's request; may pause for human help. "
              "Pass inputs keyed by the stage's declared input names (listed with each saved script). "
              "A result with error_code invalid_input means the script did NOT run and nothing was repaired: supply the "
@@ -171,8 +183,8 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
     if checked_scripts:
         execution = next(d for d in definitions if d['name'] == 'execute')
         execution['inputSchema']['properties'].update({'precondition': string, 'postcondition': string})
-        execution['inputSchema']['required'].extend(['precondition', 'postcondition'])
-        execution['description'] += (' Supply explicit async boolean precondition and postcondition functions. '
+        execution['description'] += (' Supply explicit async boolean precondition and postcondition functions '
+                                     '(required unless read_only). '
                                      'Only entry/exit are guarded; selectors inside arbitrary JS are not protected. '
                                      'Use one effect per call, reject ambiguous selectors and check its result.')
         next(d for d in definitions if d['name'] == 'complete')['description'] += (
@@ -181,7 +193,8 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
         if definition['name'] in ('complete', 'request_confirmation'):
             definition['description'] += (' save_as names the reflex the steps of this task are saved as: a stable snake_case '
                                           'name for the kind of task on this site (e.g. airport_transfer_search), the same name '
-                                          'as the reflex you replayed if you repaired one.')
+                                          'as the reflex you replayed if you repaired one. Pass it only when the task succeeded; '
+                                          'leave it out when you were blocked or the result is incomplete.')
     completion = None
     needs_observation = False
     observed_identity = None
@@ -198,6 +211,19 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                 return await callback(**args)
         except TimeoutError:
             raise TaskFault(task_error(ErrorCode.INTERRUPTED, 'Human wait deadline expired; inspect current browser state before continuing')) from None
+
+    async def read_page(script, values):
+        """Evaluate a read-only script directly over CDP, outside the action guards."""
+        from .runner import adaptive_waits
+        page = await browser.must_get_current_page()
+        session_id = await page._ensure_session()
+        response = await asyncio.wait_for(page._client.send.Runtime.evaluate(
+            {'expression': f'({adaptive_waits(script)})({json.dumps(values)}, {json.dumps(entry_url)})',
+             'returnByValue': True, 'awaitPromise': True, 'timeout': 30000}, session_id=session_id), timeout=32)
+        if 'exceptionDetails' in response:
+            return {'success': False, 'result': f"SCRIPT EXECUTION FAILED: {str(response['exceptionDetails'])[:1500]}"}
+        value = response.get('result', {}).get('value')
+        return {'success': True, 'result': json.dumps(value, ensure_ascii=False)[:8000] if value is not None else 'null'}
 
     def model_view(snapshot, limit=MAX_VIEW):
         # Only what the model reasons with; references and fingerprints stay host-side.
@@ -236,7 +262,7 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
         if interaction_tools and name in interaction_tools:
             if name == 'request_confirmation':
                 # Saved before asking: a decline ends the task at once.
-                await save_recording(args.get('save_as'))
+                await save_recording(args.get('save_as') or 'workflow')
             args = {key: value for key, value in args.items() if key != 'save_as'}
             return (await human_call(interaction_tools[name], args)).model_dump()
         if exploration_tools and name in exploration_tools:
@@ -277,6 +303,8 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
             stage_inputs = args.get('inputs') or {}
             if not isinstance(stage_inputs, dict):
                 raise ValueError('inputs must be an object of named values')
+            if args.get('read_only') is True:
+                return await read_page(as_function(script), {**inputs, **recording['inputs']})
             if checked_scripts:
                 if not args.get('precondition') or not args.get('postcondition'):
                     raise ValueError('Explicit precondition and postcondition are required')
@@ -324,7 +352,7 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                     guarded_check = False
                 else:
                     await observation_policy.require_fresh(browser, observation)
-            script = "async (inputs, entryUrl) => { if (await (" + args["verify"] + ")(inputs, entryUrl) !== true) throw new Error('Completion check failed'); return true; }"
+            script = "async (inputs, entryUrl) => { if (await (" + as_function(args["verify"]) + ")(inputs, entryUrl) !== true) throw new Error('Completion check failed'); return true; }"
             if guarded_check or observation_policy is None:
                 ok, value = await _execute_reflex(script, inputs, entry_url, browser,
                                                 **({'observation_policy': observation_policy, 'expected_observation': observation} if guarded_check else {}))
@@ -340,7 +368,8 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
             if not ok:
                 raise ValueError(value)
             completion = args["summary"]
-            await save_recording(args.get('save_as'))
+            if args.get('save_as'):
+                await save_recording(args['save_as'])
             return {"verified": True}
         raise ValueError("Unknown browser tool")
 
@@ -393,7 +422,10 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                 # Same stage + same effective inputs is the same action; a
                 # different input set is a distinct action.
                 action_args = {'name': args['name'], 'inputs': bound}
-            guarded = name in ('execute', 'run_reflex') or (
+            # A read-only script only reads the page, so the action fence (freshness, no-replay)
+            # does not apply; like complete's verify, read-only is model-asserted, not enforced.
+            read_only = name == 'execute' and args.get('read_only') is True
+            guarded = (name in ('execute', 'run_reflex') and not read_only) or (
                 exploration_tools and name in exploration_tools and
                 (name.startswith('test_') or name == 'generate_and_save_reflex'))
             if guarded and needs_observation:
@@ -478,7 +510,7 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                 needs_observation = observation is not None and observation.readiness != 'ready'
                 observed_identity = await page_identity()
             elif after is not None and name in ('execute', 'run_reflex'):
-                if succeeded and name == 'execute' and recording['pending']:
+                if succeeded and name == 'execute' and recording['pending'] and not read_only:
                     changed = observation is None or (after.progress_fingerprint, after.document_id) != (
                         observation.progress_fingerprint, observation.document_id)
                     recording['steps'].append({**recording['pending'], 'changed': changed})

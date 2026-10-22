@@ -413,7 +413,7 @@ async def test_default_local_pi_uses_native_policy_without_repl_changes(local_br
     monkeypatch.setenv('FLOWPILOT_TASKS_READINESS_TIMEOUT_SECONDS', '0.4')
     async def agent(task, system, tools, dispatch, **kwargs):
         execute = next(t for t in tools if t['name'] == 'execute')
-        assert 'precondition' in execute['inputSchema']['required']
+        assert {'precondition', 'postcondition'} <= set(execute['inputSchema']['properties'])  # enforced unless read_only
         snapshot = await dispatch('observe', {})
         assert snapshot['readiness'] == 'ready'
         assert 'references' not in snapshot and 'Total $5' in snapshot['elements']  # host-side only
