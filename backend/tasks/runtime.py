@@ -124,6 +124,7 @@ class ConversationRuntime:
         self.handles = []
         self.fenced = False
         self.declined = False
+        self.declined_proposal = ''
         self.interruption_error = None
         self.owner = None
 
@@ -206,6 +207,7 @@ class ConversationRuntime:
                 if not response.confirmed:
                     # Fail closed: a model cannot reinterpret a decline and act.
                     self.declined = True
+                    self.declined_proposal = interaction.message
                     self.fenced = True
                     if self.owner:
                         self.owner.cancel()

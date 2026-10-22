@@ -86,6 +86,21 @@ async def test_cancel_stops_writers_before_terminal(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_declined_confirmation_completes_with_the_declined_proposal(tmp_path):
+    class Declined(Runtime):
+        async def run(self):
+            self.declined, self.fenced = True, True
+            self.declined_proposal = 'Cheapest: Tigor EV, about 720 INR total'
+            raise asyncio.CancelledError
+    executor, bindings, _, _ = await setup_executor(tmp_path, Declined)
+    await executor.execute(execution())
+    call = bindings.control.finish.call_args
+    assert call.args[2] == TaskState.COMPLETED and call.kwargs['error'] is None
+    assert call.kwargs['result'].answer.startswith('Not booked: you declined')
+    assert 'Tigor EV' in call.kwargs['result'].answer
+
+
+@pytest.mark.asyncio
 async def test_failed_save_never_reports_completed(tmp_path):
     class BrokenSave(Runtime):
         def __init__(self, *args):

@@ -2,13 +2,20 @@
   {
     "name": "flight_search",
     "task": "Find me a flight: one-way, economy, 1 adult, from Mumbai (BOM) to Delhi (DEL) on 12 November 2026. Use a public flight search site such as Google Flights. Report the 3 cheapest nonstop options with airline, departure/arrival times and price in INR, plus the source URL. Do not book anything.",
-    "runs": ["cold", "warm", "warm"],
+    "runs": [
+      "cold",
+      "warm",
+      "warm"
+    ],
     "timeout_seconds": 900
   },
   {
     "name": "cab_booking",
-    "task": "Book a cab from Chhatrapati Shivaji Maharaj International Airport Terminal 2, Mumbai to Bandra Kurla Complex, Mumbai, leaving now. Use a public ride fare estimator or ride-hailing site (for example Uber's price estimate page) to find the available ride types and fare estimates, choose the cheapest, then ask me to confirm before making any booking. If a login is required to book, tell me instead of logging in.",
-    "runs": ["cold", "warm"],
+    "task": "Book a cab from Chhatrapati Shivaji Maharaj International Airport Terminal 2, Mumbai to Bandra Kurla Complex, Mumbai, on 23 October 2026 at 10:00. Find the available cab options with fares, choose the cheapest, and ask me to confirm before booking anything.",
+    "runs": [
+      "cold",
+      "warm"
+    ],
     "timeout_seconds": 900
   }
 ]

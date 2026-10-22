@@ -185,7 +185,7 @@ Confirmation responses are exactly one of:
 {"kind":"confirmation","generation":2,"idempotency_key":"decision-owner-001","confirmed":false}
 ```
 
-`true` explicitly authorizes only the proposed action; `false` does not. `browser` responses use `browser_resolved:true`, only after the owner resolved that pause. A conflict/stale generation/expiry requires fetching status and reviewing the **new** interaction, never silently rebinding the old answer to it. The examples do not automatically retry private responses; after a lost response inspect status first. They do not claim every arbitrary website action can be classified or made exactly-once.
+`true` explicitly authorizes only the proposed action; `false` does not. A decline stops the agent immediately (no further model turns or browser actions) and the task ends `completed` with an answer that starts `Not booked: you declined this proposal` followed by the proposal text, so "find options, then ask me" requests still return the options. `browser` responses use `browser_resolved:true`, only after the owner resolved that pause. A conflict/stale generation/expiry requires fetching status and reviewing the **new** interaction, never silently rebinding the old answer to it. The examples do not automatically retry private responses; after a lost response inspect status first. They do not claim every arbitrary website action can be classified or made exactly-once.
 
 Help is minted only for `waiting_for_browser`:
 

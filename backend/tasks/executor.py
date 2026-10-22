@@ -150,8 +150,12 @@ class Executor:
             state = TaskState.CANCELLED if active.cancelled else TaskState.INTERRUPTED
             error = None if active.cancelled else task_error(ErrorCode.INTERRUPTED, 'Execution interrupted; inspect website state before a new task')
             if runtime is not None and runtime.declined:
-                state = TaskState.FAILED
-                error = task_error(ErrorCode.CONFLICT, 'Confirmation declined; no further actions authorized')
+                # The agent stays fenced (no model turn after a decline); the owner
+                # still gets the proposal they declined, which is usually the answer
+                # to "find options, then ask me".
+                state, error = TaskState.COMPLETED, None
+                result = TaskResult(answer='Not booked: you declined this proposal, so FlowPilot stopped without '
+                                           'taking any further action.\n\n' + runtime.declined_proposal)
         except TimeoutError:
             state = TaskState.INTERRUPTED
             error = task_error(ErrorCode.INTERRUPTED, 'Execution deadline exceeded; website effects may be partial')

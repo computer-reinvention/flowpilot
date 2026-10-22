@@ -422,10 +422,10 @@ def confirmation_decline(ctx):
     approve_after = code(owner.request('POST', path, {**response, 'confirmed': True, 'idempotency_key': run + ':decline-approve'}))
     assert approve_after == 'conflict'
     outcome = owner.wait(receipt['task_id'], timeout=120)
-    assert outcome['state'] == 'failed' and outcome['error']['code'] == 'conflict'
+    assert outcome['state'] == 'completed' and outcome['result']['answer'].startswith('Not booked: you declined')
     stable(owner, receipt['task_id'], outcome)
     assert ctx.counters().get('submit', 0) == before.get('submit', 0)
-    return {'terminal_state': 'failed', 'approve_after_decline': approve_after, 'submit_effects': 0}
+    return {'terminal_state': 'completed_declined', 'approve_after_decline': approve_after, 'submit_effects': 0}
 
 
 # --------------------------------------------------------------------------
