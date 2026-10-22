@@ -69,6 +69,8 @@ services:
       - ./.pi-auth:/app/.pi-auth
     environment:
       - FLOWPILOT_TRACE=${FLOWPILOT_TRACE:-0}
+      # Operator debugging only: tool calls with page text; keep empty for real users.
+      - FLOWPILOT_AGENT_TRACE_FILE=${FLOWPILOT_AGENT_TRACE_FILE:-}
       - DOCKER_HOST=tcp://docker-proxy:2375
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}

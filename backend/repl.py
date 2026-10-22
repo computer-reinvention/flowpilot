@@ -83,7 +83,7 @@ class BrowserSession:
     def __init__(self, user, state_dir=Path('.repl-state'), headless=True, human_help=None, verbose=True,
                  on_handoff=None, on_question=None, browser_mode='sandbox', *,
                  handoff_factory=None, sandbox_factory=None, browser_factory=None, observation_policy=None,
-                 store=None, hosted=False):
+                 store=None, hosted=False, on_progress=None):
         self.user = user
         self.store = store if store is not None else UserStore(Path(state_dir), user)
         self.hosted = hosted
@@ -101,6 +101,7 @@ class BrowserSession:
         self.handoff = None
         self.on_handoff = on_handoff
         self.on_question = on_question
+        self.on_progress = on_progress
         self.handoff_factory = handoff_factory
         self.sandbox_factory = sandbox_factory
         self.browser_factory = browser_factory
@@ -412,7 +413,8 @@ class BrowserSession:
             result = await drive_browser(self.browser, task, inputs, '', RunControl([False]), human, replay, save, on_event=event,
                                           interaction_tools={'request_input_values': request_input_values,
                                                              'request_confirmation': request_confirmation},
-                                          **({'observation_policy': self.observation_policy} if self.observation_policy is not None else {}))
+                                          **({'observation_policy': self.observation_policy} if self.observation_policy is not None else {}),
+                                          **({'on_progress': self.on_progress} if self.on_progress is not None else {}))
             return_value = {'answer': result, 'metrics': metrics}
         except asyncio.CancelledError:
             error = 'Human cancelled the request' if human_cancelled else 'Request cancelled'

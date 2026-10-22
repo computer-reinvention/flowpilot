@@ -14,9 +14,50 @@ def tool(name, description, properties, required=(), human=False):
                             "required": list(required), "additionalProperties": False}}
 
 
+def traced(dispatch):
+    """Operator debugging only (FLOWPILOT_AGENT_TRACE_FILE): tool calls with
+    truncated arguments and results, which can include page text and task
+    values. Off by default; never enable it for real users' tasks."""
+    import os
+    path = os.environ.get('FLOWPILOT_AGENT_TRACE_FILE')
+    if not path:
+        return dispatch
+
+    def write(entry):
+        with open(path, 'a') as handle:
+            handle.write(json.dumps(entry, default=str)[:4000] + '\n')
+
+    async def wrapper(name, args):
+        import time
+        began = time.monotonic()
+        try:
+            result = await dispatch(name, args)
+        except BaseException as exc:
+            write({'tool': name, 'args': str(args)[:800], 'error': f'{type(exc).__name__}: {exc}'[:800],
+                   'seconds': round(time.monotonic() - began, 2)})
+            raise
+        write({'tool': name, 'args': str(args)[:800], 'result': str(result)[:1500],
+               'seconds': round(time.monotonic() - began, 2)})
+        return result
+    return wrapper
+
+
+PROGRESS = {'observe': 'Reading the page', 'execute': 'Working on the page', 'run_reflex': 'Running a saved step',
+            'save_reflex': 'Saving a reusable step', 'complete': 'Checking the result'}
+
+
+def progress_summary(name, args):
+    """Owner-visible progress: the action and site only, never task values."""
+    if name == 'navigate':
+        from urllib.parse import urlparse
+        host = urlparse(str(args.get('url', ''))).hostname or ''
+        return f'Opening {host}'[:120] if host else 'Opening a page'
+    return PROGRESS.get(name)
+
+
 async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                         run_reflex, save_reflex, exploration_tools=None, on_event=None,
-                        interaction_tools=None, observation_policy=None, bind_reflex_inputs=None):
+                        interaction_tools=None, observation_policy=None, bind_reflex_inputs=None, on_progress=None):
     """bind_reflex_inputs(name, call_inputs) -> effective inputs, raising
     ReflexInputError for missing/invalid values before any guard or effect.
     Defaults to an optional `run_reflex.bind_inputs` attribute so callers keep
@@ -218,6 +259,10 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
             if fatal_fault is not None:
                 raise fatal_fault
             await control.checkpoint()
+            if on_progress is not None:
+                summary = progress_summary(name, args)
+                if summary:
+                    on_progress(summary)
             action_args = args
             if name == 'run_reflex':
                 # Input binding precedes freshness/no-progress guards: a rejected
@@ -347,7 +392,7 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                   "unless the work was a single navigation plus reading. Do not save sign-in, payment or booking-submission stages. "
                   "When reusing a saved stage, pass the values resolved from the request as run_reflex inputs. "
                   + REPLAY_CONTRACT + rules,
-                      definitions, dispatch, role="exploration" if exploration_tools else "agent",
+                      definitions, traced(dispatch), role="exploration" if exploration_tools else "agent",
                       checkpoint=control.checkpoint, **({"on_event": on_event} if on_event else {}))
     except asyncio.CancelledError:
         if fatal_fault is not None:

@@ -142,7 +142,8 @@ class ConversationRuntime:
                 store.path.name, store=store, hosted=True, verbose=False,
                 sandbox_factory=create_browser(self.settings, self.lease),
                 handoff_factory=lambda *args: HostedChannel(self),
-                on_question=self.question, observation_policy=self.bindings.observation)
+                on_question=self.question, observation_policy=self.bindings.observation,
+                on_progress=self.report_progress)
         except BaseException:
             store.close()
             raise
@@ -155,6 +156,29 @@ class ConversationRuntime:
             if (store.path / 'recovery-required').exists():
                 raise TaskFault(task_error(ErrorCode.PROFILE_RECOVERY_REQUIRED, 'Profile startup requires recovery')) from None
             raise
+
+    def report_progress(self, summary):
+        # Latest summary wins; a slow or failed update never delays or fails the task.
+        self.progress_summary = summary
+        if getattr(self, 'progress_task', None) is None or self.progress_task.done():
+            self.progress_task = asyncio.create_task(self._publish_progress())
+
+    async def _publish_progress(self):
+        published = None
+        while getattr(self, 'progress_summary', None) != published and not self.fenced:
+            published = self.progress_summary
+            try:
+                view = await self.control.get(self.lease.principal, self.lease.task_id, PollRequest())
+                await self.control.progress(self.lease, view.revision, published)
+            except Exception:
+                return
+
+    async def _stop_progress(self):
+        # A late progress write would race the executor's terminal revision.
+        progress = getattr(self, 'progress_task', None)
+        if progress is not None and not progress.done():
+            progress.cancel()
+            await asyncio.gather(progress, return_exceptions=True)
 
     def page(self):
         pages = self.session.context.pages
@@ -305,6 +329,7 @@ class ConversationRuntime:
 
     async def stop_writers(self):
         self.fenced = True
+        await self._stop_progress()
         async with self.stop_lock:
             if self.writers_stopped:
                 return
@@ -338,6 +363,7 @@ class ConversationRuntime:
 
     async def close(self):
         self.fenced = True
+        await self._stop_progress()
         await self.resume()
         if self.session:
             await self.session.__aexit__(None, None, None)

@@ -93,3 +93,10 @@ async def test_pi_preserves_handoff_and_reflex_metadata(monkeypatch):
                                    None, save, interaction_tools={'request_confirmation':confirmation})
     human.assert_awaited_once_with('OTP', 'auth')
     assert save.await_args.kwargs['pause_after_auth'] is True
+
+
+def test_progress_summary_reveals_only_action_and_host():
+    from backend.pi_browser import progress_summary
+    assert progress_summary('navigate', {'url': 'https://m.uber.com/go?pickup=Secret+Street&otp=123456'}) == 'Opening m.uber.com'
+    assert progress_summary('execute', {'script': 'async()=>"4111 1111"'}) == 'Working on the page'
+    assert progress_summary('request_input_values', {'fields_json': '[]'}) is None
