@@ -204,7 +204,7 @@ async def deterministic_driver(task, system, definitions, dispatch, **kwargs):
                       + '; while (Date.now() < end) {} await fetch("/effects",{method:"POST",body:JSON.stringify({action:"late"})}); return true; }')
     elif scenario == 'guards':
         from backend.task_contracts import TaskFault
-        await dispatch('navigate', {'url': url + '/frames'})
+        await dispatch('navigate', {'url': url + '/fullframe'})
         frame = await dispatch('observe', {})
         assert frame['readiness'] == 'unknown'
         GUARD_OBSERVATIONS['cross_origin'] = frame['readiness']

@@ -2,6 +2,7 @@
 """Run from any cwd; only loopback disposable services are accepted."""
 
 import argparse
+import os
 import asyncio
 import re
 import subprocess
@@ -69,6 +70,20 @@ def main():
             run_assembled_docker(evidence)
         except Exception as exc:
             evidence.record('assembled_docker_setup', 'failed', 'owned assembled Docker execution failed', exception_type=type(exc).__name__)
+        from tests.task_acceptance_support.script_reuse import check_script_reuse_repair
+        with tempfile.TemporaryDirectory() as state_dir:
+            evidence.check('script_reuse_repair', lambda: check_script_reuse_repair(state_dir), 'script_reuse_repair')
+
+        def save_failure():
+            # Real Docker save failure owned by its dedicated opt-in test (R1).
+            run = subprocess.run([sys.executable, '-m', 'pytest', '-q', '-p', 'no:cacheprovider',
+                                  'tests/test_task_executor_save_failure_docker.py'],
+                                 cwd=ROOT, env={**os.environ, 'FLOWPILOT_R1_SAVE_FAILURE_DOCKER': '1'},
+                                 capture_output=True, text=True, timeout=600)
+            if run.returncode != 0 or ' passed' not in run.stdout or 'skipped' in run.stdout:
+                raise AssertionError('profile save failure gate did not pass')
+            return {'proof': 'tests/test_task_executor_save_failure_docker.py'}
+        evidence.check('profile_save_failure', save_failure, 'profile_save_failure')
     print(evidence.write().relative_to(ROOT))
     return evidence.exit_code(args.require_complete or bool(args.base_url) or args.direct_resume or args.assembled_docker)
 

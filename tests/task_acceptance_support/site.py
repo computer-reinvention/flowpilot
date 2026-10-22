@@ -16,6 +16,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 
+FULL_FRAME = "style='position:fixed;inset:0;width:100vw;height:100vh;border:0'"
+
+
 class Site:
     def __init__(self, directory):
         self.run_id = "task-acceptance-" + uuid.uuid4().hex
@@ -53,7 +56,7 @@ class Site:
 {('<output data-result id="volatile-tick">0</output>') if volatile else ''}
 <button id='delay'>Delayed update</button><div id='state'>initial</div>
 <div id='drag' draggable='true'>Drag me</div><div id='drop'>Drop here</div>
-<a id='navigate' href='/next'>Next page</a>{f"<iframe src='{self.frame_url}/frame'></iframe>" if frames else ''}
+<a id='navigate' href='/next'>Next page</a>{f"<iframe src='{self.frame_url}/frame'{chr(32) + FULL_FRAME if frames == 'full' else ''}></iframe>" if frames else ''}
 <script>
 const effect = async action => {{ await fetch('/effects', {{method:'POST',body:JSON.stringify({{action}})}}); }};
 document.querySelector('#login').onclick = async () => {{
@@ -104,8 +107,9 @@ def synthetic_site(directory, browser_host='127.0.0.1', listen_host='127.0.0.1')
                 pass  # Expected at the effect/result fault boundary.
 
         def do_GET(self):
-            if self.path in {"/", "/next", "/volatile", "/frames"}:
-                self.send(200, site.page(volatile=self.path == '/volatile', frames=self.path == '/frames').encode(), "text/html")
+            if self.path in {"/", "/next", "/volatile", "/frames", "/fullframe"}:
+                frames = {'/frames': True, '/fullframe': 'full'}.get(self.path, False)
+                self.send(200, site.page(volatile=self.path == '/volatile', frames=frames).encode(), "text/html")
             elif self.path == "/frame":
                 self.send(200, b"<button id='frame' onclick=\"fetch('/effects',{method:'POST',body:JSON.stringify({action:'frame'})})\">Frame effect</button>", "text/html")
             elif self.path == "/counters":
