@@ -316,6 +316,7 @@ class ObservationPolicy:
         after = await self.observe(browser)
         if after.readiness != 'ready':
             raise _fault(ErrorCode.READINESS_TIMEOUT, 'Action outcome unknown: browser did not become ready; do not replay')
+        return after
 
     async def resolve_reference(self, browser, observation, reference):
         """Validate a reference, never silently remap an index or choose a duplicate.

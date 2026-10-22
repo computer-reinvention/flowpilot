@@ -149,6 +149,7 @@ async def _execute_reflex(
     *,
     observation_policy=None,
     expected_observation=None,
+    on_settled=None,
 ) -> tuple[bool, str]:
     """Execute a reflex JS script via the Actor API. No LLM calls.
 
@@ -216,7 +217,9 @@ async def _execute_reflex(
         if isinstance(value, dict) and value.get("needs_human"):
             return False, "NEEDS_HUMAN: " + json.dumps(value)[:4000]
         if observation_policy is not None:
-            await observation_policy.after_action(browser_session, observation, 'reflex')
+            settled = await observation_policy.after_action(browser_session, observation, 'reflex')
+            if on_settled is not None and settled is not None:
+                on_settled(settled)
         trace("execute_reflex.ok")
         return True, json.dumps(value, ensure_ascii=False)[:8000] if value is not None else "Reflex executed successfully"
     except Exception as e:

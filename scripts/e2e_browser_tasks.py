@@ -155,7 +155,7 @@ def main():
         runs = scenario.get("runs", ["cold"])
         # "profile_of" runs a different request in another scenario's profile, so its
         # saved stages must generalize to new values rather than replay old ones.
-        profile_id = profiles.get(scenario.get("profile_of"))
+        profile_id = scenario.get("profile_id") or profiles.get(scenario.get("profile_of"))
         for label in runs:
             print(f"== {scenario['name']} [{label}]", flush=True)
             # Warm runs reuse the cold run's profile so saved reflexes and cookies apply.

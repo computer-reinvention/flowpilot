@@ -364,6 +364,10 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                 call_inputs = args.get('inputs') or {}
                 if not isinstance(call_inputs, dict):
                     raise ValueError('inputs must be an object of named values')
+                short = [key for key in call_inputs if len(str(key)) < 3]
+                if short:
+                    raise ValueError(f'Input names must describe the value ({", ".join(short)} is too short): use names like '
+                                     'pickup, drop, date, time, origin, destination, query. Nothing ran.')
                 from urllib.parse import unquote_plus
                 source = (unquote_plus(str(args.get('url', ''))) if name == 'navigate' else
                           ' '.join(str(args.get(k, '')) for k in ('script', 'precondition', 'postcondition')))
@@ -400,7 +404,8 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                 raise RuntimeError('Page changed since observation; call observe before further browser actions')
             if guarded and observation_policy is not None:
                 if observation is None:
-                    raise RuntimeError('Call observe before browser actions')
+                    observation = await observation_policy.observe(browser)
+                    observed_identity = await page_identity()
                 await observation_policy.require_fresh(browser, observation)
                 signature = hashlib.sha256(json.dumps([name, action_args, inputs], sort_keys=True, default=str).encode()).hexdigest()
                 if signature in consumed_actions:

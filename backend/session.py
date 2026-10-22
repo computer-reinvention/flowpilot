@@ -417,16 +417,21 @@ class BrowserSession:
             policy = self.observation_policy
             options = {'observation_policy': policy} if policy is not None else {}
             detail = 'Reflex executed successfully'
+            settled = []  # the snapshot the previous step settled on: still checked fresh
             for index, step in enumerate(steps):
                 label = f"step {index + 1} of {len(steps)}" + (f" ({step['description']})" if step.get('description') else '')
                 if step['type'] == 'navigate':
                     page = await self.browser.must_get_current_page()
                     await page.goto(fill_template(step['url'], stage_inputs))
-                    if policy is not None and (await policy.observe(self.browser)).readiness != 'ready':
-                        return False, f'{label} opened a page that did not settle' + (f'\n{PARTIAL_EFFECTS}' if index else '')
+                    if policy is not None:
+                        landed = await policy.observe(self.browser)
+                        if landed.readiness != 'ready':
+                            return False, f'{label} opened a page that did not settle' + (f'\n{PARTIAL_EFFECTS}' if index else '')
+                        settled[:] = [landed]
                     continue
                 if policy is not None:
-                    options['expected_observation'] = await policy.observe(self.browser)
+                    options['expected_observation'] = settled[0] if settled else await policy.observe(self.browser)
+                    options['on_settled'] = lambda snapshot: settled.__setitem__(slice(None), [snapshot])
                 ok, detail = await _execute_reflex(step['script'], stage_inputs, '', self.browser, **options)
                 if not ok:
                     done = f'Steps 1-{index} completed; ' if index else ''
