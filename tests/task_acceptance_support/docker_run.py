@@ -16,6 +16,10 @@ from .wire import ROOT
 from .security import scan_blobs
 
 TOOLS_IMAGE = 'flowpilot-lane005-tools:verify'  # Existing local lane005 image: caddy + age.
+# Browser image pinned by ID (the one prior lane006 evidence used). The local
+# `flowpilot-sandbox:latest` tag is shared and parallel lanes rebuild it mid-run.
+SANDBOX_PIN = os.environ.get('TASK_ACCEPTANCE_SANDBOX_IMAGE',
+                             'sha256:5725dc387dab4ce81d4f68358523de708118ea3a39a2edea0e0bd182b31aba2d')
 
 
 def synthetic_secret():
@@ -55,7 +59,8 @@ def run_local_chat(evidence, network, run, results, marker, backend):
         cwd = Path(directory) / 'cwd'
         cwd.mkdir()
         env = {name: os.environ[name] for name in ('PATH', 'HOME', 'TMPDIR', 'LANG', 'DOCKER_HOST') if name in os.environ}
-        env.update({'SANDBOX_NETWORK': network, 'PYTHONPATH': str(ROOT), 'TASK_ACCEPTANCE_RUN_ID': run})
+        env.update({'SANDBOX_NETWORK': network, 'PYTHONPATH': str(ROOT), 'TASK_ACCEPTANCE_RUN_ID': run,
+                    'TASK_ACCEPTANCE_SANDBOX_IMAGE': SANDBOX_PIN})
         with synthetic_site(directory, 'host.docker.internal') as site:
             def ask(scenario):
                 request = 'acceptance:' + json.dumps({'scenario': scenario, 'url': site.browser_url})
@@ -83,8 +88,9 @@ def run_assembled_docker(evidence):
     client = docker.from_env()
     run = evidence.run_id
     labels = {'task-acceptance-run': run}
-    image = client.images.get('flowpilot-backend:latest')
-    sandbox = client.images.get('flowpilot-sandbox:latest')
+    image = client.images.get(os.environ.get('TASK_ACCEPTANCE_BACKEND_IMAGE', 'sha256:163eb2e0517aaac2d52188815f81edb18dc305b62b9ee4fc7c3c55dce3f162be'))
+    sandbox = client.images.get(SANDBOX_PIN)
+    current_tag = client.images.get('flowpilot-sandbox:latest')
     tools = client.images.get(TOOLS_IMAGE)
     revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     values = {name: synthetic_secret() for name in ('otp_main', 'otp_mismatch', 'otp_pending', 'otp_held', 'otp_expired',
@@ -106,7 +112,7 @@ def run_assembled_docker(evidence):
                              'TASK_ACCEPTANCE_SECRETS_JSON': json.dumps(values), 'TASK_ACCEPTANCE_SCENARIOS': scenarios,
                              'TASK_ACCEPTANCE_HOST_ROOT': str(ROOT), 'TASK_ACCEPTANCE_HOST_STATE': directory,
                              'TASK_ACCEPTANCE_HOST_OPS': ops, 'TASK_ACCEPTANCE_TOOLS_IMAGE': tools.id,
-                             'TASK_ACCEPTANCE_REVISION': revision, 'TASK_ACCEPTANCE_FRONTEND_DIR': '/ui',
+                             'TASK_ACCEPTANCE_REVISION': revision, 'TASK_ACCEPTANCE_SANDBOX_IMAGE': sandbox.id, 'TASK_ACCEPTANCE_FRONTEND_DIR': '/ui',
                              'FLOWPILOT_TASKS_API_REQUESTS_PER_MINUTE': '10000', 'FLOWPILOT_TASKS_LOGIN_REQUESTS_PER_MINUTE': '100'},
                 volumes={str(ROOT): {'bind': '/lane', 'mode': 'ro'}, directory: {'bind': '/state', 'mode': 'rw'},
                          ops: {'bind': '/ops', 'mode': 'rw'}, str(frontend): {'bind': '/ui', 'mode': 'ro'},
@@ -150,7 +156,7 @@ def run_assembled_docker(evidence):
             settle_requirement(evidence, 'compatibility', ['real_legacy_flow_api', 'real_ui_boundary_browser', 'real_local_chat_repl'])
             evidence.record('assembled_topology', 'passed' if result['StatusCode'] == 0 else 'failed',
                             'actual backend/browser on owned Docker bridge; no provider credentials; PID input 1024; legacy cleanup never invoked',
-                            backend_image_id=image.id, sandbox_image_id=sandbox.id, tools_image_id=tools.id,
+                            backend_image_id=image.id, sandbox_image_id=sandbox.id, sandbox_tag_latest_id_unused=current_tag.id, tools_image_id=tools.id,
                             frontend_lock_sha256=lock_hash, network_label=run, sandbox_pids=1024, backend_exit=result['StatusCode'],
                             api_requests_per_minute=10000, login_requests_per_minute=100,
                             limitations='Existing local images, not proof of lane005 packaged network policy or live-provider quality')

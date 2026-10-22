@@ -307,6 +307,16 @@ UI_SCRIPT = r'''async (inputs) => {
 }'''
 
 
+def pin_sandbox_image():
+    """Use the launcher-pinned browser image ID, not the shared mutable local tag
+    that parallel lanes may rebuild mid-run. Same image the evidence records."""
+    from backend import sandbox
+    pinned = os.environ.get('TASK_ACCEPTANCE_SANDBOX_IMAGE')
+    if pinned:
+        assert pinned.startswith('sha256:')
+        sandbox.SANDBOX_IMAGE = pinned
+
+
 def build_app(audit_holder):
     from fastapi import FastAPI
     from backend import auth, db, main, pi_browser
@@ -322,6 +332,7 @@ def build_app(audit_holder):
     from backend.observation import create_observation
 
     pi_browser.run_pi = deterministic_driver  # The sole conversational/model substitute.
+    pin_sandbox_image()
 
     class InstrumentedSession(BrowserSession):
         async def __aenter__(self):

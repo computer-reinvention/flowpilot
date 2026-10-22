@@ -13,9 +13,10 @@ import sys
 def main():
     import dotenv
     from backend import pi_browser
-    from .assembled_run import deterministic_driver
+    from .assembled_run import deterministic_driver, pin_sandbox_image
     dotenv.load_dotenv = lambda *args, **kwargs: False  # Never read a parent .env.
     pi_browser.run_pi = deterministic_driver
+    pin_sandbox_image()
     from backend.repl import main as repl_main
     sys.argv = ['backend.repl', *sys.argv[1:]]
     asyncio.run(repl_main())
