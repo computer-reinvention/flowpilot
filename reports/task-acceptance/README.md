@@ -2,7 +2,51 @@
 
 **Acceptance evidence, not a deployment approval.** Foundation: `0ccc06a005c3ff680110de6b66a6606a4e48d3d3`. Authorized amendments `2201b5a`/`561383d` are local `2ff7646`/`c06505a`. Following explicit integrator authority, main `8d6d2f845e5b92e5bdb757631bd06ee3ceee0fb7` was merged as `cf73e2c` for assembled testing. No production repairs, shared fixture edits, provider credentials, deployment, Harp changes or external website effects occurred.
 
-## Latest assembled checkpoint (supersedes pre-assembly gaps below)
+## R4 gate closure (supersedes the unmet list in the next section)
+
+**Final clean-source result:** `task-acceptance-6819b31e8ae449138d8d80bf4c9f8c93/evidence.json`, revision **`3f3109d1ac9ae71f348434cd73077fd00b21a3c7`**, `working_tree_dirty: false`, `scenario_selection: all`. **38 passed checks, zero failed.** The same command still exits **2**, because exactly these requirements remain unmet by design: `profile_save_failure` and `script_reuse_repair` (owned by other lanes), `packaged_network` (needs a real Linux host), and `provider_backed` and `hosted_postdeployment` (not authorized). Every other requirement in the inventory is `passed`, each with its `proof_checks` list.
+
+```sh
+/Users/pgwork/Desktop/code/flowpilot/.venv/bin/python scripts/verify_task_system.py --assembled-docker --deterministic-local --require-complete
+```
+
+Pinned inputs: backend `sha256:163eb2e0…`, browser `sha256:5725dc38…`, tools `sha256:e7e1d5cc…`. The tools image is lane005's local `flowpilot-lane005-tools:verify`; it supplies `caddy` 2.10.2 and `age`. The local `flowpilot-sandbox:latest` tag is shared, and a parallel lane rebuilt it mid-session as `r3-trixie` (`sha256:f8d654c9…`). With that image, one run's seed task ended `profile_recovery_required`. The launcher therefore pins the browser and backend images by ID. It does this by setting the `backend.sandbox.SANDBOX_IMAGE` module value inside the harness process only, and it records the unused tag ID. This is not a production change.
+
+Each gate below is proven only by actual services, real Docker browsers and real HTTP/WSS. No strict peers or mocks are counted.
+
+| Requirement | Proof checks (all must pass) | What is exercised |
+| --- | --- | --- |
+| `questions_secrets` | `real_question_transient_delivery`, `real_question_secret_restart`, `real_interaction_expiry`, `real_secret_canary_full_scan` | **Rejected without delivery:** foreign owner, wrong generation, wrong kind and missing/extra fields. **Receipts:** the duplicate receipt and post-completion replay are byte-identical; a same key with a different value and a new key after the decision both conflict. **Delivery:** the current driver receives the OTP exactly once (hash only), and the website verifies it by digest exactly once. **SIGKILL, answer still pending:** state `interrupted`, the late answer is stale, and the secret is never used. **SIGKILL, secret held only in executor memory:** state `interrupted`, the replay receipt is never re-delivered, and the website is not used. **Elapsed 6 s human wait:** state `interrupted`, the late answer is stale, and the secret is not delivered. |
+| `confirmation_decline` | `real_confirmation_decline`, `real_confirmation_approve_matrix`, `real_interaction_expiry` | **Approve:** submits exactly once. **Rejected:** foreign approve/decline (not_found), wrong generation, wrong kind, and a key already bound to another interaction (conflict). **Duplicates:** the duplicate receipt is identical, and decline-after-approve or approve-after-decline conflicts. **Decline:** fails closed with zero submits. **Expired confirmation:** the late approve is stale and there are zero submits. |
+| `assistance_tls` | `real_tls_proxy_assistance` | The unmodified `scripts/ops_Caddyfile` runs in the backend network namespace with a Caddy local CA. A default trust store refuses the certificate. **Through the proxy:** viewer HTML/PNG/state and pointer/keyboard/type input work. **Origin checks:** an http-scheme, foreign, missing or cross-site Origin returns `not_found`; client `X-Forwarded-Proto`/`Forwarded` spoofing is ignored. **WSS:** bad origins are refused; rotation refuses the old stream; an **active WSS closes 0.15 s after natural capability expiry**. **Completion:** the viewer resume completes a DOM-verified task. **Logs:** proxy logs contain no capability token or variant and no `/browser-tasks/help/` path. An oversized capability input is refused (`422` from the backend's 131,072-byte bound before Caddy's 128 KB bound triggers). |
+| `assistance_atomic_commit` | `real_assistance_atomic_commit` | The harness-owned `ControlAudit` proxy holds `save_capability` after the real `assistance_lease` lookup (call order recorded). **Resolve or cancel inside the window:** the mint returns `410 assistance_expired` and there are 0 `bt_capabilities` rows. **Unperturbed control:** returns 201 with 1 row. There is no HTTP failpoint. |
+| `cancel_fencing` | `real_cancel_fencing` | **Long-running JS:** a 10 s renderer busy-loop is cancelled to `cancelled` in about 1.8 s. The browser is stopped and the post-loop page effect never fires. **Bystander:** a paused task on another profile keeps its browser and capability. **Held human writer:** a real mouse operation is held under the runtime writer lock. Late `finish(completed)`/`progress` during `cancelling` both conflict. The task settles to `interrupted`, the held input returns 503 after release, later capability access is `assistance_expired`, and the terminal view stays immutable. **Stale callbacks:** genuine stale execution leases are replayed into the real Control/Executor (progress, finish, wait_for_interaction, require_approval, assistance_lease, save_capability, executor browser/release_human). All are rejected, the view and profile are unchanged, and the reservation release is an idempotent no-op. |
+| `artifact_secret_scan` | `real_secret_snapshot_scan`, `real_secret_canary_full_scan` | **Canaries:** 9 OTP/password canaries plus 6 capability tokens, with transform-sensitive characters. Each has 17 variants: raw, URL, `quote_plus`, JSON ascii/unicode/double-escaped, HTML, hex, UTF-16LE/BE and base64/base64url at all three byte alignments. **Scope:** all of `/state` (SQLite+WAL, histories, profile archives with 5,313 tar members expanded in memory) and the backup plus restored state. **Logs and results:** live task-browser container logs, Chromium console, Caddy logs, backend logs (in-container and host-side), local REPL output and 12 task result views. Raw tracing is disabled and zero trace files exist. Result: 0 findings and 0 gaps. |
+| `operations` | `real_ops_backup_restore_continue` | **Backup:** `scripts/ops_backup.py` takes an age-encrypted backup of the quiesced service state; overwriting an existing archive and restoring at the wrong revision are both refused. **Restore and continue:** after restore, a fresh composition serves identical task history and keeps the revoked key revoked. A follow-up on the restored session/profile restores cookies/localStorage and reuses the saved script, without repeating the prerequisite. **Disk pressure:** `scripts/ops_config.py --runtime` reports `BLOCKER: DISK_LOW` on a 64 MiB tmpfs, but not on a 2 GiB tmpfs. |
+| `compatibility` | `real_legacy_flow_api`, `real_ui_boundary_browser`, `real_local_chat_repl` | **Legacy flow API:** CRUD, run listing, v1 run lookup by JWT and API key, and 401 for unauthenticated writes, while a task pause stays unchanged. **UI:** this revision's SPA, built offline from the identical lockfile, is served by the composed app. API routes are not shadowed. Real Chromium performs login and shows the browser-task profile list and API-key list (no plaintext key), while a live task stays unchanged. **REPL:** the `./chat` entry (`backend.repl` main) runs two processes on a real Docker browser, persisting cookies/storage and reusing the saved script, concurrently with the task service. |
+
+Harness-only instrumentation, none of it in production code and none reachable over HTTP:
+
+- `ControlAudit`: a transparent Control proxy that records leases and holds one armed `save_capability` failpoint.
+- The existing low-level input gate and `ReleaseAudit`.
+- In-process driver barriers.
+- Replacement of `pi_browser.run_pi` with the deterministic model.
+- Suppression of `.env` discovery in the REPL launcher.
+- The `SANDBOX_IMAGE` pin.
+- `faulthandler` on SIGUSR1 in owned server children, for hang triage.
+
+Development runs may set `TASK_ACCEPTANCE_SCENARIOS`; any unselected gate stays `blocked`, and the report records `scenario_selection`.
+
+Observations (not repaired, not counted as passes):
+
+1. **SPA on a plain-HTTP, non-localhost origin (frontend/004).** `crypto.randomUUID` exists only in secure contexts, so after login the React root unmounts with `Uncaught TypeError: crypto.randomUUID is not a function`.
+   - Reproducer: serve the composed app at `http://<container-name>:8080/` and log in from a task browser on the bridge.
+   - Production HTTPS and `http://localhost` are unaffected; the gate uses localhost.
+2. **Shared browser image tag rebuilt mid-session (integrator / lane R3).** The `r3-trixie` browser image (`f8d654c9…`), used with this base revision, ended one seed task with `profile_recovery_required`.
+   - This was not root-caused.
+3. **Legacy `/api/flows` GET routes need no authentication and are global.** This is pre-existing legacy design, recorded only as an observation.
+
+## Earlier assembled checkpoint (pre-R4)
 
 **Final clean-source result:** `task-acceptance-3fce85f79237496eb484aa04e308f99c/evidence.json`, revision **`4693718d1a0477f71ad59b8bafde4b3c6d714109`**, `working_tree_dirty: false`: **27 passed checks, zero failed**. Complete-inventory command exits **2**, deliberately not a readiness pass. This includes actual 004 standalone CLI subprocesses, backend log/DB canary checks and observed run-scoped Docker cleanup. All earlier dirty-source records below are historical, not substituted for this clean pin.
 

@@ -1,0 +1,673 @@
+{
+  "schema_version": 1,
+  "run_id": "task-acceptance-6819b31e8ae449138d8d80bf4c9f8c93",
+  "kind": "system",
+  "created_at": "2026-10-22T00:37:00.066064+00:00",
+  "revision": "3f3109d1ac9ae71f348434cd73077fd00b21a3c7",
+  "working_tree_dirty": false,
+  "foundation_revision": "0ccc06a005c3ff680110de6b66a6606a4e48d3d3",
+  "fixture_sha256": {
+    "exchanges.json": "bd835f7da2a503f9f101c717469d2f2c2a66b9aca8bfbb06781dc7ff4c89d492",
+    "policy.json": "ca892edb4d3600a67b4725e3831b50d57b23c499136901ea814075e6b95f752d",
+    "viewer_commands.json": "44e94766fe88a30575b099636a902ca51bb2c91eefcf9bc87f03cc73a5b5d38c"
+  },
+  "scenario_selection": "all",
+  "checks": [
+    {
+      "name": "real_local_chat_repl",
+      "outcome": "passed",
+      "detail": "`./chat` entry (backend.repl main) with real Docker browser, persisted cookies/localStorage and saved script across two REPL processes, concurrent with the task service; deterministic model only",
+      "repl_processes": 2,
+      "script_reused": 1,
+      "prerequisite_repeated": 0,
+      "first_saved": 1
+    },
+    {
+      "name": "real_backend_log_canaries",
+      "outcome": "passed",
+      "detail": "actual backend and local REPL stdout/stderr scanned for every OTP/password canary in raw and transformed variants without retaining raw logs",
+      "canaries": 9,
+      "findings": 0,
+      "plaintext_key_patterns": 0
+    },
+    {
+      "name": "onboarding_real_http",
+      "outcome": "passed",
+      "detail": "real account signup/login/key routes and no-store; no SDK client"
+    },
+    {
+      "name": "owned_profile_authority",
+      "outcome": "passed",
+      "detail": "assertions verified",
+      "foreign_profiles_checked": 2
+    },
+    {
+      "name": "same_account_key_scope",
+      "outcome": "passed",
+      "detail": "assertions verified",
+      "same_account_keys": 2,
+      "distinct_preserved_profiles": 2,
+      "limitations": "HTTP authority/explicit profile namespace only; website cookie/script/history separation is a different gate"
+    },
+    {
+      "name": "concurrent_admission_observation",
+      "outcome": "passed",
+      "detail": "actual admission receipts compared including revision",
+      "distinct_task_ids": 1,
+      "revisions": [
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "name": "seed_terminal_observation",
+      "outcome": "passed",
+      "detail": "actual executor terminal status",
+      "state": "completed",
+      "error_code": null,
+      "effect_counters": {
+        "cart": 1,
+        "prerequisite": 1
+      }
+    },
+    {
+      "name": "real_browser_followup_idempotency",
+      "outcome": "passed",
+      "detail": "concurrent HTTP admission once; durable profile cookie/storage and saved script restored; fresh client follow-up",
+      "admission_attempts": 4,
+      "distinct_tasks": 1,
+      "effect_counters": {
+        "cart": 2,
+        "prerequisite": 1
+      }
+    },
+    {
+      "name": "real_browser_profile_separation",
+      "outcome": "passed",
+      "detail": "same-account second profile and foreign account have no private cookie/localStorage/cart state"
+    },
+    {
+      "name": "real_published_standalone_client",
+      "outcome": "passed",
+      "detail": "004 unmodified stdlib CLI runs profile-create/start/poll/profile-delete in separate processes outside repository cwd; key only in environment, no SDK/backend imports"
+    },
+    {
+      "name": "real_pi_state_guards",
+      "outcome": "passed",
+      "detail": "native policy through real Pi dispatch: cross-origin unknown, volatile not-ready, delayed same-URL stale action and consumed-action repeat fenced",
+      "cross_origin": "unknown",
+      "volatile": "timeout",
+      "same_url_stale": "stale_generation",
+      "repeat": "no_progress"
+    },
+    {
+      "name": "real_paused_capacity_before_spawn",
+      "outcome": "passed",
+      "detail": "real paused containers count toward account/global caps; busy session/profile and overload reject without spawning; cancellation releases all three",
+      "paused_account_cap": 2,
+      "paused_global_cap": 3,
+      "rejected_spawns": 0,
+      "remaining_browsers": 0
+    },
+    {
+      "name": "real_question_transient_delivery",
+      "outcome": "passed",
+      "detail": "assertions verified against actual services",
+      "rejections": {
+        "foreign_owner": "not_found",
+        "wrong_generation": "stale_generation",
+        "wrong_kind": "stale_generation",
+        "missing_field": "invalid_input",
+        "extra_field": "invalid_input",
+        "same_key_mismatched_value": "conflict",
+        "new_key_after_decision": "conflict"
+      },
+      "deliveries_to_current_driver": 1,
+      "website_otp_uses": 1,
+      "duplicate_receipt_identical": true,
+      "post_completion_replay_identical": true,
+      "browser_log_containers_captured": 1,
+      "result_and_receipt_scan_findings": 0
+    },
+    {
+      "name": "real_confirmation_decline",
+      "outcome": "passed",
+      "detail": "assertions verified against actual services",
+      "terminal_state": "failed",
+      "approve_after_decline": "conflict",
+      "submit_effects": 0
+    },
+    {
+      "name": "real_confirmation_approve_matrix",
+      "outcome": "passed",
+      "detail": "assertions verified against actual services",
+      "rejections": {
+        "foreign_approve": "not_found",
+        "foreign_decline": "not_found",
+        "wrong_generation": "stale_generation",
+        "wrong_kind": "stale_generation",
+        "key_bound_to_other_interaction": "conflict",
+        "decline_after_approval": "conflict"
+      },
+      "approved_submit_effects": 1,
+      "duplicate_receipt_identical": true
+    },
+    {
+      "name": "real_viewer_generation_metadata",
+      "outcome": "passed",
+      "detail": "real HTML/PNG/pointer/keyboard/type and viewer resume; second pause uses same private execution epoch, distinct public pause generation",
+      "pause_generations": [
+        1,
+        2
+      ],
+      "viewport_only": true
+    },
+    {
+      "name": "real_wallclock_expiry",
+      "outcome": "passed",
+      "detail": "active-pause grant elapsed naturally and rejects state and input; no clock mocking"
+    },
+    {
+      "name": "real_private_viewer_resume",
+      "outcome": "passed",
+      "detail": "actual model completion checks DOM text entered through human capability, not an API-key viewer shortcut"
+    },
+    {
+      "name": "direct_api_resume_drain",
+      "outcome": "passed",
+      "detail": "real stream/input/Control/Executor with actual writer lock; only owned low-level mouse gate and release failure injection",
+      "proof_kind": "assembled",
+      "mode": "success",
+      "active_stream": true,
+      "held_input": true,
+      "direct_authenticated_response": true,
+      "wrong_generation_releases": 0,
+      "agent_effects": 1
+    },
+    {
+      "name": "resume_release_failure",
+      "outcome": "passed",
+      "detail": "real stream/input/Control/Executor with actual writer lock; only owned low-level mouse gate and release failure injection",
+      "proof_kind": "assembled",
+      "mode": "failure",
+      "active_stream": true,
+      "held_input": true,
+      "direct_authenticated_response": true,
+      "wrong_generation_releases": 0,
+      "agent_effects": 0
+    },
+    {
+      "name": "real_cancel_failure",
+      "outcome": "passed",
+      "detail": "held failure scenario browser stopped/saved and task cancelled after cleanup"
+    },
+    {
+      "name": "resume_release_timeout",
+      "outcome": "passed",
+      "detail": "real stream/input/Control/Executor with actual writer lock; only owned low-level mouse gate and release failure injection",
+      "proof_kind": "assembled",
+      "mode": "timeout",
+      "active_stream": true,
+      "held_input": true,
+      "direct_authenticated_response": true,
+      "wrong_generation_releases": 0,
+      "agent_effects": 0
+    },
+    {
+      "name": "real_cancel_timeout",
+      "outcome": "passed",
+      "detail": "held failure scenario browser stopped/saved and task cancelled after cleanup"
+    },
+    {
+      "name": "real_assistance_atomic_commit",
+      "outcome": "passed",
+      "detail": "assertions verified against actual services",
+      "failpoint": "ControlAudit.save_capability after assistance_lease lookup (harness-owned, not HTTP)",
+      "cases": {
+        "control": {
+          "mint_status": 201,
+          "capability_rows": 1,
+          "call_order": [
+            "assistance_lease",
+            "assistance_lease",
+            "assistance_lease",
+            "assistance_lease"
+          ]
+        },
+        "resolve": {
+          "mint_status": 410,
+          "mint_error": "assistance_expired",
+          "capability_rows": 0,
+          "call_order": [
+            "assistance_lease",
+            "revoke_capabilities",
+            "save_capability"
+          ]
+        },
+        "cancel": {
+          "mint_status": 410,
+          "mint_error": "assistance_expired",
+          "capability_rows": 0,
+          "call_order": [
+            "assistance_lease",
+            "revoke_capabilities",
+            "save_capability"
+          ]
+        }
+      }
+    },
+    {
+      "name": "real_cancel_fencing",
+      "outcome": "passed",
+      "detail": "assertions verified against actual services",
+      "long_running_js": {
+        "terminal_state": "cancelled",
+        "error_code": null,
+        "seconds_from_js_start_to_terminal": 1.8,
+        "browser_running_after_terminal": false,
+        "late_page_effects": 0,
+        "stale_callbacks": {
+          "progress": "conflict",
+          "finish_completed": "conflict",
+          "wait_for_interaction": "conflict",
+          "require_approval": "conflict",
+          "assistance_lease": "stale_generation",
+          "save_capability": "assistance_expired",
+          "executor_browser": "stale_generation",
+          "executor_release_human": "stale_generation"
+        }
+      },
+      "bystander_unaffected": true,
+      "held_human_writer": {
+        "state_while_writer_held": "cancelling",
+        "late_callbacks_while_cancelling": {
+          "finish_completed": "conflict",
+          "progress": "conflict"
+        },
+        "terminal_state_with_writer_held": "interrupted",
+        "held_input_status_after_release": 503,
+        "terminal_immutable_after_release": true,
+        "stale_callbacks": {
+          "progress": "stale_generation",
+          "finish_completed": "stale_generation",
+          "wait_for_interaction": "stale_generation",
+          "require_approval": "stale_generation",
+          "assistance_lease": "stale_generation",
+          "save_capability": "stale_generation",
+          "executor_browser": "stale_generation",
+          "executor_release_human": "stale_generation"
+        }
+      }
+    },
+    {
+      "name": "real_tls_proxy_assistance",
+      "outcome": "passed",
+      "detail": "assertions verified against actual services",
+      "proxy": "scripts/ops_Caddyfile unmodified",
+      "proxy_image_id": "sha256:e7e1d5cca899c370100a630adfe03753269cd904e9364961a07305a5add19487",
+      "tls_verified": true,
+      "viewer_html_png_state": true,
+      "input_origin_rejections": {
+        "http_scheme_origin": "not_found",
+        "foreign_origin": "not_found",
+        "missing_origin": "not_found",
+        "cross_site_fetch": "not_found"
+      },
+      "forwarding_spoof_ignored": true,
+      "oversized_body_status": 422,
+      "wss_initial": {
+        "bad_origin_refused": {
+          "http_scheme_origin": true,
+          "foreign_origin": true
+        },
+        "frames": 2,
+        "closed_seconds_after_expiry": null
+      },
+      "rotated_capability_stream_refused": true,
+      "wss_natural_expiry": {
+        "bad_origin_refused": {
+          "http_scheme_origin": true,
+          "foreign_origin": true
+        },
+        "frames": 100,
+        "closed_seconds_after_expiry": 0.153115
+      },
+      "dom_effect_via_tls_viewer_completed": true,
+      "proxy_log_bytes": 4186,
+      "proxy_log_capability_findings": 0
+    },
+    {
+      "name": "real_legacy_flow_api",
+      "outcome": "passed",
+      "detail": "assertions verified against actual services",
+      "legacy_flow_crud": true,
+      "legacy_runs_list": true,
+      "unauthenticated_flow_write": 401,
+      "task_paused_alongside_unchanged": true
+    },
+    {
+      "name": "real_ui_boundary_browser",
+      "outcome": "passed",
+      "detail": "assertions verified against actual services",
+      "frontend_index_sha256": "2cdde16bd492646748eef6656ec570c76226ab6d09ed527f0a8e9fdfadac635b",
+      "spa_served_with_task_api": true,
+      "api_routes_not_shadowed": 3,
+      "real_browser_login": true,
+      "ui_lists_task_profile_via_session": true,
+      "ui_api_keys_no_plaintext": true,
+      "live_task_unchanged": true,
+      "browser_console_lines": 0,
+      "limitation": "harness Chromium on http://localhost (secure context); SPA crashes on plain-HTTP non-localhost origins"
+    },
+    {
+      "name": "real_revocation_no_store",
+      "outcome": "passed",
+      "detail": "revoked API key cannot perform subsequent control calls"
+    },
+    {
+      "name": "real_key_hash_at_rest",
+      "outcome": "passed",
+      "detail": "assertions verified",
+      "verified_synthetic_keys": 1,
+      "snapshot_files_scanned": 46
+    },
+    {
+      "name": "real_secret_snapshot_scan",
+      "outcome": "passed",
+      "detail": "actual SQLite/history/state scan including in-memory expansion of profile archives",
+      "files_scanned": 58,
+      "bytes_scanned": 62169334,
+      "archive_members_scanned": 2555,
+      "findings": [],
+      "gaps": []
+    },
+    {
+      "name": "real_crash_after_website_effect",
+      "outcome": "passed",
+      "detail": "assertions verified",
+      "backend_signal": "SIGKILL",
+      "recovered_state": "interrupted",
+      "extra_cart_effects": 1,
+      "extra_agent_effects": 0,
+      "automatic_replay": false,
+      "same_admission_receipt": true,
+      "prior_capability_rejected": true,
+      "recovery_profile_deleted_explicitly": true
+    },
+    {
+      "name": "real_question_secret_restart",
+      "outcome": "passed",
+      "detail": "assertions verified against actual services",
+      "backend_signal": "SIGKILL",
+      "cases": {
+        "pending": {
+          "recovered_state": "interrupted",
+          "late_answer": "stale_generation"
+        },
+        "held": {
+          "recovered_state": "interrupted",
+          "same_key_replay_status": 202,
+          "different_value_same_key": "conflict",
+          "new_key": "conflict"
+        }
+      },
+      "website_secret_uses_after_crash": 0,
+      "automatic_replay": false
+    },
+    {
+      "name": "real_interaction_expiry",
+      "outcome": "passed",
+      "detail": "assertions verified against actual services",
+      "human_wait_seconds": 6,
+      "cases": {
+        "question": {
+          "terminal_state": "interrupted",
+          "error_code": "interrupted",
+          "late_response": "stale_generation",
+          "profile_state_after": "available"
+        },
+        "approve": {
+          "terminal_state": "interrupted",
+          "error_code": "interrupted",
+          "late_response": "stale_generation",
+          "profile_state_after": "available"
+        }
+      },
+      "secret_delivered": false,
+      "unapproved_submit_effects": 0
+    },
+    {
+      "name": "real_ops_backup_restore_continue",
+      "outcome": "passed",
+      "detail": "assertions verified against actual services",
+      "tools_image_id": "sha256:e7e1d5cca899c370100a630adfe03753269cd904e9364961a07305a5add19487",
+      "backup_encrypted_age": true,
+      "restore_wrong_revision_rejected": true,
+      "no_clobber": true,
+      "restored_files": 49,
+      "restored_history_identical": true,
+      "revoked_key_still_revoked": true,
+      "continued_on_restored_profile": {
+        "state": "completed",
+        "script_reused": 1,
+        "prerequisite_repeated": 0
+      },
+      "disk_preflight": {
+        "pressure": {
+          "exit_nonzero": true,
+          "disk_low_blocker": true
+        },
+        "control": {
+          "exit_nonzero": true,
+          "disk_low_blocker": false
+        }
+      },
+      "slowest_restored_status_poll_seconds": 0.09
+    },
+    {
+      "name": "real_secret_canary_full_scan",
+      "outcome": "passed",
+      "detail": "assertions verified against actual services",
+      "canaries": 9,
+      "capability_tokens": 6,
+      "variants_per_canary": 17,
+      "state_files": 68,
+      "state_bytes": 66560246,
+      "archive_members_expanded": 5313,
+      "ops_files": 52,
+      "browser_log_blobs": 2,
+      "task_result_views": 12,
+      "backend_log_bytes": 0,
+      "proxy_log_bytes": 4186,
+      "raw_trace_files": 0,
+      "raw_tracing_enabled": false,
+      "findings": 0,
+      "gaps": 0
+    },
+    {
+      "name": "assembled_topology",
+      "outcome": "passed",
+      "detail": "actual backend/browser on owned Docker bridge; no provider credentials; PID input 1024; legacy cleanup never invoked",
+      "backend_image_id": "sha256:163eb2e0517aaac2d52188815f81edb18dc305b62b9ee4fc7c3c55dce3f162be",
+      "sandbox_image_id": "sha256:5725dc387dab4ce81d4f68358523de708118ea3a39a2edea0e0bd182b31aba2d",
+      "sandbox_tag_latest_id_unused": "sha256:f8d654c98eec0b22528815350925d3a04bf6bde0e10a7592a098ef0e21569c32",
+      "tools_image_id": "sha256:e7e1d5cca899c370100a630adfe03753269cd904e9364961a07305a5add19487",
+      "frontend_lock_sha256": "91e3c643d6e41977b50bd4117da192f118996e7ba83c22e232b3f709d8680b6c",
+      "network_label": "task-acceptance-6819b31e8ae449138d8d80bf4c9f8c93",
+      "sandbox_pids": 1024,
+      "backend_exit": 0,
+      "api_requests_per_minute": 10000,
+      "login_requests_per_minute": 100,
+      "limitations": "Existing local images, not proof of lane005 packaged network policy or live-provider quality"
+    },
+    {
+      "name": "owned_docker_cleanup",
+      "outcome": "passed",
+      "detail": "only this run-labelled network members and exact run-label siblings removed, then that exact network removed",
+      "owned_containers_removed": 1,
+      "unique_network_removed": true
+    }
+  ],
+  "requirements": {
+    "onboarding_http": {
+      "outcome": "passed",
+      "owner_and_gap": "001/004: signup/login, ordinary API-key client and once-only disclosure"
+    },
+    "auth_key_no_store": {
+      "outcome": "passed",
+      "owner_and_gap": "001 repair: signup/login/key creation/list/revocation responses declare Cache-Control no-store"
+    },
+    "same_account_key_scope": {
+      "outcome": "passed",
+      "owner_and_gap": "001: same-account keys share authority/idempotency; profiles remain explicit distinct namespaces, not key-scoped identities"
+    },
+    "auth_ownership": {
+      "outcome": "passed",
+      "owner_and_gap": "001: invalid/forged identity, foreign tasks/profiles and revoked keys"
+    },
+    "http_retry_followup": {
+      "outcome": "passed",
+      "owner_and_gap": "001/002: concurrent admission, conflict, fresh-client reattach and website counters"
+    },
+    "profile_website_isolation": {
+      "outcome": "passed",
+      "owner_and_gap": "002: two-account/two-profile cookie, storage, scripts and history isolation"
+    },
+    "questions_secrets": {
+      "outcome": "passed",
+      "owner_and_gap": "001/002: transient secret delivery and duplicate/conflicting/stale response receipts",
+      "proof_checks": [
+        "real_question_transient_delivery",
+        "real_question_secret_restart",
+        "real_interaction_expiry",
+        "real_secret_canary_full_scan"
+      ]
+    },
+    "confirmation_decline": {
+      "outcome": "passed",
+      "owner_and_gap": "001/002: approve/decline/expired/wrong-owner with actual effect counters",
+      "proof_checks": [
+        "real_confirmation_decline",
+        "real_confirmation_approve_matrix",
+        "real_interaction_expiry"
+      ]
+    },
+    "assistance_tls": {
+      "outcome": "passed",
+      "owner_and_gap": "003/005: actual TLS pointer/keyboard/stream/fallback and capability expiry fencing",
+      "proof_checks": [
+        "real_tls_proxy_assistance"
+      ]
+    },
+    "assistance_generation_metadata": {
+      "outcome": "passed",
+      "owner_and_gap": "001/002/003 amendment 2201b5a: public mint/state succeeds across distinct pause generations within one execution; no public lease generation"
+    },
+    "assistance_wallclock_expiry": {
+      "outcome": "passed",
+      "owner_and_gap": "003: active capability rejects after actual elapsed TTL, not only cancel/remint"
+    },
+    "assistance_atomic_commit": {
+      "outcome": "passed",
+      "owner_and_gap": "001/003: deterministic resolve/cancel between assistance_lease lookup and save_capability commit rejects stale binding",
+      "proof_checks": [
+        "real_assistance_atomic_commit"
+      ]
+    },
+    "direct_api_resume_drain": {
+      "outcome": "passed",
+      "owner_and_gap": "001/002/003 amendment 561383d: direct authenticated respond awaits real pause-wide human drain with active stream and owned in-flight input gate before agent effects"
+    },
+    "resume_wrong_generation": {
+      "outcome": "passed",
+      "owner_and_gap": "001/002: wrong-generation direct response never releases the legitimate active human handle"
+    },
+    "resume_release_failure": {
+      "outcome": "passed",
+      "owner_and_gap": "001/002: injected release_human failure leaves pause unresolved, capability current and agent effects absent"
+    },
+    "resume_release_timeout": {
+      "outcome": "passed",
+      "owner_and_gap": "001/002: injected release_human timeout leaves pause unresolved and never wakes agent effects"
+    },
+    "capacity_paused": {
+      "outcome": "passed",
+      "owner_and_gap": "001/002: global/account/session/profile caps count paused/idle browser leases"
+    },
+    "cancel_fencing": {
+      "outcome": "passed",
+      "owner_and_gap": "001/002/003: stop proof, terminal immutability and late callback/input fencing",
+      "proof_checks": [
+        "real_cancel_fencing"
+      ]
+    },
+    "crash_after_effect": {
+      "outcome": "passed",
+      "owner_and_gap": "001/002: owned process kill after website effect, interrupted state and no replay"
+    },
+    "profile_save_failure": {
+      "outcome": "blocked",
+      "owner_and_gap": "002: failed save retains prior archive and bounded quarantine evidence"
+    },
+    "script_reuse_repair": {
+      "outcome": "blocked",
+      "owner_and_gap": "002/007: replay/repair with no repeated prerequisite, model proof separate"
+    },
+    "pi_readiness": {
+      "outcome": "passed",
+      "owner_and_gap": "007: real browser same-URL freshness/readiness/no-progress guards"
+    },
+    "packaged_network": {
+      "outcome": "blocked",
+      "owner_and_gap": "005: real packaged-browser private/admin/metadata deny plus positive control"
+    },
+    "artifact_secret_scan": {
+      "outcome": "passed",
+      "owner_and_gap": "001/002/003/005: DB/history/log/trace/result canaries absent",
+      "proof_checks": [
+        "real_secret_snapshot_scan",
+        "real_secret_canary_full_scan"
+      ]
+    },
+    "key_hash_at_rest": {
+      "outcome": "passed",
+      "owner_and_gap": "001: real disposable database stores key hashes, never plaintext"
+    },
+    "operations": {
+      "outcome": "passed",
+      "owner_and_gap": "005: image IDs, builds, restart, log/disk bounds, backup/restore",
+      "proof_checks": [
+        "real_ops_backup_restore_continue"
+      ]
+    },
+    "compatibility": {
+      "outcome": "passed",
+      "owner_and_gap": "001-007: existing flow/run/UI/chat/Pi regressions and frontend onboarding",
+      "proof_checks": [
+        "real_legacy_flow_api",
+        "real_ui_boundary_browser",
+        "real_local_chat_repl"
+      ]
+    },
+    "standalone_example": {
+      "outcome": "passed",
+      "owner_and_gap": "004: execute published standalone client against real local service"
+    },
+    "provider_backed": {
+      "outcome": "blocked",
+      "owner_and_gap": "002/007: separately authorized bounded synthetic model-backed cases"
+    },
+    "hosted_postdeployment": {
+      "outcome": "blocked",
+      "owner_and_gap": "manual only: hosted TLS, cloud runtime and real provider validation"
+    }
+  },
+  "readiness": "not_established",
+  "limitations": [
+    "Fixture/consumer tests are not service acceptance.",
+    "No deployment or provider calls authorized by this harness.",
+    "No raw bodies, credentials, website state or traces included."
+  ]
+}

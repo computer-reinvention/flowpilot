@@ -100,3 +100,24 @@ Still blocked/unverified: assembled real executor/control/assistance/observation
 - Report: `reports/task-acceptance/task-acceptance-3fce85f79237496eb484aa04e308f99c/evidence.json`. **27 passed checks, zero failed**, source **`4693718d1a0477f71ad59b8bafde4b3c6d714109`**, clean working tree at execution. Exit **2**, not 0: the full required inventory remains incomplete.
 - Includes actual unmodified 004 CLI subprocess profile-create/start/poll/delete and a completed browser task, no repository imports/caller-process continuity. Actual owned network/container cleanup is recorded green. Docker images and PID/memory/time/rate inputs are pinned in machine evidence and README. No provider quality or production deployment claim.
 - Actual secret question/decline/cancel/core private assistance passed, but their larger adversarial matrices are not automatically marked fully complete. Remaining exact gate names and failure reproducers/limitations are in the README. No production repair was made, and legacy cleanup was never called. The only full-suite local failure remains the dependency-conditioned Pi-host error already reported as nonreproducing with installed root dependencies by the integrator.
+
+### R4 gate closure (assembled, clean source)
+
+- Report: `reports/task-acceptance/task-acceptance-6819b31e8ae449138d8d80bf4c9f8c93/evidence.json`.
+  - Source: `3f3109d1ac9ae71f348434cd73077fd00b21a3c7`, clean tree.
+  - Result: **38 passed checks, zero failed**.
+  - Exit: **2** under `--require-complete`.
+- **Now passed with actual services, browsers and HTTP/WSS:**
+  - `questions_secrets`: adversarial receipts, SIGKILL while an answer is pending and while the executor holds it, and elapsed expiry.
+  - `confirmation_decline`: approve, decline, duplicate, wrong owner, stale generation and expired.
+  - `assistance_tls`: the repository Caddyfile over real TLS/WSS, with origin checks, natural expiry closing an active stream, and log hygiene.
+  - `assistance_atomic_commit`: a harness-owned lookup→save failpoint.
+  - `cancel_fencing`: long-running page JS, a held human writer, and replay of genuine stale leases.
+  - `artifact_secret_scan`: 17 transformed variants per canary, in-memory archive expansion, browser/proxy/backend logs and results.
+  - `operations`: age backup→restore→continue on the restored profile, plus the DISK_LOW preflight.
+  - `compatibility`: the legacy flow API, this revision's UI in real Chromium, and the `./chat` REPL path.
+- **Still unmet by design:**
+  - `profile_save_failure` and `script_reuse_repair`: other lanes.
+  - `packaged_network`: needs a Linux host.
+  - `provider_backed` and `hosted_postdeployment`: not authorized.
+- No production code changed. Instrumentation and observations are listed in `reports/task-acceptance/README.md`.
