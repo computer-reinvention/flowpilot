@@ -383,7 +383,7 @@ async def test_pi_injected_observation_is_consumed_without_separate_dump(monkeyp
         with pytest.raises(RuntimeError):
             await dispatch("execute", {"script": "async()=>true"})
         result = await dispatch("observe", {})
-        assert result["snapshot_id"] == snapshot.snapshot_id
+        assert result["elements"] == snapshot.elements and "snapshot_id" not in result
         await dispatch("execute", {"script": "async()=>true"})
         await dispatch("complete", {"verify": "async()=>true", "summary": "Verified"})
 
