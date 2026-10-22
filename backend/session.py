@@ -20,6 +20,7 @@ from .pi_browser import drive_browser, fill_template
 from .replay import RunControl
 from .reflex_inputs import ReflexInputError, bind_inputs, catalog_entry, normalize_fields
 from .runner import PARTIAL_EFFECTS, _execute_reflex
+from .task_contracts import ErrorCode, TaskFault
 
 # Agents do not reliably mark codes as secret; treat these labels as secret too.
 SECRET_FIELD = re.compile(r'otp|one[- ]?time|passw|passcode|\bpin\b|cvv|cvc|2fa|mfa|token|secret|'
@@ -432,15 +433,25 @@ class BrowserSession:
                 if policy is not None:
                     options['expected_observation'] = settled[0] if settled else await policy.observe(self.browser)
                     options['on_settled'] = lambda snapshot: settled.__setitem__(slice(None), [snapshot])
-                ok, detail = await _execute_reflex(step['script'], stage_inputs, '', self.browser, **options)
-                if not ok and PARTIAL_EFFECTS not in detail and 'NEEDS_' not in detail:
-                    # The step changed nothing on the page (the executor checked), so it is safe
-                    # to run once more after the page settles: content such as suggestions
-                    # may still have been loading when it looked.
-                    await asyncio.sleep(1)
+                for attempt in range(3):
+                    try:
+                        ok, detail = await _execute_reflex(step['script'], stage_inputs, '', self.browser, **options)
+                    except TaskFault as fault:
+                        # The page moved on before the step ran (e.g. still hydrating): nothing
+                        # happened, so take a current snapshot and try again.
+                        if fault.error.code != ErrorCode.STALE_GENERATION or attempt == 2:
+                            raise
+                        ok, detail = False, 'stale snapshot before the step ran'
+                    else:
+                        # A failure that changed nothing on the page (checked by the executor) is
+                        # safe to retry: the page may still have been loading what the step needs.
+                        if ok or PARTIAL_EFFECTS in detail or 'NEEDS_' in detail:
+                            break
+                    if attempt == 2:
+                        break
+                    await asyncio.sleep(attempt + 1)
                     if policy is not None:
                         options['expected_observation'] = await policy.observe(self.browser)
-                    ok, detail = await _execute_reflex(step['script'], stage_inputs, '', self.browser, **options)
                 if not ok:
                     done = f'Steps 1-{index} completed; ' if index else ''
                     return False, (f'{done}{label} failed.\n{detail}'
