@@ -65,7 +65,7 @@ async def test_actual_generation_uses_exact_dispatch_snapshot_and_saves(monkeypa
     async def generate(llm, context):
         origin = action_observation.get()
         assert origin[0] is env.browser and origin[1] is env.policy
-        assert origin[2].model_dump(mode='json') == shown
+        assert {k: origin[2].model_dump(mode='json')[k] for k in shown} == shown
         assert context['elements'] == shown['elements']
         assert context['url'] == shown['url']
         assert 'fixture-secret' not in context['elements']

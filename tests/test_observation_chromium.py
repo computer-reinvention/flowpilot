@@ -399,7 +399,7 @@ async def test_default_local_pi_uses_native_policy_without_repl_changes(local_br
         assert 'precondition' in execute['inputSchema']['required']
         snapshot = await dispatch('observe', {})
         assert snapshot['readiness'] == 'ready'
-        assert 'references' in snapshot and 'Total $5' in snapshot['elements']
+        assert 'references' not in snapshot and 'Total $5' in snapshot['elements']  # host-side only
         await dispatch('complete', {'verify': 'async()=>window.right===0', 'summary': 'Default checked'})
     monkeypatch.setattr(pi_browser, 'run_pi', agent)
     assert await pi_browser.drive_browser(browser, 'local default', {}, url,
