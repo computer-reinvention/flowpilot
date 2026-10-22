@@ -370,7 +370,8 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
             guarded_check = observation_policy is not None
             if checked_scripts:
                 try:
-                    observation = await observation_policy.observe(browser)
+                    # verify only reads: wait briefly for steady state, not the full deadline.
+                    observation = await observation_policy.observe(browser, deadline_seconds=5)
                 except TaskFault as fault:
                     if fault.error.code not in (ErrorCode.READINESS_TIMEOUT, ErrorCode.UNAVAILABLE):
                         raise
@@ -379,10 +380,10 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                     completion = ('The browser stopped responding, so this could not be verified on the page.\n\n'
                                   + args["summary"])
                     return {"verified": False, "reported": True}
-                if observation.readiness == 'unknown':
+                if observation.readiness in ('unknown', 'timeout'):
                     # complete only reads: an opaque wall (bot check, full-page
-                    # cross-origin frame) must not stop the agent reporting it.
-                    # A busy or still-changing page still blocks completion.
+                    # cross-origin frame) or a page that keeps loading content
+                    # must not stop the agent reporting what it read.
                     guarded_check = False
                 else:
                     await observation_policy.require_fresh(browser, observation)
@@ -422,7 +423,7 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                 if summary:
                     on_progress(summary)
             action_args = args
-            if name in ('execute', 'navigate'):
+            if name == 'navigate' or (name == 'execute' and args.get('read_only') is not True):
                 # Rejected before guards: nothing ran, so the page needs no re-observation.
                 call_inputs = args.get('inputs') or {}
                 if not isinstance(call_inputs, dict):

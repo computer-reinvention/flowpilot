@@ -247,17 +247,19 @@ class ObservationPolicy:
                            structural_fingerprint=structural, progress_fingerprint=progress,
                            readiness=readiness, part=part, parts=parts)
 
-    async def observe(self, browser, *, part=0, find=None):
-        """part pages through long pages; find shows only what matches."""
+    async def observe(self, browser, *, part=0, find=None, deadline_seconds=None):
+        """part pages through long pages; find shows only what matches; deadline_seconds
+        shortens the readiness deadline for callers that only read."""
         start = time.monotonic()
-        deadline = start + self.settings.readiness_timeout_seconds
+        limit = min(deadline_seconds or self.settings.readiness_timeout_seconds, self.settings.readiness_timeout_seconds)
+        deadline = start + limit
         window = self.settings.readiness_window_seconds
         last = None
         unchanged_since = start
         capture = None
         failed = False
         try:
-            async with asyncio.timeout(self.settings.readiness_timeout_seconds):
+            async with asyncio.timeout(limit):
                 while True:
                     try:
                         capture = await self._capture(browser)
