@@ -72,6 +72,7 @@ services:
       # Operator debugging only: tool calls with page text; keep empty for real users.
       - FLOWPILOT_AGENT_TRACE_FILE=${FLOWPILOT_AGENT_TRACE_FILE:-}
       - FLOWPILOT_AGENT_EFFORT=${FLOWPILOT_AGENT_EFFORT:-}
+      - FLOWPILOT_AGENT_WARM_EFFORT=${FLOWPILOT_AGENT_WARM_EFFORT:-low}
       - REFLEX_TIMEOUT_SECONDS=${REFLEX_TIMEOUT_SECONDS:-30}
       - FLOWPILOT_SIGNUP_EMAILS=${FLOWPILOT_SIGNUP_EMAILS:-}
       - DOCKER_HOST=tcp://docker-proxy:2375

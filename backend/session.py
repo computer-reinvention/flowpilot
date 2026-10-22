@@ -567,6 +567,10 @@ class BrowserSession:
             return ActionResult(extracted_content='User approved. Proceed.' if response.get('confirmed') is True else 'User declined. Do NOT proceed.')
 
         reflexes = self.store.scripts()
+        # A profile that has done work before follows known paths: low effort per turn is
+        # as accurate there and much faster. Cold profiles keep the default (explores harder).
+        effort = (os.getenv('FLOWPILOT_AGENT_WARM_EFFORT', 'low') if reflexes or self.store.history(1)
+                  else os.getenv('FLOWPILOT_AGENT_EFFORT') or None)
         context = json.dumps({'recent_conversation': self.store.history(), 'available_scripts': reflexes}, ensure_ascii=False)
         offer = ''
         if reflexes:
@@ -603,7 +607,8 @@ class BrowserSession:
                                           interaction_tools={'request_input_values': request_input_values,
                                                              'request_confirmation': request_confirmation},
                                           **({'observation_policy': self.observation_policy} if self.observation_policy is not None else {}),
-                                          **({'on_progress': self.on_progress} if self.on_progress is not None else {}))
+                                          **({'on_progress': self.on_progress} if self.on_progress is not None else {}),
+                                          effort=effort)
             # secrets: answered values the client must not show back, e.g. OTPs.
             return_value = {'answer': result, 'metrics': metrics, 'secrets': secrets}
         except asyncio.CancelledError:

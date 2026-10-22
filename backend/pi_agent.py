@@ -10,7 +10,7 @@ from .llm import DEFAULT_MODELS, KEYS, PREFIXES
 HOST = Path(__file__).resolve().parent.parent / "agent-host" / "host.mjs"
 
 
-async def run_pi(task, system, tools, dispatch, role="agent", checkpoint=None, on_event=None):
+async def run_pi(task, system, tools, dispatch, role="agent", checkpoint=None, on_event=None, effort=None):
     provider = (os.getenv("LLM_PROVIDER") or "gemini").lower()
     provider = "claude" if provider == "anthropic" else provider
     subscription = provider == "codex"
@@ -60,7 +60,7 @@ async def run_pi(task, system, tools, dispatch, role="agent", checkpoint=None, o
         await send({"type": "start", "provider": {"gemini": "google", "claude": "anthropic", "openai": "openai", "codex": "openai-codex"}[provider],
                     "model": model, "system": system, "task": task, "tools": tools, "maxTurns": 50,
                     # Effort per model turn (low|medium|high); unset uses the provider default (high).
-                    **({"thinkingLevel": effort} if (effort := os.getenv("FLOWPILOT_AGENT_EFFORT")) else {})})
+                    **({"thinkingLevel": level} if (level := effort or os.getenv("FLOWPILOT_AGENT_EFFORT")) else {})})
         while line := await proc.stdout.readline():
             message = json.loads(line)
             if on_event and message["type"] in ("tool", "metric"):

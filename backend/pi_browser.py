@@ -115,7 +115,7 @@ def progress_summary(name, args):
 
 async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                         run_reflex, save_reflex, exploration_tools=None, on_event=None,
-                        interaction_tools=None, observation_policy=None, bind_reflex_inputs=None, on_progress=None):
+                        interaction_tools=None, observation_policy=None, bind_reflex_inputs=None, on_progress=None, effort=None):
     """bind_reflex_inputs(name, call_inputs) -> effective inputs, raising
     ReflexInputError for missing/invalid values before any guard or effect.
     Defaults to an optional `run_reflex.bind_inputs` attribute so callers keep
@@ -625,7 +625,8 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                   "Use save_reflex only for a script you wrote outside the recorded steps; recorded steps are saved for you. "
                   + REPLAY_CONTRACT + rules,
                       definitions, traced(dispatch), role="exploration" if exploration_tools else "agent",
-                      checkpoint=control.checkpoint, **({"on_event": on_event} if on_event else {}))
+                      checkpoint=control.checkpoint, **({"on_event": on_event} if on_event else {}),
+                      **({"effort": effort} if effort else {}))
     except asyncio.CancelledError:
         if fatal_fault is not None:
             raise fatal_fault from None
