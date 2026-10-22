@@ -132,6 +132,10 @@ class TaskFault(Exception):
         super().__init__(error.code.value)
 
 
+class ScriptTimeout(TaskFault):
+    """A page script was stopped at its deadline; its effects are unknown."""
+
+
 def bounded_values(value: dict) -> dict:
     if len(value) > 64 or any(not key or len(key) > 128 for key in value):
         raise ValueError("At most 64 bounded named values are allowed")

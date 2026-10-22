@@ -10,3 +10,5 @@ node_modules/
 
 # Reflex traces
 traces/
+.e2e-password
+.lab-state/

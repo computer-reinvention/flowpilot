@@ -220,12 +220,12 @@ async def _execute_reflex(
         trace("execute_reflex.ok")
         return True, json.dumps(value, ensure_ascii=False)[:8000] if value is not None else "Reflex executed successfully"
     except Exception as e:
-        from .task_contracts import ErrorCode, TaskFault, task_error
+        from .task_contracts import ErrorCode, ScriptTimeout, TaskFault, task_error
         if observation_policy is not None and isinstance(e, (TimeoutError, TaskFault)):
             # Do not feed uncertain execution back into automatic repair/replay.
             if isinstance(e, TaskFault):
                 raise
-            raise TaskFault(task_error(ErrorCode.INTERRUPTED, 'Script timed out; website effects are unknown; inspect before retrying')) from None
+            raise ScriptTimeout(task_error(ErrorCode.INTERRUPTED, 'Script timed out; website effects are unknown; inspect before retrying')) from None
         # A changed URL does not establish that the script's remaining work ran.
         # Dump page state so the agent can pick up where the script stopped
         effects = ''

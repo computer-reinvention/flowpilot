@@ -158,7 +158,13 @@ class Executor:
         except TaskFault as exc:
             state = TaskState.INTERRUPTED if exc.error.code == ErrorCode.INTERRUPTED else TaskState.FAILED
             error = exc.error
-        except Exception:
+        except Exception as exc:
+            # Type and raise site only: messages may carry website or user text.
+            frame = exc.__traceback__
+            while frame and frame.tb_next:
+                frame = frame.tb_next
+            site = f'{frame.tb_frame.f_code.co_filename.rsplit("/", 1)[-1]}:{frame.tb_lineno}' if frame else '?'
+            logger.warning('Task execution failed task_id=%s error=%s at=%s', lease.task_id, type(exc).__name__, site)
             state = TaskState.FAILED
             error = task_error(ErrorCode.PROVIDER_FAILURE, 'Execution failed; inspect website state before a new task')
         finally:

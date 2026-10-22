@@ -23,7 +23,7 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
     the historical positional driver signature."""
     from .runner import _DUMP_ELEMENTS_JS, _execute_reflex
     from .observation import ObservationPolicy, ProgressGuard, action_observation, create_observation
-    from .task_contracts import ErrorCode, TaskFault, task_error
+    from .task_contracts import ErrorCode, ScriptTimeout, TaskFault, task_error
     from .task_settings import TaskSettings
     from .reflex_inputs import CALL_SCHEMA, FIELDS_SCHEMA, ReflexInputError, bind_inputs
     if bind_reflex_inputs is None:
@@ -242,6 +242,12 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                     await observation_policy.after_action(browser, observation, name)
                 succeeded = not (isinstance(result, dict) and
                                  (result.get('success') is False or result.get('error')))
+            except ScriptTimeout:
+                # The action stays consumed, so it cannot be replayed; the model
+                # inspects the page and decides how to continue.
+                raise RuntimeError(f'SCRIPT_TIMEOUT: {name} was stopped after its deadline and its effects are unknown. '
+                                   'Call observe, verify what actually happened on the page, and continue without repeating this exact action. '
+                                   'Keep scripts short: one bounded step per call, and wait for elements with a short timeout.') from None
             except TaskFault as fault:
                 if fault.error.code == ErrorCode.INTERRUPTED:
                     fatal_fault = fault

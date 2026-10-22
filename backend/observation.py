@@ -38,20 +38,29 @@ CAPTURE_JS = r"""() => {
     return state.nodes.get(node);
   };
   const clean = s => String(s || '').replace(/\s+/g, ' ').trim();
-  const controls = [], content = [], display = [], nodes = [], docs = [];
-  let unknown = false, busy = false, size = 0;
+  const controls = [], content = [], display = [], nodes = [], docs = [], opaque = [];
+  let unknown = false, busy = false, truncated = false, size = 0, count = 0;
+  const viewport = Math.max(1, innerWidth * innerHeight);
   const visible = el => {
     const style = el.ownerDocument.defaultView.getComputedStyle(el);
     return style.display !== 'none' && style.visibility !== 'hidden' &&
       el.getClientRects().length > 0;
   };
-  const walk = (doc, frame) => {
-    docs.push([frame, token(doc.documentElement)]);
-    busy ||= doc.readyState === 'loading' || !!doc.querySelector('[aria-busy="true"]');
-    const tree = doc.createTreeWalker(doc.body || doc.documentElement, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
-    let el = tree.currentNode, count = 0;
+  // root is a Document or an open ShadowRoot; doc is always its owning document.
+  const walk = (root, frame) => {
+    const doc = root.ownerDocument || root;
+    if (root === doc) {
+      docs.push([frame, token(doc.documentElement)]);
+      busy ||= doc.readyState === 'loading';
+    }
+    busy ||= !!root.querySelector('[aria-busy="true"]');
+    const tree = doc.createTreeWalker(root === doc ? (doc.body || doc.documentElement) : root,
+      NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+    let el = tree.currentNode;
     do {
-      if (++count > 12000 || size > 96000 || controls.length >= 2000) { unknown = true; break; }
+      // Large pages are captured up to a bound and marked truncated: the
+      // captured prefix and the counts still fingerprint every change in it.
+      if (++count > 60000 || size > 400000 || controls.length >= 5000) { truncated = true; break; }
       if (el.nodeType === Node.TEXT_NODE) {
         const p = el.parentElement;
         // Only an explicit data-observation-volatile="timestamp"
@@ -66,12 +75,22 @@ CAPTURE_JS = r"""() => {
           }
         }
       } else if (el.nodeType === Node.ELEMENT_NODE && visible(el)) {
-        if (el.shadowRoot) unknown = true; // no silently partial shadow tree
+        if (el.shadowRoot) walk(el.shadowRoot, frame + '#' + token(el));
         if (el.matches('iframe,frame')) {
-          try {
-            if (!el.contentDocument) unknown = true;
-            else walk(el.contentDocument, frame + '/' + token(el));
-          } catch (_) { unknown = true; }
+          let inner = null;
+          try { inner = el.contentDocument; } catch (_) {}
+          if (inner) walk(inner, frame + '/' + token(el));
+          else {
+            // Page scripts cannot act inside a cross-origin frame, so it cannot
+            // hold this task's effects; only a frame that is the page's main
+            // content leaves the observation genuinely unknown.
+            const r = el.getBoundingClientRect();
+            const area = Math.max(0, r.width) * Math.max(0, r.height) / viewport;
+            let origin = '';
+            try { origin = new URL(el.src, location.href).origin; } catch (_) {}
+            opaque.push([frame + '/' + token(el), origin, Math.round(area * 100) / 100]);
+            if (area >= 0.5) unknown = true;
+          }
         }
         if (el.matches('a,button,input,select,textarea,[role],[contenteditable="true"],[onclick],[tabindex]')) {
           const labelled = (el.getAttribute('aria-labelledby') || '').split(/\s+/).filter(Boolean)
@@ -93,7 +112,7 @@ CAPTURE_JS = r"""() => {
     } while ((el = tree.nextNode()));
   };
   walk(document, 'top');
-  return {url: location.href, docs, controls, content, display, nodes, busy, unknown};
+  return {url: location.href, docs, controls, content, display, nodes, busy, unknown, truncated, opaque, count};
 }"""
 
 
@@ -128,7 +147,8 @@ class ObservationPolicy:
         structural = self._digest(identities)
         progress = self._digest([raw['content'], [(c['identity'], c['status']) for c in raw['controls']]])
         document = self._digest(raw['docs'])
-        freshness = self._digest([target, raw['url'], document, structural, progress, raw['nodes'], raw['busy'], raw['unknown']])
+        freshness = self._digest([target, raw['url'], document, structural, progress, raw['nodes'], raw['busy'], raw['unknown'],
+                                  raw.get('opaque', []), raw.get('count', 0)])
         return raw, target, document, structural, progress, freshness
 
     def _snapshot(self, capture, readiness):
@@ -140,14 +160,21 @@ class ObservationPolicy:
         lines = [f'{ref.reference}: {c["label"]} disabled={c["status"][0]}'
                  for ref, c in zip(refs, raw['controls'])]
         elements = '\n'.join(lines)
-        if len(elements) > 24000:
-            readiness = 'unknown'
-        else:
-            # Text is from the same capture, never a later unrelated DOM read.
-            # Form values are digest-only. Page text is ephemeral/untrusted and
-            # intentionally not included in safe metrics or persistence.
-            text = '\n'.join(f'{frame}: {text}' for frame, text in raw.get('display', ()))
-            elements += '\nPage text (bounded; form values omitted):\n' + text[:max(0, 23950 - len(elements))]
+        if len(elements) > 10000:
+            # Long control lists are cut for the model, never for freshness:
+            # every control still contributes to the snapshot fingerprints.
+            kept = elements[:10000].rsplit('\n', 1)[0]
+            elements = kept + f'\n... {len(lines) - kept.count(chr(10)) - 1} more controls omitted; query specific ones with execute'
+        if raw.get('truncated'):
+            elements += '\n(Page capture truncated at its size bound.)'
+        if raw.get('opaque'):
+            elements += '\nCross-origin frames (not inspectable by scripts): ' + ', '.join(
+                f'{origin or "unknown origin"} ({int(area * 100)}% of viewport)' for _, origin, area in raw['opaque'][:10])
+        # Text is from the same capture, never a later unrelated DOM read.
+        # Form values are digest-only. Page text is ephemeral/untrusted and
+        # intentionally not included in safe metrics or persistence.
+        text = '\n'.join(text for _, text in raw.get('display', ()))
+        elements += '\nPage text (bounded; form values omitted):\n' + text[:max(0, 23950 - len(elements))]
         return Observation(snapshot_id=snapshot_id, url=raw['url'], target_id=target,
                            document_id=document, elements=elements[:24000], references=refs,
                            structural_fingerprint=structural, progress_fingerprint=progress,

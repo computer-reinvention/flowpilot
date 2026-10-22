@@ -111,9 +111,30 @@ async def test_unknown_cross_origin_and_never_ready_deadline(local_browser):
         await p.require_fresh(browser, a)
     await page.evaluate('''() => {
       document.body.removeAttribute('aria-busy'); const f=document.createElement('iframe');
-      f.sandbox='allow-scripts'; f.srcdoc='<button>Opaque frame</button>'; document.body.append(f);
+      f.id='opaque'; f.sandbox='allow-scripts'; f.srcdoc='<button>Opaque frame</button>'; document.body.append(f);
     }''')
+    # A small opaque frame (ads, widgets) is reported but cannot hold script effects.
+    small = await p.observe(browser)
+    assert small.readiness == 'ready'
+    assert 'Cross-origin frames' in small.elements
+    # An opaque frame that is the page's main content leaves the page unknown.
+    await page.evaluate("() => { const f=document.getElementById('opaque'); f.style.cssText='position:fixed;inset:0;width:100vw;height:100vh'; }")
     assert (await p.observe(browser)).readiness == 'unknown'
+
+
+async def test_open_shadow_roots_are_observed_and_fence_changes(local_browser):
+    browser, page, url = local_browser
+    p = policy()
+    await page.evaluate('''() => {
+      const host=document.createElement('div'); host.id='host'; document.body.append(host);
+      host.attachShadow({mode:'open'}).innerHTML='<button id="inner">Shadow price 100</button>';
+    }''')
+    before = await p.observe(browser)
+    assert before.readiness == 'ready'
+    assert 'Shadow price 100' in before.elements
+    await page.evaluate("() => { document.getElementById('host').shadowRoot.getElementById('inner').textContent='Shadow price 200'; }")
+    with pytest.raises(TaskFault):
+        await p.require_fresh(browser, before)
 
 
 async def test_pi_code_mode_batch_rejects_stale_next_call_and_checks_completion(local_browser, monkeypatch):
