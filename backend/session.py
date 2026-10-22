@@ -433,6 +433,14 @@ class BrowserSession:
                     options['expected_observation'] = settled[0] if settled else await policy.observe(self.browser)
                     options['on_settled'] = lambda snapshot: settled.__setitem__(slice(None), [snapshot])
                 ok, detail = await _execute_reflex(step['script'], stage_inputs, '', self.browser, **options)
+                if not ok and PARTIAL_EFFECTS not in detail and 'NEEDS_' not in detail:
+                    # The step changed nothing on the page (the executor checked), so it is safe
+                    # to run once more after the page settles: content such as suggestions
+                    # may still have been loading when it looked.
+                    await asyncio.sleep(1)
+                    if policy is not None:
+                        options['expected_observation'] = await policy.observe(self.browser)
+                    ok, detail = await _execute_reflex(step['script'], stage_inputs, '', self.browser, **options)
                 if not ok:
                     done = f'Steps 1-{index} completed; ' if index else ''
                     return False, (f'{done}{label} failed.\n{detail}'

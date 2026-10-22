@@ -397,7 +397,11 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                 exploration_tools and name in exploration_tools and
                 (name.startswith('test_') or name == 'generate_and_save_reflex'))
             if guarded and needs_observation:
-                raise RuntimeError('Page changed; call observe before further browser actions')
+                if name != 'run_reflex' or observation_policy is None:
+                    raise RuntimeError('Page changed; call observe before further browser actions')
+                # A saved reflex checks every step itself; observe for it instead of failing a turn.
+                observation, needs_observation = await observation_policy.observe(browser), False
+                observed_identity = await page_identity()
             before = await page_identity() if guarded else None
             if guarded and observed_identity is not None and before != observed_identity:
                 needs_observation = True
@@ -406,7 +410,16 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                 if observation is None:
                     observation = await observation_policy.observe(browser)
                     observed_identity = await page_identity()
-                await observation_policy.require_fresh(browser, observation)
+                try:
+                    await observation_policy.require_fresh(browser, observation)
+                except TaskFault as fault:
+                    if name != 'run_reflex' or fault.error.code != ErrorCode.STALE_GENERATION:
+                        raise
+                    # Nothing has run yet; a saved reflex checks its own steps, so take a
+                    # current snapshot instead of spending a turn on observe.
+                    observation = await observation_policy.observe(browser)
+                    observed_identity = await page_identity()
+                    await observation_policy.require_fresh(browser, observation)
                 signature = hashlib.sha256(json.dumps([name, action_args, inputs], sort_keys=True, default=str).encode()).hexdigest()
                 if signature in consumed_actions:
                     from .trace import trace
