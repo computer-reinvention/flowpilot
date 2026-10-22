@@ -32,6 +32,31 @@ def fill_template(url, values):
                   lambda m: quote(str(values[m.group(1)]), safe='') if m.group(1) in values else m.group(0), url)
 
 
+_STRING = re.compile(r"""'((?:[^'\\\n]|\\.){2,120})'|"((?:[^"\\\n]|\\.){2,120})"|`([^`$]{2,120})`|/((?:[^/\\\n]|\\.){2,80})/[gimsuy]*\.(?:test|exec)\(""")
+_NUMBER = re.compile(r'\b\d{1,4}(?::\d{2})?\b')
+
+
+def request_literals(source, request):
+    """String or regex literals in a script that copy values from the user's request: a
+    date, time or number of 2+ digits, or a run of 2-4 words (8+ characters) from a name in
+    the request (capitalised words). Short site words such as 'Airport' stay allowed."""
+    text = ' '.join(re.sub(r'[^\w:]+', ' ', request.lower()).split())
+    numbers = set(_NUMBER.findall(text)) - {str(n) for n in range(10)}
+    # Named things in the request (runs of capitalised words), not instruction prose.
+    names = ' | '.join(' '.join(re.sub(r'[^\w:]+', ' ', run.lower()).split())
+                       for run in re.findall(r'\b[A-Z][\w.]*(?:[ ,]+[A-Z0-9][\w.]*)+', request))
+    found = []
+    for match in _STRING.finditer(source):
+        literal = next(group for group in match.groups() if group is not None).strip()
+        words = re.sub(r'[^\w:]+', ' ', literal.lower()).split()
+        phrases = (' '.join(words[i:i + n]) for n in (2, 3, 4) for i in range(len(words) - n + 1))
+        if set(_NUMBER.findall(' '.join(words))) & numbers or any(
+                len(phrase) >= 8 and f' {phrase} ' in f' {names} ' for phrase in phrases):
+            if literal not in found:
+                found.append(literal)
+    return found
+
+
 def hardcoded_values(source, inputs):
     """Input values written literally into a stage's source instead of read from inputs."""
     found = []
@@ -117,6 +142,8 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
     # session replays step by step under the same observation policy, guards and
     # health rules as any reflex. Request values are placeholders throughout.
     recording = {'steps': [], 'inputs': {}, 'pending': None, 'replayed': False}
+    # The user's request alone (the task also carries history and catalog context).
+    request_text = task.split('\n', 1)[0].removeprefix('Current request:').strip()
     lookup = getattr(run_reflex, 'catalog', None) if run_reflex is not None else None
 
     async def save_recording(name):
@@ -400,7 +427,8 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                 from urllib.parse import unquote_plus
                 source = (unquote_plus(str(args.get('url', ''))) if name == 'navigate' else
                           ' '.join(str(args.get(k, '')) for k in ('script', 'precondition', 'postcondition')))
-                literal = hardcoded_values(source, {**recording['inputs'], **call_inputs})
+                literal = hardcoded_values(source, {**recording['inputs'], **call_inputs}) + [
+                    value for value in request_literals(source, request_text) if value not in call_inputs.values()]
                 if literal:
                     where = 'URL' if name == 'navigate' else 'script'
                     fix = '{key} placeholders' if name == 'navigate' else 'inputs.<key>'
