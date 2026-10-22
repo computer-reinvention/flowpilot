@@ -154,8 +154,10 @@ class Executor:
                 # still gets the proposal they declined, which is usually the answer
                 # to "find options, then ask me".
                 state, error = TaskState.COMPLETED, None
+                metrics = getattr(getattr(runtime, 'session', None), 'last_metrics', None) or {}
                 result = TaskResult(answer='Not booked: you declined this proposal, so FlowPilot stopped without '
-                                           'taking any further action.\n\n' + runtime.declined_proposal)
+                                           'taking any further action.\n\n' + runtime.declined_proposal,
+                                    metrics=TaskMetrics(**{k: v for k, v in metrics.items() if k in TaskMetrics.model_fields}))
         except TimeoutError:
             state = TaskState.INTERRUPTED
             error = task_error(ErrorCode.INTERRUPTED, 'Execution deadline exceeded; website effects may be partial')

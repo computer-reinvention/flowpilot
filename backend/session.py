@@ -26,6 +26,15 @@ SECRET_FIELD = re.compile(r'otp|one[- ]?time|passw|passcode|\bpin\b|cvv|cvc|2fa|
                           r'(sms|auth|login|verification|security|access)[ _-]?code|^code$', re.I)
 
 
+def written_values(source, inputs, secrets=()):
+    """Input values that appear literally in source. Secrets count at any length."""
+    from .pi_browser import hardcoded_values
+    from .tasks.memory import input_atoms
+    atoms = list(input_atoms(inputs))
+    return hardcoded_values(source, dict(enumerate(atoms))) + [
+        '[secret]' for value in secrets if value and value in source]
+
+
 def is_secret_field(field):
     kind = field.get('kind') or field.get('type')
     return kind == 'secret' or bool(SECRET_FIELD.search(field['name']) or SECRET_FIELD.search(field.get('label') or ''))
@@ -196,6 +205,7 @@ class BrowserSession:
         started = time.monotonic()
         metrics = {'model_turns': 0, 'tool_calls': 0, 'reused': 0, 'saved': 0,
                    'replay_failures': 0, 'human_seconds': 0.0}
+        self.last_metrics = metrics  # finalized even when the request is cancelled
         ask_task = asyncio.current_task()
         human_cancelled = False
         private_inputs = False
@@ -241,15 +251,13 @@ class BrowserSession:
                 fields = normalize_fields(inputs)
             except (TypeError, ValueError) as exc:
                 return ActionResult(error=f'Invalid declared inputs: {exc}')
+            # A saved script is a sequence of steps with placeholders: every task or
+            # interaction value must be read from inputs, never written into it.
+            literal = written_values(json.dumps([name, description, script, tags, fields]), task_inputs, secrets)
+            if literal:
+                return ActionResult(error='Parameterize input values before saving scripts: read '
+                                          f'{", ".join(literal)} from inputs.<key>')
             if self.hosted:
-                from .tasks.memory import input_atoms
-                if private_inputs:
-                    return ActionResult(error='Save parameterized scripts before collecting private transient inputs')
-                # Known task/interaction inputs must remain parameterized, not
-                # become credentials embedded in durable personal scripts.
-                metadata = json.dumps([name, description, script, tags, fields])
-                if any(v in metadata for v in input_atoms(task_inputs)):
-                    return ActionResult(error='Parameterize input values before saving scripts')
                 if len(name) > 128 or len(description) > 2000 or len(tags or []) > 32 or len(json.dumps(tags)) > 4000:
                     return ActionResult(error='Script metadata exceeds persistence bounds')
             self.store.db.execute('''INSERT INTO reflexes(domain,name,description,script,pause_after,tags,inputs) VALUES(?,?,?,?,?,?,?)
@@ -320,13 +328,10 @@ class BrowserSession:
                     entry_url='', browser_session=self.browser, llm=get_llm('fast'),
                     **({'observation_policy': self.observation_policy} if self.observation_policy is not None else {}))
                 if ok and fixed:
-                    if self.hosted:
-                        from .tasks.memory import input_atoms
-                        if private_inputs or any(v in fixed for v in input_atoms(task_inputs)) or any(
-                                v in fixed for v in input_atoms(stage_inputs)):
-                            # The repaired script already ran, but it is not safe
-                            # to persist credential-bearing generated source.
-                            return ActionResult(extracted_content=detail)
+                    if written_values(fixed, task_inputs, secrets) or written_values(fixed, stage_inputs, secrets):
+                        # The repaired script already ran, but a script with request
+                        # values written in is not a reusable stage; keep the old one.
+                        return ActionResult(extracted_content=detail)
                     # Keep scope captured before execution: submission may have
                     # navigated to another site. Preserve tags/pause metadata.
                     self.store.db.execute('UPDATE reflexes SET script=?,successes=successes+1 WHERE domain=? AND name=?',

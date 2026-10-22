@@ -121,6 +121,8 @@ def run(api, scenario, profile_id=None, session_id=None):
         "profile_id": adm["profile_id"], "state": view and view["state"],
         "seconds_total": round(elapsed, 2),
         "seconds_to_running": first_running and round(first_running, 2),
+        # Time the agent took to produce what it asks the owner to approve (or any pause).
+        "seconds_to_first_pause": next((t for state, t in states if state.startswith("waiting_for_")), None),
         "states": states, "interactions": log,
         "result": view and view.get("result"), "error": view and view.get("error"),
     }
@@ -151,7 +153,9 @@ def main():
             profile_id = result.get("profile_id") or profile_id
             results.append(result)
             answer = ((result.get("result") or {}).get("answer") or "")[:600]
-            print(f"   -> {result.get('state')} in {result.get('seconds_total')}s\n   {answer}\n", flush=True)
+            pause = result.get('seconds_to_first_pause')
+            print(f"   -> {result.get('state')} in {result.get('seconds_total')}s"
+                  + (f" (first pause at {pause}s)" if pause is not None else "") + f"\n   {answer}\n", flush=True)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")

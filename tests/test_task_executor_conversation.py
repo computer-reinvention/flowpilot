@@ -28,7 +28,10 @@ async def test_hosted_private_question_never_uses_stdin_or_persists_response(tmp
         result = await kwargs['interaction_tools']['request_input_values']('[{"name":"otp","label":"Code"}]')
         assert json.loads(result.extracted_content)['otp'] == '246810'
         save = args[7]
-        assert (await save('login', 'Use input', 'async (inputs) => inputs.otp')).error
+        # A step that reads the code as a placeholder is reusable and saved; one with
+        # the code written in is rejected.
+        assert not (await save('login', 'Enter the code', 'async (inputs) => inputs.otp', inputs=[{'name': 'otp', 'type': 'string'}])).error
+        assert (await save('login_literal', 'Enter the code', "async () => '246810'")).error
         # Even transformed model responses are not persisted after private input.
         return 'Code characters: 2 4 6 8 1 0'
     monkeypatch.setattr(agent_session, 'drive_browser', inference)
@@ -40,7 +43,7 @@ async def test_hosted_private_question_never_uses_stdin_or_persists_response(tmp
         history = store.history()
         assert '246810' not in str(history)
         assert '2 4 6 8 1 0' not in str(history)
-        assert not store.scripts()
+        assert [s['name'] for s in store.scripts()] == ['login'] and '246810' not in str(store.scripts())
     finally:
         store.close()
 

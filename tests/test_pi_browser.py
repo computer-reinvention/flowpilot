@@ -100,3 +100,10 @@ def test_progress_summary_reveals_only_action_and_host():
     assert progress_summary('navigate', {'url': 'https://m.uber.com/go?pickup=Secret+Street&otp=123456'}) == 'Opening m.uber.com'
     assert progress_summary('execute', {'script': 'async()=>"4111 1111"'}) == 'Working on the page'
     assert progress_summary('request_input_values', {'fields_json': '[]'}) is None
+
+
+def test_hardcoded_values_finds_request_values_written_into_a_stage():
+    from backend.pi_browser import hardcoded_values
+    script = "async (inputs) => { pick(inputs.pickup); type('Bandra Kurla Complex'); setDate('2026-10-23'); seats(2); }"
+    found = hardcoded_values(script, {'pickup': 'Mumbai T2', 'drop': 'Bandra Kurla Complex', 'date': '2026-10-23', 'seats': 2})
+    assert found == ['Bandra Kurla Complex', '2026-10-23']

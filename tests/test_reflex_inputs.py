@@ -232,7 +232,7 @@ async def test_hosted_save_checks_task_values_not_declared_schema(tmp_path, monk
         # values used to reject scripts embedding user-supplied data.
         assert (await save('search', 'Search', 'async (inputs) => inputs.origin', inputs=declared)).error is None
         leaked = await save('leak', 'Search', "async () => 'Reykjavik'", inputs=declared)
-        assert leaked.error == 'Parameterize input values before saving scripts'
+        assert leaked.error.startswith('Parameterize input values before saving scripts') and 'Reykjavik' in leaked.error
         return 'done'
     monkeypatch.setattr(agent_session, 'drive_browser', drive)
     try:

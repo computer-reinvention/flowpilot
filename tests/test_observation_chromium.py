@@ -520,3 +520,34 @@ async def test_capture_failing_while_a_document_loads_is_retried(local_browser, 
     with pytest.raises(TaskFault) as fault:
         await policy(timeout=0.3).observe(browser)
     assert fault.value.error.code == ErrorCode.UNAVAILABLE
+
+
+async def test_named_stage_reads_placeholders_and_is_saved_automatically(local_browser, monkeypatch):
+    browser, page, _ = local_browser
+    saved, seen = [], {}
+    async def save_reflex(**kwargs):
+        saved.append(kwargs)
+        return SimpleNamespace(error=None, extracted_content=f"Saved {kwargs['name']}")
+    async def run_pi(task, system, tools, dispatch, *args, **kwargs):
+        await dispatch('observe', {})
+        seen['ok'] = await dispatch('execute', {
+            'name': 'fill_city', 'description': 'Type the city into the field', 'inputs': {'city': 'Reykjavik'},
+            'script': 'async (inputs) => { field.value = inputs.city; return field.value; }',
+            'precondition': 'async () => !!field', 'postcondition': 'async (inputs) => field.value === inputs.city'})
+        try:
+            await dispatch('execute', {'name': 'fill_literal', 'inputs': {'city': 'Oslo'},
+                                       'script': "async () => { field.value = 'Oslo'; }",
+                                       'precondition': 'async () => true', 'postcondition': 'async () => true'})
+        except ValueError as exc:
+            seen['literal'] = str(exc)
+        return 'done'
+    monkeypatch.setattr(pi_browser, 'run_pi', run_pi)
+    from backend.replay import RunControl
+    with pytest.raises(RuntimeError, match='without verified completion'):
+        await pi_browser.drive_browser(browser, 'Fill the city', {}, '', RunControl([False]), AsyncMock(),
+                                       AsyncMock(), save_reflex, observation_policy=policy(3))
+    assert seen['ok']['success'] is True and json.loads(seen['ok']['result']) == 'Reykjavik'
+    assert seen['ok']['saved'] == 'Saved fill_city'
+    assert saved[0]['inputs'] == [{'name': 'city', 'type': 'string'}] and 'Reykjavik' not in saved[0]['script']
+    assert 'Oslo' in seen['literal'] and 'did not run' in seen['literal'] and len(saved) == 1
+    assert await page.evaluate('() => field.value') == 'Reykjavik'
