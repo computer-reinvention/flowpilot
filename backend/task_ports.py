@@ -53,7 +53,11 @@ class AssistanceBinding(Contract):
 
 
 # Element references one snapshot may hold; captures stop collecting controls here.
-MAX_REFERENCES = 2_000
+# Host-side only (never sent to the model), so sized to cover very large pages.
+MAX_REFERENCES = 10_000
+# Characters of one observation the model sees (~15k tokens). The Pi loop keeps every
+# tool result for up to 50 turns, so 50 full views stay under a 1M-token context.
+MAX_VIEW = 60_000
 
 
 class ElementReference(Contract):
@@ -69,7 +73,7 @@ class Observation(Contract):
     url: str = Field(max_length=8_192)
     target_id: Identifier
     document_id: Identifier
-    elements: str = Field(max_length=24_000, repr=False)
+    elements: str = Field(max_length=MAX_VIEW, repr=False)
     references: tuple[ElementReference, ...] = Field(default=(), max_length=MAX_REFERENCES)
     structural_fingerprint: str = Field(min_length=1, max_length=128)
     progress_fingerprint: str = Field(min_length=1, max_length=128)

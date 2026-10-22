@@ -26,7 +26,7 @@ export function createCodeMode(definitions, invoke, { timeoutMs = 30000 } = {}) 
         const result = await sandbox.execute(code, { signal });
         const text = JSON.stringify(result.ok
           ? { value: result.value, output: result.output }
-          : { error: result.error, output: result.output }).slice(0, 24000);
+          : { error: result.error, output: result.output }).slice(0, 64000);
         return { content: [{ type: 'text', text }], details: { ok: result.ok } };
       },
     },

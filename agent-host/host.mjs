@@ -46,7 +46,7 @@ async function run(config) {
     parameters: def.inputSchema, executionMode: 'sequential',
     async execute(id, args, signal) {
       const value = await invoke(def.name, args, signal);
-      return { content: [{ type: 'text', text: JSON.stringify(value).slice(0, 24000) }], details: {} };
+      return { content: [{ type: 'text', text: JSON.stringify(value).slice(0, 64000) }], details: {} };
     },
   }));
   let turns = 0;

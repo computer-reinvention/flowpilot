@@ -450,11 +450,11 @@ async def test_completion_with_an_unresponsive_browser_is_reported_unverified(lo
 
 
 async def test_huge_page_is_paged_not_an_error(local_browser):
-    """A Wikipedia-sized page: more links than references, more text than one view."""
+    """More links than references and more text than one view."""
     browser, page, _ = local_browser
     await page.evaluate('''() => {
       const main = document.querySelector('main');
-      for (let i = 0; i < 2900; i++) {
+      for (let i = 0; i < 10500; i++) {
         const p = document.createElement('p');
         p.textContent = `Paragraph ${i} about tigers. `;
         const a = document.createElement('a'); a.href = `/wiki/link${i}`; a.textContent = `Link ${i}`;
@@ -465,24 +465,27 @@ async def test_huge_page_is_paged_not_an_error(local_browser):
     p = policy(3)
     first = await p.observe(browser)
     assert first.readiness == 'ready'
-    assert len(first.references) == 2000 and first.parts > 1
+    from backend.task_ports import MAX_REFERENCES
+    assert len(first.references) == MAX_REFERENCES and first.parts > 1
     assert first.elements.startswith(f'Part 1 of {first.parts}') and 'truncated' in first.elements
     # Text beyond the reference bound is still captured and reachable.
     found = await p.observe(browser, find='taxonomy')
     assert 'Panthera tigris' in found.elements and 'Part 1 of' not in found.elements
-    last = await p.observe(browser, part=first.parts - 1)
-    assert last.part == first.parts - 1 and 'Panthera tigris' in last.elements
+    last = await p.observe(browser, part=first.parts + 5)  # clamped to the last part
+    assert last.part == first.parts - 1 and '(last part)' in last.elements
+    texts = [(await p.observe(browser, part=i)).elements for i in range(first.parts)]
+    assert sum('Panthera tigris' in t for t in texts) == 1
     later = await p.observe(browser, part=1)
     assert later.elements.startswith(f'Part 2 of {first.parts}')
     # References stay valid whichever part was read.
     await p.require_fresh(browser, later)
-    await p.resolve_reference(browser, later, 'r1500')
+    await p.resolve_reference(browser, later, 'r9500')
 
 
 async def test_pi_observe_tool_pages_through_a_long_page(local_browser, monkeypatch):
     browser, page, _ = local_browser
     await page.evaluate('''() => { const m = document.querySelector('main');
-      for (let i = 0; i < 4000; i++) { const p = document.createElement('p'); p.textContent = 'Filler line ' + i; m.append(p); }
+      for (let i = 0; i < 12000; i++) { const p = document.createElement('p'); p.textContent = 'Filler line ' + i; m.append(p); }
       const z = document.createElement('p'); z.textContent = 'The answer is 42'; m.append(z); }''')
     seen = {}
     async def run_pi(task, system, tools, dispatch, *args, **kwargs):

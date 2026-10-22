@@ -66,6 +66,7 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
     from .observation import ObservationPolicy, ProgressGuard, action_observation, create_observation
     from .task_contracts import ErrorCode, ScriptTimeout, TaskFault, task_error
     from .task_settings import TaskSettings
+    from .task_ports import MAX_VIEW
     from .reflex_inputs import CALL_SCHEMA, FIELDS_SCHEMA, ReflexInputError, bind_inputs
     if bind_reflex_inputs is None:
         bind_reflex_inputs = getattr(run_reflex, 'bind_inputs', None)
@@ -132,7 +133,7 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
         except TimeoutError:
             raise TaskFault(task_error(ErrorCode.INTERRUPTED, 'Human wait deadline expired; inspect current browser state before continuing')) from None
 
-    def model_view(snapshot, limit=24000):
+    def model_view(snapshot, limit=MAX_VIEW):
         # Only what the model reasons with; references and fingerprints stay host-side.
         return {"url": snapshot.url, "readiness": snapshot.readiness, "elements": snapshot.elements[:limit]}
 
@@ -375,13 +376,13 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                 observation, needs_observation = after, False
                 observed_identity = await page_identity()
                 if isinstance(result, dict):
-                    result = {**result, "page_after": model_view(after, 12000)}
+                    result = {**result, "page_after": model_view(after, 30000)}
             elif name == 'navigate' and observation_policy is not None:
                 landed = await observation_policy.observe(browser)
                 if landed.readiness == 'ready':
                     observation, needs_observation = landed, False
                     observed_identity = await page_identity()
-                result = {**result, "page": model_view(landed, 16000)}
+                result = {**result, "page": model_view(landed, 40000)}
             return result
 
     rules = ("Map stages with report_stage before generate_and_save_reflex. Declare all user inputs. "

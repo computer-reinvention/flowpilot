@@ -16,7 +16,7 @@ import secrets
 import time
 
 from .task_contracts import ErrorCode, TaskFault, task_error
-from .task_ports import MAX_REFERENCES, ElementReference, Observation
+from .task_ports import MAX_REFERENCES, MAX_VIEW, ElementReference, Observation
 from .task_settings import TaskSettings
 from .trace import trace
 
@@ -60,7 +60,7 @@ CAPTURE_JS = r"""() => {
     do {
       // Large pages are captured up to a bound and marked truncated: the
       // captured prefix and the counts still fingerprint every change in it.
-      if (++count > 60000 || size > 400000) { truncated = true; break; }
+      if (++count > 100000 || size > 1000000) { truncated = true; break; }
       if (el.nodeType === Node.TEXT_NODE) {
         const p = el.parentElement;
         // Only an explicit data-observation-volatile="timestamp"
@@ -119,8 +119,8 @@ CAPTURE_JS = r"""() => {
 }""".replace('__MAX_REFERENCES__', str(MAX_REFERENCES))
 
 
-# Characters of controls and of page text shown per observe part (24000 total).
-CONTROL_PAGE, TEXT_PAGE = 10000, 13000
+# Characters of controls and of page text shown per observe part (within MAX_VIEW).
+CONTROL_PAGE, TEXT_PAGE = 24000, 34000
 
 
 def _pages(items, size):
@@ -236,13 +236,14 @@ class ObservationPolicy:
         parts = max(len(control_parts), len(text_parts))
         part = min(part, parts - 1)
         if parts > 1:
-            header = f'Part {part + 1} of {parts}; call observe with part={part + 1} for the next part, or find="text" to jump to it.'
+            header = (f'Part {part + 1} of {parts} (last part).' if part == parts - 1 else
+                      f'Part {part + 1} of {parts}; call observe with part={part + 1} for the next part, or find="text" to jump to it.')
         shown_controls = control_parts[part] if part < len(control_parts) else []
         shown_text = text_parts[part] if part < len(text_parts) else []
         elements = '\n'.join(filter(None, [header, *(shown_controls or ['(no controls in this part)']), *notes,
                                            'Page text (bounded; form values omitted):', *shown_text]))
         return Observation(snapshot_id=snapshot_id, url=raw['url'], target_id=target,
-                           document_id=document, elements=elements[:24000], references=refs,
+                           document_id=document, elements=elements[:MAX_VIEW], references=refs,
                            structural_fingerprint=structural, progress_fingerprint=progress,
                            readiness=readiness, part=part, parts=parts)
 
