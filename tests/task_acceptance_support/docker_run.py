@@ -39,9 +39,17 @@ def build_frontend(directory):
     return output, hashlib.sha256(lock).hexdigest()
 
 
-def run_local_chat(evidence, network, run, results):
-    """./chat REPL path on the host, concurrently with the assembled service."""
+def run_local_chat(evidence, network, run, results, marker, backend):
+    """./chat REPL path on the host, concurrently with the assembled service's
+    compatibility phase (released by a marker the backend writes)."""
+    import time
     from .site import synthetic_site
+    while not marker.exists():
+        backend.reload()
+        if backend.status not in {'created', 'running'}:
+            evidence.record('real_local_chat_repl', 'blocked', 'assembled compatibility phase never started; REPL not run')
+            return
+        time.sleep(1)
     with tempfile.TemporaryDirectory(prefix=run + '-chat-', dir=ROOT / 'reports/task-acceptance') as directory:
         state = Path(directory) / 'repl-state'
         cwd = Path(directory) / 'cwd'
@@ -106,7 +114,7 @@ def run_assembled_docker(evidence):
                 working_dir='/lane', pids_limit=1024, mem_limit='2g')
             chat_thread = None
             if not scenarios or 'compat' in scenarios.split(','):
-                chat_thread = threading.Thread(target=run_local_chat, args=(evidence, network.name, run, chat), daemon=True)
+                chat_thread = threading.Thread(target=run_local_chat, args=(evidence, network.name, run, chat, Path(directory) / 'compat-started', backend), daemon=True)
                 chat_thread.start()
             result = backend.wait(timeout=2400)
             if chat_thread is not None:
@@ -119,7 +127,7 @@ def run_assembled_docker(evidence):
             if os.environ.get('TASK_ACCEPTANCE_DEBUG') == '1':
                 # Development only: traceback locations/types, never values.
                 for line in logs.decode(errors='replace').splitlines():
-                    if line.startswith(('  File "/lane/tests', 'Traceback', 'AssertionError', 'TimeoutError')) or 'Error:' in line[:60]:
+                    if 'File "' in line or line.startswith(('Traceback', 'Thread', 'Current thread')) or 'Error:' in line[:60]:
                         print('debug:', line[:240])
             log_scan = scan_blobs([('backend', logs), ('local-chat', chat.get('output', b''))], list(values.values()))
             key_patterns = len(re.findall(rb'fp_live_[a-f0-9]{32}', logs))

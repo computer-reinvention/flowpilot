@@ -202,12 +202,6 @@ async def deterministic_driver(task, system, definitions, dispatch, **kwargs):
         busy = int(spec.get('busy_ms', 10000))
         await execute('async () => { await fetch("/effects",{method:"POST",body:JSON.stringify({action:"longjs"})}); const end=Date.now()+' + str(busy)
                       + '; while (Date.now() < end) {} await fetch("/effects",{method:"POST",body:JSON.stringify({action:"late"})}); return true; }')
-    elif scenario == 'ui':
-        # The current revision's SPA served by the composed app, in a real browser.
-        await dispatch('observe', {})
-        result = await dispatch('execute', {'script': UI_SCRIPT, 'precondition': 'async () => true', 'postcondition': 'async () => true'})
-        assert result.get('success') and result.get('result') is True, 'UI boundary smoke failed'
-        verify = 'async (inputs) => document.body.innerText.includes(inputs.ui_label) && !!localStorage.getItem("flowpilot_token")'
     elif scenario == 'guards':
         from backend.task_contracts import TaskFault
         await dispatch('navigate', {'url': url + '/frames'})
@@ -265,25 +259,51 @@ async def deterministic_driver(task, system, definitions, dispatch, **kwargs):
 
 
 UI_SCRIPT = r'''async (inputs) => {
-  const wait = async (find, ms) => { const end = Date.now() + (ms || 15000);
+  let step = 'start'; const errors = [];
+  const wait = async (find, ms) => { const end = Date.now() + (ms || 8000);
     while (Date.now() < end) { const found = find(); if (found) return found; await new Promise(r => setTimeout(r, 100)); }
     throw new Error('UI element did not appear'); };
+  try { return await flow(); } catch (e) {
+    const labels = [...document.querySelectorAll('button, a, h1, h2')].map(e => e.tagName + ':' + e.textContent.trim().slice(0, 24)).slice(0, 25);
+    return 'failed:' + step + ' ' + innerWidth + 'x' + innerHeight + ' ' + JSON.stringify(labels) + ' root=' +
+      (document.querySelector('#root') || {innerHTML: ''}).innerHTML.length + ' text=' + JSON.stringify(document.body.innerText.slice(0, 160)) + ' url=' + location.pathname + ' errors=' + JSON.stringify(errors); }
+  async function flow() {
+  step = 'login-form';
+  addEventListener('error', e => errors.push(String(e.message).slice(0, 300)));
+  addEventListener('unhandledrejection', e => errors.push('rejection:' + String(e.reason).slice(0, 300)));
   const set = (element, value) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(element, value);
     element.dispatchEvent(new Event('input', {bubbles: true})); };
   const email = await wait(() => document.querySelector('#login-email'));
   set(email, inputs.ui_email);
   const password = document.querySelector('#login-password');
   set(password, inputs.ui_password);
+  step = 'submit';
   password.form.requestSubmit();
-  const button = text => [...document.querySelectorAll('button, a')].find(e => e.textContent.trim() === text);
-  (await wait(() => button('Browser tasks'))).click();
+  step = 'session-token';
+  await wait(() => localStorage.getItem('flowpilot_token'));
+  const find = text => [...document.querySelectorAll('button, a')].find(e => e.textContent.trim() === text);
+  const button = async text => {
+    try { return await wait(() => find(text), 2000); } catch (e) {}
+    // Narrow viewports render the sidebar off-canvas; open it once, like a user.
+    const trigger = document.querySelector('[data-sidebar="trigger"]');
+    if (trigger) trigger.click();
+    return await wait(() => find(text), 6000);
+  };
+  step = 'nav-tasks';
+  (await button('Browser tasks')).click();
+  step = 'task-profiles';
   await wait(() => document.body.innerText.includes('Owned browser-task profiles') && document.body.innerText.includes(inputs.ui_label));
-  (await wait(() => button('API Keys'))).click();
+  step = 'nav-keys';
+  (await button('API Keys')).click();
+  step = 'key-list';
   await wait(() => document.body.innerText.includes(inputs.ui_key_name));
+  step = 'no-plaintext-key';
   if (/fp_live_[a-f0-9]{32}/.test(document.body.innerText)) throw new Error('plaintext key rendered');
-  (await wait(() => button('Browser tasks'))).click();
+  step = 'back-to-tasks';
+  (await button('Browser tasks')).click();
   await wait(() => document.body.innerText.includes(inputs.ui_label));
   return true;
+  }
 }'''
 
 
@@ -374,6 +394,10 @@ def compose_legacy(app, main):
 
 def serve(port, stop=None, holder=None, env=None, host='127.0.0.1'):
     os.environ.update(env or {})  # Spawned children only; read before backend import.
+    if threading.current_thread() is threading.main_thread():
+        import faulthandler
+        import signal
+        faulthandler.register(signal.SIGUSR1, all_threads=True)  # Owned-child hang triage: stack locations only.
     logging.disable(logging.CRITICAL)
     import uvicorn
     holder = {} if holder is None else holder
@@ -540,7 +564,8 @@ def run_inside():
             follow = fresh.start({**program(fresh, site, 'follow', run + ':follow'), 'session_id': receipt['session_id']})
             assert follow['session_id'] == receipt['session_id'] and follow['profile_id'] == receipt['profile_id']
             followed = fresh.wait(follow['task_id'], timeout=120)
-            assert followed['state'] == 'completed' and followed['result']['metrics']['reused'] == 1
+            assert followed['state'] == 'completed' and followed['result']['metrics']['reused'] == 1, \
+                'follow-up ' + followed['state'] + ' ' + str((followed.get('error') or {}).get('code'))
             assert site.counters() == {'prerequisite': 1, 'cart': 2}
             evidence.record('real_browser_followup_idempotency', 'passed', 'concurrent HTTP admission once; durable profile cookie/storage and saved script restored; fresh client follow-up',
                             admission_attempts=4, distinct_tasks=1, effect_counters=site.counters())
@@ -552,7 +577,8 @@ def run_inside():
             for account, profile in [(owner, owned_profiles[1]), (foreign, foreign_profiles[0])]:
                 stage = 'browser_profile_separation'
                 clean = task('clean', profile, account)
-                assert account.wait(clean['task_id'], timeout=120)['state'] == 'completed'
+                cleaned = account.wait(clean['task_id'], timeout=120)
+                assert cleaned['state'] == 'completed', 'clean ' + cleaned['state'] + ' ' + str((cleaned.get('error') or {}).get('code'))
             evidence.record('real_browser_profile_separation', 'passed', 'same-account second profile and foreign account have no private cookie/localStorage/cart state')
             evidence.requirements['profile_website_isolation']['outcome'] = 'passed'
 
@@ -751,6 +777,7 @@ def run_inside():
                             'actual SQLite/history/state scan including in-memory expansion of profile archives', **scan)
         except Exception as exc:
             import traceback
+            traceback.print_exc()  # Private container stderr only; never retained by the host.
             frames = [{'path': frame.filename, 'line': frame.lineno} for frame in traceback.extract_tb(exc.__traceback__)]
             evidence.record('assembled_scenario', 'failed', 'actual assembled scenario stopped; rerun exact launcher for failure boundary',
                             stage=stage, exception_type=type(exc).__name__, traceback_frames=frames[-6:], model_events=MODEL_EVENTS[-24:])
