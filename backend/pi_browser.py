@@ -119,9 +119,15 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
         if save_reflex is None or not any(step['type'] == 'script' for step in kept) or recording['replayed']:
             return None
         kept = [{key: value for key, value in step.items() if key != 'changed'} for step in kept]
-        fields = [{'name': key, 'type': 'boolean' if isinstance(value, bool) else
-                   'number' if isinstance(value, (int, float)) else 'string'}
-                  for key, value in sorted(recording['inputs'].items())]
+        from .session import is_secret_field
+        fields = []
+        for key, value in sorted(recording['inputs'].items()):
+            field = {'name': key, 'type': 'boolean' if isinstance(value, bool) else
+                     'number' if isinstance(value, (int, float)) else 'string'}
+            if not is_secret_field({'name': key}):
+                # The value this recording ran with tells the next request what goes here.
+                field['description'] = f'e.g. {json.dumps(value, ensure_ascii=False)[:80]}'
+            fields.append(field)
         summary = '; '.join(step.get('description') or ('open ' + step['url'] if step['type'] == 'navigate' else 'script step')
                             for step in kept)[:1500]
         name = re.sub(r'[^A-Za-z0-9_]+', '_', name or '').strip('_')[:64] or 'workflow'
@@ -145,7 +151,7 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
              "Pass every request value the script uses (place, date, time, quantity, query) in inputs and read it as "
              "inputs.<key>; a script containing one literally is rejected. Give a one-line description of the step: steps "
              "that work are recorded and saved as a reflex for the next request.",
-             {"script": string, "description": string, "inputs": CALL_SCHEMA}, ["script"]),
+             {"script": string, "description": string, "inputs": CALL_SCHEMA}, ["script", "description"]),
         tool("run_reflex", "Run a stored stage by name with the input values you resolved from the user's request; may pause for human help. "
              "Pass inputs keyed by the stage's declared input names (listed with each saved script). "
              "A result with error_code invalid_input means the script did NOT run and nothing was repaired: supply the "
@@ -480,7 +486,14 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                     from urllib.parse import urlparse
                     saved = await lookup((urlparse(landed.url).hostname or '').lower())
                     if saved:
-                        result['saved_reflexes'] = saved
+                        best = saved[0]
+                        names = ', '.join(f"{f['name']} ({f.get('description', f['type'])})" for f in best.get('inputs') or [])
+                        result = {'REUSE': (f"This site has a saved reflex '{best['name']}' ({best['status']}, "
+                                            f"{best['successes']} successful replays): {best['description'][:400]}. "
+                                            f"If it fits this request, call run_reflex now with name='{best['name']}' and inputs "
+                                            f"for: {names}, using this request's values. It replays every step with checks; "
+                                            "explore by hand only if it fails, continuing from the failed step."),
+                                  'saved_reflexes': saved, **result}
             return result
 
     rules = ("Map stages with report_stage before generate_and_save_reflex. Declare all user inputs. "
