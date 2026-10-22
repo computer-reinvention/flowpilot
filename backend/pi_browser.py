@@ -136,7 +136,7 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
         if save_reflex is None or not segments or not flow['inputs']:
             return None
         keys = sorted(flow['inputs'])
-        base = 'flow_' + '_'.join(keys)[:80]
+        base = 'flow'  # one flow per site; the newest recording replaces the last
         outcomes = []
         for index, segment in enumerate(segments):
             name = base if len(segments) == 1 else f'{base}_part{index + 1}'
@@ -281,12 +281,6 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
             stage_inputs = args.get('inputs') or {}
             if not isinstance(stage_inputs, dict):
                 raise ValueError('inputs must be an object of named values')
-            known = {**flow['inputs'], **stage_inputs}
-            literal = hardcoded_values(script + ' ' + str(args.get('precondition', '')) + ' ' + str(args.get('postcondition', '')),
-                                       known)
-            if literal:
-                raise ValueError(f'This script contains request values literally ({", ".join(literal)}); pass them in inputs '
-                                 'and read them as inputs.<key>. The script did not run.')
             flow['inputs'].update(stage_inputs)
             if checked_scripts:
                 if not args.get('precondition') or not args.get('postcondition'):
@@ -374,6 +368,13 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                 if summary:
                     on_progress(summary)
             action_args = args
+            if name == 'execute' and isinstance(args.get('inputs') or {}, dict):
+                # Rejected before guards: the script never ran, so the page needs no re-observation.
+                literal = hardcoded_values(' '.join(str(args.get(k, '')) for k in ('script', 'precondition', 'postcondition')),
+                                           {**flow['inputs'], **(args.get('inputs') or {})})
+                if literal:
+                    raise ValueError(f'This script contains request values literally ({", ".join(literal)}); pass them in inputs '
+                                     'and read them as inputs.<key>. The script did not run; the page is unchanged.')
             if name == 'run_reflex':
                 # Input binding precedes freshness/no-progress guards: a rejected
                 # call never entered the script, so it consumes no attempt and
@@ -492,11 +493,12 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                  "counts, queries, filters) as named inputs, using the same key names every time for the same meaning (pickup, drop, "
                  "date, time, origin, destination, query...). Pass them in every execute call's inputs and read them as inputs.<key>; "
                  "a script containing a request value literally is rejected. Every step that works is recorded, and when you ask for "
-                 "confirmation or complete, the recording is saved as flow_<input keys> scripts (one per page, _part1, _part2...). "
-                 "REUSE FIRST: if a saved flow exists for the site with matching input keys, navigate to its start URL and run its "
-                 "parts in order with this request's values (chain them in one codemode program, observing between parts), then read "
-                 "the result; explore by hand only from the point where a part fails. When the user names no site, prefer one that "
-                 "already has saved scripts for this kind of task. "
+                 "confirmation or complete, the recording is saved as the site's flow (flow, or flow_part1, flow_part2... one per page). "
+                 "REUSE FIRST: if the site has a saved flow, navigate to its start URL and run its parts in order, passing this "
+                 "request's values under the flow's own declared input names (map each meaning: e.g. its 'q' may be the drop place); "
+                 "chain the parts in one codemode program, observing between parts, then read the result. Explore by hand only from "
+                 "the point where a part fails. When the user names no site, prefer one that already has saved scripts for this kind "
+                 "of task. "
                  "Submit a search in one stage and return; read the results in the next stage after observing the new page. "
                  "SPEED: every tool call costs a model turn, so do more per call. Fill all fields of a form in one stage when they "
                  "are on the same page; do independent work inside a stage concurrently (Promise.all); wait for elements or results "
