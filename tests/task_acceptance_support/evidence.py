@@ -78,7 +78,10 @@ class Evidence:
                     "created_at": datetime.now(timezone.utc).isoformat(),
                     "revision": revision, "working_tree_dirty": dirty,
                     "foundation_revision": "0ccc06a005c3ff680110de6b66a6606a4e48d3d3",
-                    "fixture_sha256": fixture_hashes, "checks": self.checks,
+                    "fixture_sha256": fixture_hashes,
+                    # A development subset can never complete: unselected gates stay blocked.
+                    "scenario_selection": getattr(self, "scenario_selection", None) or "all",
+                    "checks": self.checks,
                     "requirements": self.requirements,
                     "readiness": "not_established" if any(v["outcome"] != "passed" for v in self.requirements.values()) else "local_only",
                     "limitations": ["Fixture/consumer tests are not service acceptance.",

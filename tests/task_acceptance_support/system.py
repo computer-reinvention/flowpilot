@@ -11,8 +11,8 @@ from .assistance import public_assistance_targets
 from .wire import PREFIX, admission, no_store, ordinary_safe, view
 
 
-def onboard(base, label):
-    password = secrets.token_urlsafe(24)
+def onboard(base, label, password=None):
+    password = password or secrets.token_urlsafe(24)
     email = f"{label}@acceptance.invalid"
     anonymous = Client(base)
     signup = anonymous.request("POST", "/api/auth/signup", {

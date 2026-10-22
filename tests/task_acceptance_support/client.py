@@ -33,11 +33,17 @@ class Reply:
 
 
 class Client:
-    def __init__(self, base_url, token="", timeout=30):
+    def __init__(self, base_url, token="", timeout=30, ssl_context=None):
         self.base_url = local_url(base_url)
         self.token = token
         self.timeout = timeout
-        self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+        self.ssl_context = ssl_context
+        handlers = [urllib.request.ProxyHandler({}), NoRedirect()]
+        if ssl_context is not None:
+            # Explicit trust root for the run's local TLS proxy; never disables verification.
+            assert ssl_context.verify_mode != 0 and ssl_context.check_hostname
+            handlers.append(urllib.request.HTTPSHandler(context=ssl_context))
+        self.opener = urllib.request.build_opener(*handlers)
 
     def request(self, method, path, body=None, headers=None, raw=False):
         assert path.startswith("/") and not path.startswith("//") and "://" not in path

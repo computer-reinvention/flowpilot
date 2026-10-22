@@ -47,7 +47,7 @@ def mint(owner, receipt, interaction):
 
 
 def metadata(owner, grant, interaction, expected_url):
-    capability_client = Client(owner.base_url)  # No API key on capability requests.
+    capability_client = Client(owner.base_url, ssl_context=getattr(owner, 'ssl_context', None))  # No API key on capability requests.
     state = capability_client.request('GET', grant['assistance_url'] + '/state')
     assert state.status == 200
     assistance_state(state.body, interaction, expected_url)
@@ -69,8 +69,9 @@ def wallclock_expiry(evidence, owner, grant, max_wait=10):
 
 
 def expired(owner, grant):
-    Client(owner.base_url).expect_error('GET', grant['assistance_url'] + '/state', None, 'assistance_expired')
-    Client(owner.base_url).expect_error('POST', grant['assistance_url'] + '/input', {'kind': 'release'},
+    context = getattr(owner, 'ssl_context', None)
+    Client(owner.base_url, ssl_context=context).expect_error('GET', grant['assistance_url'] + '/state', None, 'assistance_expired')
+    Client(owner.base_url, ssl_context=context).expect_error('POST', grant['assistance_url'] + '/input', {'kind': 'release'},
                                         'assistance_expired', {'Origin': owner.base_url})
 
 
