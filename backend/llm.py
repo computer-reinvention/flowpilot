@@ -13,7 +13,7 @@ Role = Literal["agent", "exploration", "fast"]
 
 DEFAULT_MODELS = {
     "gemini": {"agent": "gemini-4-argon", "exploration": "gemini-4-argon", "fast": "gemini-3.8-flash"},
-    "claude": {"agent": "claude-sonnet-5-5", "exploration": "claude-sonnet-5-5", "fast": "claude-haiku-5-5"},
+    "claude": {"agent": "claude-opus-5-5", "exploration": "claude-opus-5-5", "fast": "claude-sonnet-5-5"},
     "openai": {"agent": "gpt-6.1-sol", "exploration": "gpt-6.1-sol", "fast": "gpt-6-luna"},
 }
 PREFIXES = {"gemini": "GEMINI", "claude": "ANTHROPIC", "openai": "OPENAI"}

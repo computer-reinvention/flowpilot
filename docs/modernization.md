@@ -322,8 +322,8 @@ Official model catalogs retrieved October 16, 2026:
   `gpt-6.1-sol`, `gpt-6-luna`. Select Sol for agent/exploration and Luna for fast
   calls; Astra is configurable for demanding flows.
 - https://platform.claude.com/docs/en/models/overview — `claude-sonnet-5-5`,
-  `claude-haiku-5-5`, `claude-opus-5-5`, `claude-fable-5-1`. Select Sonnet and
-  Haiku by role, leaving larger models configurable. Check current sampling
+  `claude-haiku-5-5`, `claude-opus-5-5`, `claude-fable-5-1`. Select Opus for
+  agent/exploration and Sonnet for fast calls, leaving Fable configurable. Check current sampling
   constraints against the adapter before using these defaults.
 
 Jev's documented REST API is `POST https://api.typesafe.ai/v1/systemone`, with
