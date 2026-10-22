@@ -182,15 +182,26 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
             guarded_check = observation_policy is not None
             if checked_scripts:
                 observation = await observation_policy.observe(browser)
-                if observation.readiness == 'ready':
-                    await observation_policy.require_fresh(browser, observation)
-                else:
-                    # complete only reads: an unsettled page (bot wall, endless
-                    # animation) must not stop the agent reporting what it found.
+                if observation.readiness == 'unknown':
+                    # complete only reads: an opaque wall (bot check, full-page
+                    # cross-origin frame) must not stop the agent reporting it.
+                    # A busy or still-changing page still blocks completion.
                     guarded_check = False
+                else:
+                    await observation_policy.require_fresh(browser, observation)
             script = "async (inputs, entryUrl) => { if (await (" + args["verify"] + ")(inputs, entryUrl) !== true) throw new Error('Completion check failed'); return true; }"
-            ok, value = await _execute_reflex(script, inputs, entry_url, browser,
-                                            **({'observation_policy': observation_policy, 'expected_observation': observation} if guarded_check else {}))
+            if guarded_check or observation_policy is None:
+                ok, value = await _execute_reflex(script, inputs, entry_url, browser,
+                                                **({'observation_policy': observation_policy, 'expected_observation': observation} if guarded_check else {}))
+            else:
+                # Read-only check on an unsettled page, outside the action guards.
+                page = await browser.must_get_current_page()
+                session_id = await page._ensure_session()
+                response = await asyncio.wait_for(page._client.send.Runtime.evaluate(
+                    {'expression': f'({script})({json.dumps(inputs)}, {json.dumps(entry_url)})',
+                     'returnByValue': True, 'awaitPromise': True, 'timeout': 10000}, session_id=session_id), timeout=12)
+                ok = 'exceptionDetails' not in response and response.get('result', {}).get('value') is True
+                value = 'Completion check failed'
             if not ok:
                 raise ValueError(value)
             completion = args["summary"]

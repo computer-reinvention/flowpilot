@@ -263,6 +263,21 @@ async def test_completion_requires_true_postcondition_and_ready_state(local_brow
     assert result == 'Checked'
 
 
+async def test_completion_reports_through_an_opaque_full_page_wall(local_browser, monkeypatch):
+    browser, page, url = local_browser
+    await page.evaluate("""() => { const f=document.createElement('iframe'); f.sandbox='allow-scripts';
+      f.srcdoc='<p>Bot check</p>'; f.style.cssText='position:fixed;inset:0;width:100vw;height:100vh'; document.body.append(f); }""")
+    async def agent(task, system, tools, dispatch, **kwargs):
+        assert (await dispatch('observe', {}))['readiness'] == 'unknown'
+        with pytest.raises(ValueError):
+            await dispatch('complete', {'verify': 'async()=>false', 'summary': 'Must not finish'})
+        await dispatch('complete', {'verify': 'async()=>!!document.querySelector("iframe")', 'summary': 'Blocked by a bot check'})
+    monkeypatch.setattr(pi_browser, 'run_pi', agent)
+    result = await pi_browser.drive_browser(browser, 'check', {}, url, SimpleNamespace(checkpoint=AsyncMock()),
+                                           None, None, None, observation_policy=policy(timeout=0.4))
+    assert result == 'Blocked by a bot check'
+
+
 async def test_volatile_optout_does_not_hide_result_or_control_state(local_browser):
     browser, page, _ = local_browser
     await page.evaluate("() => { result.setAttribute('data-observation-volatile','timestamp'); action.setAttribute('data-observation-volatile','timestamp'); }")
