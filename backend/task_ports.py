@@ -52,6 +52,10 @@ class AssistanceBinding(Contract):
     expires_at: AwareDatetime
 
 
+# Element references one snapshot may hold; captures stop collecting controls here.
+MAX_REFERENCES = 2_000
+
+
 class ElementReference(Contract):
     reference: Identifier
     snapshot_id: Identifier
@@ -66,10 +70,12 @@ class Observation(Contract):
     target_id: Identifier
     document_id: Identifier
     elements: str = Field(max_length=24_000, repr=False)
-    references: tuple[ElementReference, ...] = Field(default=(), max_length=2_000)
+    references: tuple[ElementReference, ...] = Field(default=(), max_length=MAX_REFERENCES)
     structural_fingerprint: str = Field(min_length=1, max_length=128)
     progress_fingerprint: str = Field(min_length=1, max_length=128)
     readiness: Literal["ready", "timeout", "unstable", "unknown"]
+    part: int = Field(default=0, ge=0)
+    parts: int = Field(default=1, ge=1)
 
     @model_validator(mode="after")
     def coherent_references(self):
@@ -83,7 +89,7 @@ class Observation(Contract):
 class ObservationPolicy(Protocol):
     """Never silently accept timeout as readiness or rematch an ambiguous target."""
 
-    async def observe(self, browser: Any) -> Observation: ...
+    async def observe(self, browser: Any, *, part: int = 0, find: str | None = None) -> Observation: ...
     async def require_fresh(self, browser: Any, observation: Observation) -> None: ...
     async def after_action(self, browser: Any, observation: Observation | None, action: str) -> None: ...
 

@@ -447,3 +447,73 @@ async def test_completion_with_an_unresponsive_browser_is_reported_unverified(lo
     result = await pi_browser.drive_browser(browser, 'check', {}, url, SimpleNamespace(checkpoint=AsyncMock()),
                                            None, None, None, observation_policy=p)
     assert result.startswith('The browser stopped responding') and 'Site blocked; nothing booked' in result
+
+
+async def test_huge_page_is_paged_not_an_error(local_browser):
+    """A Wikipedia-sized page: more links than references, more text than one view."""
+    browser, page, _ = local_browser
+    await page.evaluate('''() => {
+      const main = document.querySelector('main');
+      for (let i = 0; i < 2900; i++) {
+        const p = document.createElement('p');
+        p.textContent = `Paragraph ${i} about tigers. `;
+        const a = document.createElement('a'); a.href = `/wiki/link${i}`; a.textContent = `Link ${i}`;
+        p.append(a); main.append(p);
+      }
+      const end = document.createElement('p'); end.textContent = 'Taxonomy: Panthera tigris'; main.append(end);
+    }''')
+    p = policy(3)
+    first = await p.observe(browser)
+    assert first.readiness == 'ready'
+    assert len(first.references) == 2000 and first.parts > 1
+    assert first.elements.startswith(f'Part 1 of {first.parts}') and 'truncated' in first.elements
+    # Text beyond the reference bound is still captured and reachable.
+    found = await p.observe(browser, find='taxonomy')
+    assert 'Panthera tigris' in found.elements and 'Part 1 of' not in found.elements
+    last = await p.observe(browser, part=first.parts - 1)
+    assert last.part == first.parts - 1 and 'Panthera tigris' in last.elements
+    later = await p.observe(browser, part=1)
+    assert later.elements.startswith(f'Part 2 of {first.parts}')
+    # References stay valid whichever part was read.
+    await p.require_fresh(browser, later)
+    await p.resolve_reference(browser, later, 'r1500')
+
+
+async def test_pi_observe_tool_pages_through_a_long_page(local_browser, monkeypatch):
+    browser, page, _ = local_browser
+    await page.evaluate('''() => { const m = document.querySelector('main');
+      for (let i = 0; i < 4000; i++) { const p = document.createElement('p'); p.textContent = 'Filler line ' + i; m.append(p); }
+      const z = document.createElement('p'); z.textContent = 'The answer is 42'; m.append(z); }''')
+    seen = {}
+    async def run_pi(task, system, tools, dispatch, *args, **kwargs):
+        seen['schema'] = next(t for t in tools if t['name'] == 'observe')
+        seen['found'] = await dispatch('observe', {'find': 'answer is'})
+        seen['part'] = await dispatch('observe', {'part': 2})
+        return 'done'
+    monkeypatch.setattr(pi_browser, 'run_pi', run_pi)
+    from backend.replay import RunControl
+    with pytest.raises(RuntimeError, match='without verified completion'):  # the fake never completes
+        await pi_browser.drive_browser(browser, 'Find the answer', {}, '', RunControl([False]), AsyncMock(),
+                                       AsyncMock(), AsyncMock(), observation_policy=policy(3))
+    assert {'part', 'find'} <= set(seen['schema']['inputSchema']['properties'])
+    assert 'The answer is 42' in seen['found']['elements']
+    assert seen['part']['elements'].startswith('Part 3 of')
+
+
+async def test_capture_failing_while_a_document_loads_is_retried(local_browser, monkeypatch):
+    browser, _, _ = local_browser
+    p = policy()
+    real, calls = type(p)._capture, []
+    async def flaky(self, b):
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError('Execution context was destroyed')
+        return await real(self, b)
+    monkeypatch.setattr(type(p), '_capture', flaky)
+    assert (await p.observe(browser)).readiness == 'ready' and len(calls) > 1
+    async def dead(self, b):
+        raise RuntimeError('target closed')
+    monkeypatch.setattr(type(p), '_capture', dead)
+    with pytest.raises(TaskFault) as fault:
+        await policy(timeout=0.3).observe(browser)
+    assert fault.value.error.code == ErrorCode.UNAVAILABLE

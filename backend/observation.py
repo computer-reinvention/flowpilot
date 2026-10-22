@@ -16,7 +16,7 @@ import secrets
 import time
 
 from .task_contracts import ErrorCode, TaskFault, task_error
-from .task_ports import ElementReference, Observation
+from .task_ports import MAX_REFERENCES, ElementReference, Observation
 from .task_settings import TaskSettings
 from .trace import trace
 
@@ -60,7 +60,7 @@ CAPTURE_JS = r"""() => {
     do {
       // Large pages are captured up to a bound and marked truncated: the
       // captured prefix and the counts still fingerprint every change in it.
-      if (++count > 60000 || size > 400000 || controls.length >= 5000) { truncated = true; break; }
+      if (++count > 60000 || size > 400000) { truncated = true; break; }
       if (el.nodeType === Node.TEXT_NODE) {
         const p = el.parentElement;
         // Only an explicit data-observation-volatile="timestamp"
@@ -92,7 +92,10 @@ CAPTURE_JS = r"""() => {
             if (area >= 0.5) unknown = true;
           }
         }
-        if (el.matches('a,button,input,select,textarea,[role],[contenteditable="true"],[onclick],[tabindex]')) {
+        const control = el.matches('a,button,input,select,textarea,[role],[contenteditable="true"],[onclick],[tabindex]');
+        // Past the reference bound, controls are not addressable; text is still read.
+        if (control && controls.length >= __MAX_REFERENCES__) truncated = true;
+        else if (control) {
           const labelled = (el.getAttribute('aria-labelledby') || '').split(/\s+/).filter(Boolean)
             .map(id => clean(doc.getElementById(id)?.textContent)).join(' ');
           const identity = [frame, el.tagName, el.id, el.getAttribute('name'),
@@ -113,7 +116,49 @@ CAPTURE_JS = r"""() => {
   };
   walk(document, 'top');
   return {url: location.href, docs, controls, content, display, nodes, busy, unknown, truncated, opaque, count};
-}"""
+}""".replace('__MAX_REFERENCES__', str(MAX_REFERENCES))
+
+
+# Characters of controls and of page text shown per observe part (24000 total).
+CONTROL_PAGE, TEXT_PAGE = 10000, 13000
+
+
+def _pages(items, size):
+    """Pack lines into consecutive pages of at most `size` characters."""
+    pages, page, used = [], [], 0
+    for item in items:
+        while len(item) > size:  # a single huge line is split, never dropped
+            if page:
+                pages.append(page)
+                page, used = [], 0
+            pages.append([item[:size]])
+            item = item[size:]
+        if used + len(item) + 1 > size and page:
+            pages.append(page)
+            page, used = [], 0
+        page.append(item)
+        used += len(item) + 1
+    return pages + [page] if page or not pages else pages
+
+
+def _windows(text, needle, radius=500, limit=TEXT_PAGE):
+    """Passages around each match of `needle`, merged when they overlap."""
+    spans, lower, start = [], text.lower(), 0
+    while (start := lower.find(needle, start)) != -1:
+        a, b = max(0, start - radius), min(len(text), start + len(needle) + radius)
+        if spans and a <= spans[-1][1]:
+            spans[-1][1] = b
+        else:
+            spans.append([a, b])
+        start += len(needle)
+    passages, used = [], 0
+    for a, b in spans:
+        passage = ('…' if a else '') + text[a:b] + ('…' if b < len(text) else '')
+        if used + len(passage) > limit:
+            break
+        passages.append(passage)
+        used += len(passage) + 1
+    return passages
 
 
 def _encoded(value):
@@ -156,49 +201,75 @@ class ObservationPolicy:
         freshness = self._digest([target, raw['url'], document, structural, controls, raw['nodes'], raw['busy'], raw['unknown']])
         return raw, target, document, structural, progress, freshness
 
-    def _snapshot(self, capture, readiness):
+    def _snapshot(self, capture, readiness, part=0, find=None):
         raw, target, document, structural, progress, freshness = capture
         snapshot_id = secrets.token_hex(16) + '_' + freshness
+        # Every captured control keeps a reference in every part, so a control
+        # read on a later part stays actionable; only the model's text is paged.
         refs = tuple(ElementReference(reference=f'r{i}', snapshot_id=snapshot_id,
                                       fingerprint=self._digest(c['identity']))
                      for i, c in enumerate(raw['controls']))
         lines = [f'{ref.reference}: {c["label"]} disabled={c["status"][0]}'
                  for ref, c in zip(refs, raw['controls'])]
-        elements = '\n'.join(lines)
-        if len(elements) > 10000:
-            # Long control lists are cut for the model, never for freshness:
-            # every control still contributes to the snapshot fingerprints.
-            kept = elements[:10000].rsplit('\n', 1)[0]
-            elements = kept + f'\n... {len(lines) - kept.count(chr(10)) - 1} more controls omitted; query specific ones with execute'
-        if raw.get('truncated'):
-            elements += '\n(Page capture truncated at its size bound.)'
-        if raw.get('opaque'):
-            elements += '\nCross-origin frames (not inspectable by scripts): ' + ', '.join(
-                f'{origin or "unknown origin"} ({int(area * 100)}% of viewport)' for _, origin, area in raw['opaque'][:10])
-            if any(area >= 0.5 for _, _, area in raw['opaque']):
-                elements += ('\nA cross-origin frame covers most of the page: usually a CAPTCHA, bot check or consent wall. '
-                             'Scripts cannot act inside it; request human_help if it blocks the task.')
         # Text is from the same capture, never a later unrelated DOM read.
         # Form values are digest-only. Page text is ephemeral/untrusted and
         # intentionally not included in safe metrics or persistence.
-        text = '\n'.join(text for _, text in raw.get('display', ()))
-        elements += '\nPage text (bounded; form values omitted):\n' + text[:max(0, 23950 - len(elements))]
+        texts = [text for _, text in raw.get('display', ())]
+        notes = []
+        if raw.get('truncated'):
+            notes.append('(Page capture truncated at its size bound.)')
+        if raw.get('opaque'):
+            notes.append('Cross-origin frames (not inspectable by scripts): ' + ', '.join(
+                f'{origin or "unknown origin"} ({int(area * 100)}% of viewport)' for _, origin, area in raw['opaque'][:10]))
+            if any(area >= 0.5 for _, _, area in raw['opaque']):
+                notes.append('A cross-origin frame covers most of the page: usually a CAPTCHA, bot check or consent wall. '
+                             'Scripts cannot act inside it; request human_help if it blocks the task.')
+        if find:
+            needle = find.lower()
+            lines = [line for line in lines if needle in line.lower()]
+            texts = _windows('\n'.join(texts), needle)
+            header = f'Matches for "{find}": {len(lines)} controls, {len(texts)} text passages.'
+            control_parts, text_parts = [lines], [texts]
+        else:
+            header = ''
+            control_parts, text_parts = _pages(lines, CONTROL_PAGE), _pages(texts, TEXT_PAGE)
+        parts = max(len(control_parts), len(text_parts))
+        part = min(part, parts - 1)
+        if parts > 1:
+            header = f'Part {part + 1} of {parts}; call observe with part={part + 1} for the next part, or find="text" to jump to it.'
+        shown_controls = control_parts[part] if part < len(control_parts) else []
+        shown_text = text_parts[part] if part < len(text_parts) else []
+        elements = '\n'.join(filter(None, [header, *(shown_controls or ['(no controls in this part)']), *notes,
+                                           'Page text (bounded; form values omitted):', *shown_text]))
         return Observation(snapshot_id=snapshot_id, url=raw['url'], target_id=target,
                            document_id=document, elements=elements[:24000], references=refs,
                            structural_fingerprint=structural, progress_fingerprint=progress,
-                           readiness=readiness)
+                           readiness=readiness, part=part, parts=parts)
 
-    async def observe(self, browser):
+    async def observe(self, browser, *, part=0, find=None):
+        """part pages through long pages; find shows only what matches."""
         start = time.monotonic()
         deadline = start + self.settings.readiness_timeout_seconds
         window = self.settings.readiness_window_seconds
         last = None
         unchanged_since = start
         capture = None
+        failed = False
         try:
             async with asyncio.timeout(self.settings.readiness_timeout_seconds):
                 while True:
-                    capture = await self._capture(browser)
+                    try:
+                        capture = await self._capture(browser)
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception:
+                        if capture is not None:
+                            raise
+                        # A document still loading after navigation destroys the
+                        # evaluation context; retry until the readiness deadline.
+                        failed = True
+                        await asyncio.sleep(min(window / 2, 0.2))
+                        continue
                     now = time.monotonic()
                     # Convergence waits for text too (results still streaming in),
                     # unlike the action fence, which only tracks action targets.
@@ -207,21 +278,23 @@ class ObservationPolicy:
                     raw = capture[0]
                     if raw['unknown']:
                         trace('observation.result', readiness='unknown', seconds=round(now - start, 3))
-                        return self._snapshot(capture, 'unknown')
+                        return self._snapshot(capture, 'unknown', part, find)
                     if not raw['busy'] and now - start >= 2 * window and now - unchanged_since >= window:
                         trace('observation.result', readiness='ready', seconds=round(now - start, 3))
-                        return self._snapshot(capture, 'ready')
+                        return self._snapshot(capture, 'ready', part, find)
                     await asyncio.sleep(min(window / 4, 0.1, max(0, deadline - now)))
         except TimeoutError:
             trace('observation.result', readiness='timeout', seconds=round(time.monotonic() - start, 3))
             if capture is not None:
-                return self._snapshot(capture, 'timeout')
+                return self._snapshot(capture, 'timeout', part, find)
+            if failed:
+                raise _fault(ErrorCode.UNAVAILABLE, 'Browser observation unavailable; website effects are unknown') from None
             raise _fault(ErrorCode.READINESS_TIMEOUT, 'Observation deadline expired without a snapshot') from None
         except asyncio.CancelledError:
             raise
         except Exception:
             if capture is not None:
-                return self._snapshot(capture, 'unknown')
+                return self._snapshot(capture, 'unknown', part, find)
             raise _fault(ErrorCode.UNAVAILABLE, 'Browser observation unavailable; website effects are unknown') from None
 
     async def require_fresh(self, browser, observation):
