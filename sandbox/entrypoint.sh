@@ -20,7 +20,7 @@ export CHROME_BIN
 
 # ── Export environment for supervisord children ──────────────────────
 export DISPLAY="${DISPLAY:-:1}"
-export RESOLUTION="${RESOLUTION:-1280x720x24}"
+export RESOLUTION="${RESOLUTION:-1280x800x24}"
 export CHROME_AUTORESTART="${CHROME_AUTORESTART:-true}"
 
 # ── Start supervisord (manages Xvfb, Chromium, socat CDP forwarder) ──

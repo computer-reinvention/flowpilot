@@ -26,6 +26,11 @@ with zipfile.ZipFile("/tmp/chrome.zip") as archive:
         mode = (info.external_attr >> 16) & 0o777
         if mode:
             os.chmod(path, mode)
+# UI translations are unused in the sandbox (page language is unaffected): -49 MB.
+locales = "/opt/chrome-for-testing/chrome-linux64/locales"
+for name in os.listdir(locales):
+    if not name.startswith("en-US."):
+        os.remove(os.path.join(locales, name))
 EOF
 
 FROM python:3.12.15-slim-trixie@sha256:cb33f7f771ecec2ef1225cf39b159591a040391bd73e4c01f00fdfc4c47611d2
@@ -34,7 +39,7 @@ LABEL org.opencontainers.image.revision=$REVISION
 
 ENV DEBIAN_FRONTEND=noninteractive \
     DISPLAY=:1 \
-    RESOLUTION=1920x1080x24
+    RESOLUTION=1280x800x24
 
 # ── System dependencies ──────────────────────────────────────────────
 # `apt-get upgrade` stays within the pinned trixie (Debian 13) suite (point + security
@@ -79,6 +84,9 @@ RUN pip install --no-cache-dir --require-hashes -r /tmp/sandbox-requirements.txt
     && playwright install-deps chromium \
     && pip uninstall -y playwright greenlet pyee typing_extensions \
     && apt-get purge -y --auto-remove curl \
+    # GNU Unifont is a 32 MB bitmap last-resort font; Noto, Liberation, DejaVu, IPA and
+    # WenQuanYi cover the scripts the sandbox renders.
+    && if dpkg -s fonts-unifont >/dev/null 2>&1; then apt-get purge -y fonts-unifont; fi \
     && rm -rf /var/lib/apt/lists/* /tmp/sandbox-requirements.txt
 
 COPY --from=chrome-download /opt/chrome-for-testing /opt/chrome-for-testing
