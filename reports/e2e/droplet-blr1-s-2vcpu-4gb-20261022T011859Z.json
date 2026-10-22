@@ -1,0 +1,180 @@
+{
+  "base_url": "http://localhost:8080",
+  "results": [
+    {
+      "name": "flight_search",
+      "task_id": "task_b8e225bad21a46c0a91d7334bf589ed9",
+      "session_id": "session_ee15f58ec74b4fb29ab125a14ab50f87",
+      "profile_id": "profile_665bcf96d7c3491584a6f5f17ade10b5",
+      "state": "completed",
+      "seconds_total": 35.11,
+      "seconds_to_running": 0.82,
+      "states": [
+        [
+          "running",
+          0.81
+        ],
+        [
+          "completed",
+          35.11
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "Cheapest nonstop BOM\u2192DEL flights on Thu 12 Nov 2026 (one-way, economy, 1 adult). I used Google Flights with the Nonstop filter on, and prices are in INR:\n1. SpiceJet: departs 11:20 PM, arrives 1:40 AM on 13 Nov (2h 20m), \u20b97,484.\n2. SpiceJet: departs 11:20 PM, arrives 2:05 AM on 13 Nov (2h 45m), \u20b97,484. This is a separate listing with the same departure and price.\n3. Akasa Air: departs 8:55 PM, arrives 11:15 PM (2h 20m), \u20b97,717. Another Akasa Air nonstop ties at \u20b97,717, departing 6:35 PM and arriving 9:00 PM (2h 25m).\nThe next cheapest after those was SpiceJet at 10:30 PM for \u20b97,923.\nSource: https://www.google.com/travel/flights?q=Flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20one%20way%20economy%201%20adult%20nonstop&curr=INR&hl=en\nNothing was booked.",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 26.08,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "flight_search",
+      "task_id": "task_52b9d8a37cb143c3afdfc0b5f79a7938",
+      "session_id": "session_245b42bfc7ac4ef69aa457da0def4f09",
+      "profile_id": "profile_665bcf96d7c3491584a6f5f17ade10b5",
+      "state": "completed",
+      "seconds_total": 29.26,
+      "seconds_to_running": 0.66,
+      "states": [
+        [
+          "running",
+          0.66
+        ],
+        [
+          "completed",
+          29.26
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "Cheapest nonstop BOM\u2192DEL flights on Thu 12 Nov 2026 (one-way, economy, 1 adult, prices in INR, from Google Flights with the Nonstop filter on):\n1. SpiceJet: departs 11:20 PM, arrives 1:40 AM on 13 Nov (2h 20m), \u20b97,484.\n2. SpiceJet: departs 11:20 PM, arrives 2:05 AM on 13 Nov (2h 45m), \u20b97,484. This is a separate listing with the same departure time and price as #1.\n3. Akasa Air: departs 8:55 PM, arrives 11:15 PM (2h 20m), \u20b97,717. A second Akasa Air nonstop ties at \u20b97,717, departing 6:35 PM and arriving 9:00 PM (2h 25m).\nThe next cheapest after those was SpiceJet at 10:30 PM for \u20b97,923.\nSource: https://www.google.com/travel/flights?q=Flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20one%20way%20economy%201%20adult%20nonstop&curr=INR&hl=en\nNothing was booked.",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 22.92,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "flight_search",
+      "task_id": "task_8283bcd7127343a1a7ca4ee75fe9d695",
+      "session_id": "session_d74b69ba1ac44bf68524aedfe57781c1",
+      "profile_id": "profile_665bcf96d7c3491584a6f5f17ade10b5",
+      "state": "completed",
+      "seconds_total": 29.46,
+      "seconds_to_running": 0.65,
+      "states": [
+        [
+          "running",
+          0.65
+        ],
+        [
+          "completed",
+          29.46
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "Cheapest nonstop BOM\u2192DEL flights on Thu 12 Nov 2026 (one-way, economy, 1 adult). Google Flights had the Nonstop filter on, and prices are in INR:\n1. SpiceJet: departs 11:20 PM, arrives 1:40 AM on 13 Nov (2h 20m), \u20b97,484.\n2. SpiceJet: departs 11:20 PM, arrives 2:05 AM on 13 Nov (2h 45m), \u20b97,484. This is a separate listing with the same departure time and price as #1.\n3. Akasa Air: departs 8:55 PM, arrives 11:15 PM (2h 20m), \u20b97,717. A second Akasa Air nonstop ties at \u20b97,717, departing 6:35 PM and arriving 9:00 PM (2h 25m).\nSource: https://www.google.com/travel/flights?q=Flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20one%20way%20economy%201%20adult%20nonstop&curr=INR&hl=en\nNothing was booked.",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 23.2,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "cab_booking",
+      "task_id": "task_e3afdf7e8cef42c39dfb48dcdf739d19",
+      "session_id": "session_fbdfd5a97035400bb6900b6a9ee9641b",
+      "profile_id": "profile_6104b15fad0c49ed80408833f1a018e5",
+      "state": "completed",
+      "seconds_total": 205.04,
+      "seconds_to_running": 0.64,
+      "states": [
+        [
+          "running",
+          0.64
+        ],
+        [
+          "completed",
+          205.04
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "I couldn't get fare estimates or ride types, so I didn't pick a cheapest ride and I didn't book anything. Uber requires a login to show prices, and I did not log in.\n\n- **Uber price estimate page** (uber.com/global/en/price-estimate): I entered pickup \"Terminal 2, Chhatrapati Shivaji Maharaj International Airport (BOM), Navpada, Vile Parle East, Andheri East, Mumbai\" and drop-off \"Bandra Kurla Complex, Bandra East, Mumbai\". The page only links on to Uber's booking site and shows no fares itself.\n- **Uber booking site** (m.uber.com/go/product-selection), with \"Pickup now\" set: it showed a dialog, \"Log in to see ride options\", so no ride types or prices were visible without an account.\n- **Alternative site**: I tried Rome2Rio for a taxi estimate, but it was blocked by a Cloudflare bot check. I stopped there.\n\nTo go ahead, you can log in to Uber yourself and I'll compare the ride options and ask you to confirm before booking. Alternatively, check the fares in the Uber or Ola app. The pickup and drop-off above are already set in the Uber link.",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 21,
+          "tool_calls": 21,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 196.19,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "cab_booking",
+      "task_id": "task_6a43fd4aa05140eca932b78002e8a428",
+      "session_id": "session_57f5e5e39ff24fa588757394d1d73fb7",
+      "profile_id": "profile_6104b15fad0c49ed80408833f1a018e5",
+      "state": "completed",
+      "seconds_total": 80.62,
+      "seconds_to_running": 0.66,
+      "states": [
+        [
+          "running",
+          0.66
+        ],
+        [
+          "completed",
+          80.62
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "I couldn't get any ride types or fare estimates, so I haven't picked a cheapest ride and I haven't booked anything. I didn't log in to any site.\n\n- **Uber** (https://www.uber.com/global/en/price-estimate/): this page takes a pickup and drop-off but shows no prices itself. It sends you on to Uber's booking site. In the earlier attempt that site showed \"Log in to see ride options\" for the same trip. So Uber fares need a login, which I left to you.\n- **Ola** (https://www.olacabs.com/): the site offered the right places in its suggestions, Terminal 2 of Chhatrapati Shivaji Maharaj International Airport (BOM) and Bandra Kurla Complex. I couldn't get past the address fields to a fare screen, and I saw no fares. It's a basic booking page that likely needs a login or the Ola app to show prices, but I didn't confirm that.\n- **Rome2Rio**: in the earlier attempt it was blocked by a Cloudflare bot check.\n\n**Next step:** you can log in to Uber or Ola yourself. Tell me when you're logged in and I'll compare the ride options for leaving now. I'll pick the cheapest and ask you to confirm before booking anything. Or check the fares directly in the Uber or Ola app.",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 10,
+          "tool_calls": 9,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 71.07,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    }
+  ]
+}
