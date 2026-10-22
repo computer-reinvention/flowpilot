@@ -1,0 +1,210 @@
+{
+  "base_url": "http://localhost:8080",
+  "results": [
+    {
+      "name": "flight_search",
+      "task_id": "task_61b1de3a59e04876a5ad06472d2311e7",
+      "session_id": "session_62c8b3fb147c45d9b38d6599f0f49214",
+      "profile_id": "profile_6fb8af0e4f1a4986a41f91fc22933739",
+      "state": "completed",
+      "seconds_total": 40.61,
+      "seconds_to_running": 0.72,
+      "states": [
+        [
+          "running",
+          0.72
+        ],
+        [
+          "completed",
+          40.61
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The 3 cheapest nonstop one-way economy flights for 1 adult from Mumbai (BOM) to New Delhi (DEL) on Thu 12 Nov 2026, as listed on Google Flights (prices in INR, taxes and fees included):\n\n1. SpiceJet: departs 11:20 PM, arrives 1:40 AM on 13 Nov (+1), 2 h 20 min. \u20b97,484.\n2. SpiceJet: departs 11:20 PM, arrives 2:05 AM on 13 Nov (+1), 2 h 45 min. \u20b97,484. This is a separate listing with the same departure time and price as option 1.\n3. Akasa Air: departs 8:55 PM, arrives 11:15 PM, 2 h 20 min. \u20b97,717.\n\nA second Akasa Air nonstop ties with option 3 at \u20b97,717. It departs 6:35 PM and arrives 9:00 PM, 2 h 25 min. The next cheapest after those were SpiceJet at \u20b97,923 (10:30 PM\u201312:50 AM +1) and Akasa Air at \u20b97,950 (1:00 PM\u20133:25 PM).\n\nI didn't book anything.\n\nSource: https://www.google.com/travel/flights?q=Flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20one%20way%20economy%201%20adult%20nonstop&curr=INR&hl=en",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 4,
+          "tool_calls": 3,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 32.54,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "flight_search",
+      "task_id": "task_229021eb044d4d2b87ece6ac4e5e2762",
+      "session_id": "session_1aff4472208c4cd6a09e74c370adf065",
+      "profile_id": "profile_6fb8af0e4f1a4986a41f91fc22933739",
+      "state": "completed",
+      "seconds_total": 33.1,
+      "seconds_to_running": 0.65,
+      "states": [
+        [
+          "running",
+          0.65
+        ],
+        [
+          "completed",
+          33.1
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "Cheapest 3 nonstop one-way economy flights for 1 adult, Mumbai (BOM) to New Delhi (DEL), Thu 12 Nov 2026, from Google Flights (INR, taxes and fees included):\n\n1. SpiceJet: departs 11:20 PM, arrives 1:40 AM on 13 Nov (+1), 2 h 20 min. \u20b97,484.\n2. SpiceJet: departs 11:20 PM, arrives 2:05 AM on 13 Nov (+1), 2 h 45 min. \u20b97,484. This is a separate listing with the same departure time and price as option 1.\n3. Akasa Air: departs 8:55 PM, arrives 11:15 PM, 2 h 20 min. \u20b97,717.\n\nA second Akasa Air nonstop ties with option 3 at \u20b97,717. It departs 6:35 PM and arrives 9:00 PM, 2 h 25 min.\n\nI didn't book anything.\n\nSource: https://www.google.com/travel/flights?q=Flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20one%20way%20economy%201%20adult%20nonstop&curr=INR&hl=en",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 25.42,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "flight_search",
+      "task_id": "task_7ef74939b6ac4978b32162a375efcee7",
+      "session_id": "session_6ec4dcac4405497b9997b10ba1efec0b",
+      "profile_id": "profile_6fb8af0e4f1a4986a41f91fc22933739",
+      "state": "completed",
+      "seconds_total": 31.82,
+      "seconds_to_running": 0.69,
+      "states": [
+        [
+          "running",
+          0.69
+        ],
+        [
+          "completed",
+          31.82
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The 3 cheapest nonstop one-way economy flights for 1 adult from Mumbai (BOM) to New Delhi (DEL) on Thu 12 Nov 2026, as listed on Google Flights. Prices are in INR and include taxes and fees.\n\n1. SpiceJet: departs 11:20 PM, arrives 1:40 AM on 13 Nov (+1), 2 h 20 min. \u20b97,484.\n2. SpiceJet: departs 11:20 PM, arrives 2:05 AM on 13 Nov (+1), 2 h 45 min. \u20b97,484. This is a separate listing with the same departure time and price as option 1.\n3. Akasa Air: departs 8:55 PM, arrives 11:15 PM, 2 h 20 min. \u20b97,717.\n\nA second Akasa Air nonstop ties with option 3 at \u20b97,717. It departs 6:35 PM and arrives 9:00 PM, 2 h 25 min.\n\nI didn't book anything.\n\nSource: https://www.google.com/travel/flights?q=Flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20one%20way%20economy%201%20adult%20nonstop&curr=INR&hl=en",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 24.55,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "cab_booking",
+      "task_id": "task_f9bb2bfb528b4208aa8d194914be42c7",
+      "session_id": "session_730683c6299a44de8d1f54bbab2f1105",
+      "profile_id": "profile_569c94898912432f8a5dd4057360de9c",
+      "state": "completed",
+      "seconds_total": 207.6,
+      "seconds_to_running": 0.64,
+      "states": [
+        [
+          "running",
+          0.64
+        ],
+        [
+          "waiting_for_confirmation",
+          203.98
+        ],
+        [
+          "running",
+          204.73
+        ],
+        [
+          "completed",
+          207.6
+        ]
+      ],
+      "interactions": [
+        {
+          "t": 203.98,
+          "interaction": "confirmation",
+          "message": "Savaari cab, Terminal 2, Chhatrapati Shivaji International Airport, Mumbai \u2192 Bandra Kurla Complex, Bandra East, on 23-10-2026 at 10:00 AM. Cheapest option: Wagon R / Swift (or similar), 4-seater AC, 8 km included \u2014 \u20b9615 + \u20b931 charges and taxes (\u2248\u20b9646 total). Other options: Dzire/Etios \u20b9628+\u20b931; Ertiga \u20b9917+\u20b946; Toyota Innova \u20b91,101+\u20b955; Innova Crysta \u20b91,112+\u20b956. Shall I proceed to select the cheapest cab and continue booking (will need passenger details/payment)?",
+          "fields": []
+        }
+      ],
+      "result": {
+        "answer": "Not booked: you declined this proposal, so FlowPilot stopped without taking any further action.\n\nSavaari cab, Terminal 2, Chhatrapati Shivaji International Airport, Mumbai \u2192 Bandra Kurla Complex, Bandra East, on 23-10-2026 at 10:00 AM. Cheapest option: Wagon R / Swift (or similar), 4-seater AC, 8 km included \u2014 \u20b9615 + \u20b931 charges and taxes (\u2248\u20b9646 total). Other options: Dzire/Etios \u20b9628+\u20b931; Ertiga \u20b9917+\u20b946; Toyota Innova \u20b91,101+\u20b955; Innova Crysta \u20b91,112+\u20b956. Shall I proceed to select the cheapest cab and continue booking (will need passenger details/payment)?",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 0,
+          "tool_calls": 0,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 0.0,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "cab_booking",
+      "task_id": "task_b44965a93e2f4172a4ef4c782a5250b5",
+      "session_id": "session_ef3bf46bfdbc46a8a20f894748d76328",
+      "profile_id": "profile_569c94898912432f8a5dd4057360de9c",
+      "state": "completed",
+      "seconds_total": 165.89,
+      "seconds_to_running": 0.79,
+      "states": [
+        [
+          "running",
+          0.79
+        ],
+        [
+          "waiting_for_confirmation",
+          162.93
+        ],
+        [
+          "running",
+          163.65
+        ],
+        [
+          "completed",
+          165.89
+        ]
+      ],
+      "interactions": [
+        {
+          "t": 162.93,
+          "interaction": "confirmation",
+          "message": "Savaari cab, Mumbai Airport Terminal 2 \u2192 Bandra Kurla Complex, 23-10-2026 10:00 AM. Options: Wagon R/Swift \u20b9615 (+\u20b931 taxes); Dzire/Etios \u20b9628 (+\u20b931); Ertiga \u20b9917 (+\u20b946); Toyota Innova \u20b91,101 (+\u20b955); Innova Crysta \u20b91,112 (+\u20b956). Cheapest: Wagon R/Swift (or similar), \u20b9615 + \u20b931 = \u20b9646. Shall I proceed to select it and book?",
+          "fields": []
+        }
+      ],
+      "result": {
+        "answer": "Not booked: you declined this proposal, so FlowPilot stopped without taking any further action.\n\nSavaari cab, Mumbai Airport Terminal 2 \u2192 Bandra Kurla Complex, 23-10-2026 10:00 AM. Options: Wagon R/Swift \u20b9615 (+\u20b931 taxes); Dzire/Etios \u20b9628 (+\u20b931); Ertiga \u20b9917 (+\u20b946); Toyota Innova \u20b91,101 (+\u20b955); Innova Crysta \u20b91,112 (+\u20b956). Cheapest: Wagon R/Swift (or similar), \u20b9615 + \u20b931 = \u20b9646. Shall I proceed to select it and book?",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 0,
+          "tool_calls": 0,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 0.0,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    }
+  ]
+}
