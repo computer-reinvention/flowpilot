@@ -84,3 +84,12 @@ async def test_me_authenticated(client: httpx.AsyncClient, auth_headers: dict):
 async def test_me_no_token(client: httpx.AsyncClient):
     resp = await client.get("/api/auth/me")
     assert resp.status_code == 401
+
+
+async def test_signup_allowlist_admits_only_listed_emails(client: httpx.AsyncClient, monkeypatch):
+    monkeypatch.setenv("FLOWPILOT_SIGNUP_EMAILS", "owner@example.com, Second@Example.com")
+    blocked = await client.post("/api/auth/signup", json={"email": "stranger@example.com", "password": "secret123", "name": "S"})
+    assert blocked.status_code == 403
+    for email in ("Owner@example.com", "second@example.com"):
+        allowed = await client.post("/api/auth/signup", json={"email": email, "password": "secret123", "name": "O"})
+        assert allowed.status_code == 200

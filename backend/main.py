@@ -247,6 +247,10 @@ async def signup(req: SignupRequest) -> dict:
         raise HTTPException(status_code=400, detail="email, password, and name are required")
     if len(req.password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    # Comma-separated allowlist; unset keeps sign-up open (local development).
+    allowed = {e.strip().lower() for e in os.environ.get("FLOWPILOT_SIGNUP_EMAILS", "").split(",") if e.strip()}
+    if allowed and req.email.strip().lower() not in allowed:
+        raise HTTPException(status_code=403, detail="Sign-up is invite-only")
     try:
         user = await auth.create_user(req.email, req.password, req.name)
     except ValueError:

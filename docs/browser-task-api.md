@@ -6,7 +6,7 @@ This guide targets the **frozen foundation contract**, `backend/task_contracts.p
 
 ## Start in the dashboard
 
-1. Sign up or log in with the existing account form. Password fields clear after success/failure.
+1. Sign up or log in with the existing account form. When `FLOWPILOT_SIGNUP_EMAILS` is set, only those emails can sign up (403 otherwise). Password fields clear after success/failure.
 2. Select **API Keys → Create Key**. Plaintext appears once in a dismissible dialog. Copying is explicit; dismissing, navigating away or logging out drops that disclosure. Lists contain metadata only. Save the key in your own secret manager, not source control, task text or a URL.
 3. Select **Browser tasks**. The default creates a **fresh isolated profile**. Explicitly choose an owned profile to reuse website login and memory; follow up in the displayed session only after its previous task is terminal.
 4. Save the returned task ID to reattach after refresh. Task IDs, not secret responses or viewer links, are the recovery handle. The dashboard intentionally does not persist task prompts, private answers or help grants in browser storage. Its existing account JWT remains in the existing `flowpilot_token` convention.
