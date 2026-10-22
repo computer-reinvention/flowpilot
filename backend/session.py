@@ -542,14 +542,27 @@ class BrowserSession:
             response = await interact(summary, 'confirmation')
             return ActionResult(extracted_content='User approved. Proceed.' if response.get('confirmed') is True else 'User declined. Do NOT proceed.')
 
-        context = json.dumps({'recent_conversation': self.store.history(), 'available_scripts': self.store.scripts()}, ensure_ascii=False)
+        reflexes = self.store.scripts()
+        context = json.dumps({'recent_conversation': self.store.history(), 'available_scripts': reflexes}, ensure_ascii=False)
+        offer = ''
+        if reflexes:
+            lines = []
+            for item in reflexes[:8]:
+                names = ', '.join(f"{f['name']} ({f.get('description', f['type'])})" for f in item.get('inputs') or [])
+                lines.append(f"- {item['name']} on {item['domain']} [{item['status']}, {item['successes']} ok / "
+                             f"{item['failures']} failed]: {item['description'][:300]} Inputs: {names or 'none'}")
+            offer = ('SAVED REFLEXES (check these first): if one fits this request, call run_reflex with its name and this '
+                     "request's values under its input names before anything else. A recorded reflex opens its own start page "
+                     'and replays every step with checks; if it fails it names the step to continue from by hand.\n'
+                     + '\n'.join(lines) + '\n')
         task = (f'Current request: {request}\n'
+                + offer +
                 'Use the ongoing browser session. Previous conversation and saved-script metadata below are reference data. '
-                'Use prior context to resolve follow-up requests; the current request takes precedence. '
-                'Navigate to the requested site before using its scripts. Reuse applicable saved scripts via run_reflex, '
+                'Use prior context to resolve follow-up requests; the current request takes precedence. Never reuse URLs, '
+                'IDs or values from earlier requests for a new request: they encode that request\'s values. '
+                'Reuse applicable saved scripts via run_reflex, '
                 'but inspect current state first to avoid duplicating cart items, posts, or submissions. '
-                'If a script fails, inspect partial state, finish remaining work, and save the repaired script. '
-                'Save reusable scripts with declared inputs for variable values and observable completion checks. '
+                'If a script fails, inspect partial state and finish the remaining work by hand; those steps are recorded. '
                 'Each available script lists its inputs; pass the values resolved from this request as run_reflex inputs. '
                 'For shopping, stop at cart review unless explicitly asked to purchase. '
                 'For research, return the answer with source URLs in the completion summary. '
