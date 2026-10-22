@@ -179,12 +179,18 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
         if name == "save_reflex":
             return (await save_reflex(**args)).model_dump()
         if name == "complete":
+            guarded_check = observation_policy is not None
             if checked_scripts:
                 observation = await observation_policy.observe(browser)
-                await observation_policy.require_fresh(browser, observation)
+                if observation.readiness == 'ready':
+                    await observation_policy.require_fresh(browser, observation)
+                else:
+                    # complete only reads: an unsettled page (bot wall, endless
+                    # animation) must not stop the agent reporting what it found.
+                    guarded_check = False
             script = "async (inputs, entryUrl) => { if (await (" + args["verify"] + ")(inputs, entryUrl) !== true) throw new Error('Completion check failed'); return true; }"
             ok, value = await _execute_reflex(script, inputs, entry_url, browser,
-                                            **({'observation_policy': observation_policy, 'expected_observation': observation} if observation_policy is not None else {}))
+                                            **({'observation_policy': observation_policy, 'expected_observation': observation} if guarded_check else {}))
             if not ok:
                 raise ValueError(value)
             completion = args["summary"]
@@ -313,6 +319,9 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
                  "Inspect before acting. Prefer direct URLs with query parameters when a site supports them. "
                  "Use codemode for bounded multi-tool work and return compact results. "
                  "Report only data you observed on the page during this task; if results are missing or ambiguous, inspect further or say so. "
+                 "Always finish by calling complete. If a site blocks you (bot check, login wall, missing data), try at most one reasonable "
+                 "alternative site, request human_help for a CAPTCHA you cannot pass, and otherwise call complete with a verify that "
+                 "checks the blocking condition and a summary explaining what blocked you, what you tried, and any partial results. "
                   "Never repeat completed side effects. "
                   "A readiness timeout or unknown outcome is not success: inspect and do not replay partial effects. "
                   + ("Use request_input_values for missing information, including OTP/SMS codes; enter the returned values yourself. "

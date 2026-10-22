@@ -170,6 +170,9 @@ class ObservationPolicy:
         if raw.get('opaque'):
             elements += '\nCross-origin frames (not inspectable by scripts): ' + ', '.join(
                 f'{origin or "unknown origin"} ({int(area * 100)}% of viewport)' for _, origin, area in raw['opaque'][:10])
+            if any(area >= 0.5 for _, _, area in raw['opaque']):
+                elements += ('\nA cross-origin frame covers most of the page: usually a CAPTCHA, bot check or consent wall. '
+                             'Scripts cannot act inside it; request human_help if it blocks the task.')
         # Text is from the same capture, never a later unrelated DOM read.
         # Form values are digest-only. Page text is ephemeral/untrusted and
         # intentionally not included in safe metrics or persistence.
