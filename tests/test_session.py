@@ -32,7 +32,7 @@ async def test_session_repairs_and_persists_in_original_scope(tmp_path, monkeypa
         assert row['domain'] == 'example.com'
         assert row['script'] == 'async()=>({success:true})'
         assert json.loads(row['tags']) == ['search']
-        assert row['successes'] == 1 and row['failures'] == 1
+        assert row['successes'] == 1 and row['failures'] == 0 and row['status'] == 'active'  # repair resets the record
         assert result['metrics']['repaired'] == 1
         repair_mock.assert_awaited_once()
     finally:

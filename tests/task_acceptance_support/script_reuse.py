@@ -230,7 +230,7 @@ async def prove_script_reuse_repair(state_dir, *, hosted=False):
                     catalog['c_error'] = bool(result.get('error'))
                     if hosted:
                         # Hosted tasks never auto-repair/replay; the model repairs explicitly.
-                        assert 'Do not replay this stage automatically' in result['error']
+                        assert 'Do not replay it automatically' in result['error']
                         repaired = SEARCH_SCRIPT.replace('#search-btn', '#find-trains')
                         await dispatch('observe', {})
                         # One-off execute carries this request's values; the saved script stays parameterized.

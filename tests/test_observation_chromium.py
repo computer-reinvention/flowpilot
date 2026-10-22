@@ -522,21 +522,17 @@ async def test_capture_failing_while_a_document_loads_is_retried(local_browser, 
     assert fault.value.error.code == ErrorCode.UNAVAILABLE
 
 
-async def test_named_stage_reads_placeholders_and_is_saved_automatically(local_browser, monkeypatch):
+async def test_scripts_must_read_declared_values_from_placeholders(local_browser, monkeypatch):
     browser, page, _ = local_browser
-    saved, seen = [], {}
-    async def save_reflex(**kwargs):
-        saved.append(kwargs)
-        return SimpleNamespace(error=None, extracted_content=f"Saved {kwargs['name']}")
+    seen = {}
     async def run_pi(task, system, tools, dispatch, *args, **kwargs):
         await dispatch('observe', {})
         seen['ok'] = await dispatch('execute', {
-            'name': 'fill_city', 'description': 'Type the city into the field', 'inputs': {'city': 'Reykjavik'},
+            'description': 'Type the city', 'inputs': {'city': 'Reykjavik'},
             'script': 'async (inputs) => { field.value = inputs.city; return field.value; }',
             'precondition': 'async () => !!field', 'postcondition': 'async (inputs) => field.value === inputs.city'})
         try:
-            await dispatch('execute', {'name': 'fill_literal', 'inputs': {'city': 'Oslo'},
-                                       'script': "async () => { field.value = 'Oslo'; }",
+            await dispatch('execute', {'script': "async () => { field.value = 'Reykjavik'; }",
                                        'precondition': 'async () => true', 'postcondition': 'async () => true'})
         except ValueError as exc:
             seen['literal'] = str(exc)
@@ -545,9 +541,6 @@ async def test_named_stage_reads_placeholders_and_is_saved_automatically(local_b
     from backend.replay import RunControl
     with pytest.raises(RuntimeError, match='without verified completion'):
         await pi_browser.drive_browser(browser, 'Fill the city', {}, '', RunControl([False]), AsyncMock(),
-                                       AsyncMock(), save_reflex, observation_policy=policy(3))
+                                       AsyncMock(), AsyncMock(), observation_policy=policy(3))
     assert seen['ok']['success'] is True and json.loads(seen['ok']['result']) == 'Reykjavik'
-    assert seen['ok']['saved'] == 'Saved fill_city'
-    assert saved[0]['inputs'] == [{'name': 'city', 'type': 'string'}] and 'Reykjavik' not in saved[0]['script']
-    assert 'Oslo' in seen['literal'] and 'did not run' in seen['literal'] and len(saved) == 1
-    assert await page.evaluate('() => field.value') == 'Reykjavik'
+    assert 'Reykjavik' in seen['literal'] and 'Nothing ran' in seen['literal']

@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 
 from browser_use import ActionResult, Browser
 
-from .pi_browser import drive_browser
+from .pi_browser import drive_browser, fill_template
 from .replay import RunControl
 from .reflex_inputs import ReflexInputError, bind_inputs, catalog_entry, normalize_fields
 from .runner import PARTIAL_EFFECTS, _execute_reflex
@@ -33,6 +33,11 @@ def written_values(source, inputs, secrets=()):
     atoms = list(input_atoms(inputs))
     return hardcoded_values(source, dict(enumerate(atoms))) + [
         '[secret]' for value in secrets if value and value in source]
+
+
+def host_of(url):
+    host = (urlparse(url).hostname or '').lower()
+    return host
 
 
 def is_secret_field(field):
@@ -72,19 +77,118 @@ class UserStore:
         if 'inputs' not in columns:
             # JSON declared-input schema; NULL for legacy undeclared reflexes.
             self.db.execute('ALTER TABLE reflexes ADD COLUMN inputs TEXT')
+        # Health: a new script starts as a candidate, one successful replay makes it
+        # active, consecutive failures make it broken (not offered for lookup). A new
+        # script for an active reflex waits in `candidate` instead of replacing it.
+        for column, ddl in (('steps', 'TEXT'), ('status', "TEXT DEFAULT 'active'"),
+                            ('consecutive_failures', 'INTEGER DEFAULT 0'), ('candidate', 'TEXT'),
+                            ('updated_at', 'TEXT')):
+            if column not in columns:
+                self.db.execute(f'ALTER TABLE reflexes ADD COLUMN {column} {ddl}')
         self.db.commit()
 
-    def scripts(self):
-        """Catalog for the model: metadata plus each script's input parameters."""
-        rows = self.db.execute('SELECT domain,name,description,successes,failures,inputs,script '
-                               'FROM reflexes ORDER BY successes DESC LIMIT 50')
+    BROKEN_AFTER = 2  # consecutive failed replays
+
+    def _catalog(self, where, params, limit):
+        rows = self.db.execute(
+            'SELECT domain,name,description,successes,failures,status,inputs,script,steps,candidate FROM reflexes '
+            f"WHERE (status != 'broken' OR candidate IS NOT NULL) {where} "
+            "ORDER BY status = 'active' DESC, successes - failures DESC, updated_at DESC LIMIT ?", (*params, limit))
         result = []
         for row in rows:
             item = dict(row)
-            fields, script = item.pop('inputs'), item.pop('script')
+            fields, script, steps, candidate = item.pop('inputs'), item.pop('script'), item.pop('steps'), item.pop('candidate')
+            if item['status'] == 'broken':
+                item['status'] = 'candidate'  # only the waiting candidate is usable
+                fields = json.loads(candidate).get('inputs')
+                fields = json.dumps(fields) if fields is not None else None
             item.update(catalog_entry(json.loads(fields) if fields else None, script))
+            if steps:
+                steps = json.loads(steps)
+                item['steps'] = len(steps)
+                start = next((step['url'] for step in steps if step['type'] == 'navigate'), None)
+                if start:
+                    item['start_url'] = start
             result.append(item)
         return result
+
+    def scripts(self):
+        """Catalog for the model: usable reflexes, active and proven first."""
+        return self._catalog('', (), 50)
+
+    def for_site(self, site):
+        """Usable reflexes for one host, offered when the agent arrives there."""
+        return self._catalog('AND domain = ?', (site,), 20)
+
+    def reflex(self, site, name):
+        row = self.db.execute('SELECT rowid AS id, * FROM reflexes WHERE domain=? AND name=?', (site, name)).fetchone()
+        if row is None:
+            # A recorded sequence opens its own start page, so it can run from anywhere.
+            rows = self.db.execute('SELECT rowid AS id, * FROM reflexes WHERE name=? AND steps IS NOT NULL', (name,)).fetchall()
+            row = rows[0] if len(rows) == 1 else None
+        return row
+
+    @staticmethod
+    def usable(row):
+        """(version, which) to replay: the main script unless broken, else a waiting candidate."""
+        if row['status'] != 'broken':
+            return {k: row[k] for k in ('script', 'steps', 'inputs', 'pause_after', 'description')}, 'main'
+        if row['candidate']:
+            candidate = json.loads(row['candidate'])
+            return {**candidate, 'inputs': json.dumps(candidate['inputs']) if candidate.get('inputs') is not None else None,
+                    'steps': json.dumps(candidate['steps']) if candidate.get('steps') else None}, 'candidate'
+        return None, None
+
+    def save_reflex(self, site, name, description, script, steps, fields, pause_after, tags):
+        version = {'description': description, 'script': script, 'steps': steps, 'inputs': fields,
+                   'pause_after': pause_after, 'tags': tags or []}
+        steps_json = json.dumps(steps) if steps else None
+        row = self.db.execute('SELECT status, script, steps FROM reflexes WHERE domain=? AND name=?', (site, name)).fetchone()
+        if row and (row['script'], row['steps']) == (script, steps_json):
+            self.db.execute("UPDATE reflexes SET description=?, inputs=?, updated_at=datetime('now') WHERE domain=? AND name=?",
+                            (description, None if fields is None else json.dumps(fields), site, name))
+            self.db.commit()
+            return f'Unchanged {site}/{name}; its record is kept'
+        if row and row['status'] == 'active':
+            self.db.execute("UPDATE reflexes SET candidate=?, updated_at=datetime('now') WHERE domain=? AND name=?",
+                            (json.dumps(version), site, name))
+            self.db.commit()
+            return (f'Saved a candidate for {site}/{name}; the active script stays in use until it fails, '
+                    'then the candidate is tried and replaces it after one successful replay')
+        self.db.execute('''INSERT INTO reflexes(domain,name,description,script,pause_after,tags,inputs,steps,status,
+                successes,failures,consecutive_failures,candidate,updated_at) VALUES(?,?,?,?,?,?,?,?,'candidate',0,0,0,NULL,datetime('now'))
+            ON CONFLICT(domain,name) DO UPDATE SET description=excluded.description,script=excluded.script,
+                pause_after=excluded.pause_after,tags=excluded.tags,inputs=excluded.inputs,steps=excluded.steps,
+                status='candidate',successes=0,failures=0,consecutive_failures=0,candidate=NULL,updated_at=excluded.updated_at''',
+            (site, name, description, script, pause_after, json.dumps(tags or []),
+             None if fields is None else json.dumps(fields), steps_json))
+        self.db.commit()
+        return f'Saved {site}/{name} as a candidate; it becomes active after one successful replay'
+
+    def record_replay(self, row_id, which, ok):
+        """Apply a replay outcome to the reflex's health."""
+        row = self.db.execute('SELECT * FROM reflexes WHERE rowid=?', (row_id,)).fetchone()
+        if row is None:
+            return
+        if which == 'candidate':
+            if ok:
+                candidate = json.loads(row['candidate'])
+                self.db.execute('''UPDATE reflexes SET description=?,script=?,steps=?,inputs=?,pause_after=?,tags=?,
+                    status='active',successes=1,failures=0,consecutive_failures=0,candidate=NULL,updated_at=datetime('now')
+                    WHERE rowid=?''', (candidate['description'], candidate['script'],
+                                       json.dumps(candidate['steps']) if candidate.get('steps') else None,
+                                       None if candidate.get('inputs') is None else json.dumps(candidate['inputs']),
+                                       candidate.get('pause_after'), json.dumps(candidate.get('tags') or []), row_id))
+            else:
+                self.db.execute("UPDATE reflexes SET candidate=NULL, updated_at=datetime('now') WHERE rowid=?", (row_id,))
+        elif ok:
+            self.db.execute('''UPDATE reflexes SET successes=successes+1, consecutive_failures=0, status='active',
+                updated_at=datetime('now') WHERE rowid=?''', (row_id,))
+        else:
+            self.db.execute('''UPDATE reflexes SET failures=failures+1, consecutive_failures=consecutive_failures+1,
+                status=CASE WHEN consecutive_failures+1 >= ? THEN 'broken' ELSE status END, updated_at=datetime('now')
+                WHERE rowid=?''', (self.BROKEN_AFTER, row_id))
+        self.db.commit()
 
     def history(self, limit=6):
         return [dict(r) for r in self.db.execute('SELECT task,inputs,result,metrics FROM turns ORDER BY id DESC LIMIT ?', (limit,))][::-1]
@@ -244,90 +348,129 @@ class BrowserSession:
                 return host + (f':{parsed.port}' if parsed.port else '')
             return parsed.netloc.lower()
 
-        async def save(name, description, script, tags=None, pause_after_auth=False, inputs=None):
+        async def save(name, description, script='', tags=None, pause_after_auth=False, inputs=None, steps=None):
             site = await domain()
+            if steps:
+                # A recorded sequence belongs to the site it starts on.
+                start = next((step['url'] for step in steps if step['type'] == 'navigate'), None)
+                site = host_of(start) if start else site
             if not site:
                 return ActionResult(error='Navigate to the website before saving its script')
-            if len(script) > 60000 or not script.lstrip().startswith('async'):
+            if steps:
+                if not isinstance(steps, list) or len(steps) > 40 or any(
+                        step.get('type') not in ('navigate', 'script') for step in steps):
+                    return ActionResult(error='Expected at most 40 navigate/script steps')
+                if any(step['type'] == 'script' and not step['script'].lstrip().startswith('async') for step in steps):
+                    return ActionResult(error='Every script step must be an async arrow function')
+            elif len(script) > 60000 or not script.lstrip().startswith('async'):
                 return ActionResult(error='Expected a bounded async arrow function')
+            if len(json.dumps(steps or [])) > 200000:
+                return ActionResult(error='Recorded steps exceed persistence bounds')
             try:
                 fields = normalize_fields(inputs)
             except (TypeError, ValueError) as exc:
                 return ActionResult(error=f'Invalid declared inputs: {exc}')
             # A saved script is a sequence of steps with placeholders: every task or
             # interaction value must be read from inputs, never written into it.
-            literal = written_values(json.dumps([name, description, script, tags, fields]), task_inputs, secrets)
+            literal = written_values(json.dumps([name, description, script, steps, tags, fields]), task_inputs, secrets)
             if literal:
                 return ActionResult(error='Parameterize input values before saving scripts: read '
                                           f'{", ".join(literal)} from inputs.<key>')
             if self.hosted:
                 if len(name) > 128 or len(description) > 2000 or len(tags or []) > 32 or len(json.dumps(tags)) > 4000:
                     return ActionResult(error='Script metadata exceeds persistence bounds')
-            self.store.db.execute('''INSERT INTO reflexes(domain,name,description,script,pause_after,tags,inputs) VALUES(?,?,?,?,?,?,?)
-                ON CONFLICT(domain,name) DO UPDATE SET description=excluded.description,script=excluded.script,
-                pause_after=excluded.pause_after,tags=excluded.tags,inputs=excluded.inputs''',
-                (site, name, description, script, 'auth' if pause_after_auth else None, json.dumps(tags or []),
-                 None if fields is None else json.dumps(fields)))
-            self.store.db.commit()
+            message = self.store.save_reflex(site, name, description, script, steps, fields,
+                                             'auth' if pause_after_auth else None, tags)
             if self.hosted:
                 self.store.db.execute('DELETE FROM reflexes WHERE rowid NOT IN (SELECT rowid FROM reflexes ORDER BY rowid DESC LIMIT 100)')
                 self.store.db.commit()
             metrics['saved'] += 1
-            return ActionResult(extracted_content=f'Saved {site}/{name}')
+            return ActionResult(extracted_content=message)
 
-        def lookup(site, name):
-            return self.store.db.execute('SELECT script,pause_after,inputs FROM reflexes WHERE domain=? AND name=?',
-                                         (site, name)).fetchone()
-
-        def bound_inputs(name, row, call_inputs):
+        def bound_inputs(name, version, call_inputs):
             # Declared reflexes receive exactly their declared inputs: call values,
             # then task/interaction values, then documented defaults.
-            return bind_inputs(name, json.loads(row['inputs']) if row['inputs'] else None, call_inputs, task_inputs)
+            return bind_inputs(name, json.loads(version['inputs']) if version['inputs'] else None, call_inputs, task_inputs)
+
+        async def resolve(name):
+            row = self.store.reflex(await domain(), name)
+            if not row:
+                return None, None, None
+            version, which = self.store.usable(row)
+            return row, version, which
 
         async def bind(name, call_inputs=None):
-            row = lookup(await domain(), name)
-            if not row:
-                # Unknown script: replay reports it; nothing to validate here.
+            row, version, _ = await resolve(name)
+            if not version:
+                # Unknown or broken script: replay reports it; nothing to validate here.
                 return call_inputs or {}
             try:
-                return bound_inputs(name, row, call_inputs)
+                return bound_inputs(name, version, call_inputs)
             except ReflexInputError:
                 metrics['input_errors'] = metrics.get('input_errors', 0) + 1
                 raise
 
+        async def run_steps(steps, stage_inputs):
+            """Replay a recorded sequence one step at a time under the observation policy:
+            each step is checked against a fresh snapshot, runs with its own pre- and
+            postcondition, and the page must reach steady state before the next."""
+            policy = self.observation_policy
+            options = {'observation_policy': policy} if policy is not None else {}
+            detail = 'Reflex executed successfully'
+            for index, step in enumerate(steps):
+                label = f"step {index + 1} of {len(steps)}" + (f" ({step['description']})" if step.get('description') else '')
+                if step['type'] == 'navigate':
+                    page = await self.browser.must_get_current_page()
+                    await page.goto(fill_template(step['url'], stage_inputs))
+                    if policy is not None and (await policy.observe(self.browser)).readiness != 'ready':
+                        return False, f'{label} opened a page that did not settle' + (f'\n{PARTIAL_EFFECTS}' if index else '')
+                    continue
+                if policy is not None:
+                    options['expected_observation'] = await policy.observe(self.browser)
+                ok, detail = await _execute_reflex(step['script'], stage_inputs, '', self.browser, **options)
+                if not ok:
+                    done = f'Steps 1-{index} completed; ' if index else ''
+                    return False, (f'{done}{label} failed.\n{detail}'
+                                   + (f'\nEFFECTS: {PARTIAL_EFFECTS} - earlier steps of this reflex already acted.' if index else ''))
+            return True, detail
+
         async def replay(name, inputs=None):
             call_inputs = inputs
-            site = await domain()
-            row = lookup(site, name)
+            row, version, which = await resolve(name)
             if not row:
                 return ActionResult(error='No script with that name for this user and current site')
+            if not version:
+                return ActionResult(error=f'Reflex {name} is marked broken after repeated failures; do the work by hand '
+                                          '(a new recording replaces it)')
             try:
-                stage_inputs = bound_inputs(name, row, call_inputs)
+                stage_inputs = bound_inputs(name, version, call_inputs)
             except ReflexInputError as exc:
                 # A caller error, not a broken script: no execution, no failure
                 # count and never the repair pipeline.
                 metrics['input_errors'] = metrics.get('input_errors', 0) + 1
                 return ActionResult(error=exc.to_text())
-            ok, detail = await _execute_reflex(row['script'], stage_inputs, '', self.browser,
-                                             **({'observation_policy': self.observation_policy} if self.observation_policy is not None else {}))
-            column = 'successes' if ok else 'failures'
-            self.store.db.execute(f'UPDATE reflexes SET {column}={column}+1 WHERE domain=? AND name=?', (site, name))
-            self.store.db.commit()
+            if version['steps']:
+                ok, detail = await run_steps(json.loads(version['steps']), stage_inputs)
+            else:
+                ok, detail = await _execute_reflex(version['script'], stage_inputs, '', self.browser,
+                                                 **({'observation_policy': self.observation_policy} if self.observation_policy is not None else {}))
+            self.store.record_replay(row['id'], which, ok)
             metrics['reused' if ok else 'replay_failures'] += 1
             partial = not ok and PARTIAL_EFFECTS in detail
             if partial:
                 metrics['partial_effects'] = metrics.get('partial_effects', 0) + 1
-            if (self.hosted or partial) and not ok and 'NEEDS_HUMAN' not in detail and 'NEEDS_AUTH' not in detail:
+            if (self.hosted or partial or version['steps']) and not ok and 'NEEDS_HUMAN' not in detail and 'NEEDS_AUTH' not in detail:
                 # A failed script may already have submitted or mutated state.
                 # Automatic full-script repair/retry is not safe in a hosted task,
                 # nor anywhere once the page visibly changed before the failure.
-                return ActionResult(error=detail + '\nEffects may be partial. Observe current state; repair only remaining work and save the corrected script for a future explicit task. Do not replay this stage automatically.')
+                return ActionResult(error=detail + '\nEffects may be partial. Observe current state and continue by hand from the failed step; '
+                                    'the work you do is recorded as this reflex\'s replacement. Do not replay it automatically.')
             if not ok and 'NEEDS_HUMAN' not in detail and 'NEEDS_AUTH' not in detail:
                 from .runner import _repair_reflex
                 from .llm import get_llm
                 metrics['repair_attempts'] = metrics.get('repair_attempts', 0) + 1
                 ok, detail, fixed = await _repair_reflex(
-                    broken_script=row['script'], error_msg=detail, inputs=stage_inputs,
+                    broken_script=version['script'], error_msg=detail, inputs=stage_inputs,
                     entry_url='', browser_session=self.browser, llm=get_llm('fast'),
                     **({'observation_policy': self.observation_policy} if self.observation_policy is not None else {}))
                 if ok and fixed:
@@ -335,18 +478,21 @@ class BrowserSession:
                         # The repaired script already ran, but a script with request
                         # values written in is not a reusable stage; keep the old one.
                         return ActionResult(extracted_content=detail)
-                    # Keep scope captured before execution: submission may have
-                    # navigated to another site. Preserve tags/pause metadata.
-                    self.store.db.execute('UPDATE reflexes SET script=?,successes=successes+1 WHERE domain=? AND name=?',
-                                          (fixed, site, name))
+                    # The repair just succeeded on the live page: it replaces the
+                    # script with a fresh record. Keep scope captured before execution.
+                    self.store.db.execute("""UPDATE reflexes SET script=?, successes=1, failures=0, consecutive_failures=0,
+                        status='active', candidate=NULL, updated_at=datetime('now') WHERE rowid=?""", (fixed, row['id']))
                     self.store.db.commit()
                     metrics['repaired'] = metrics.get('repaired', 0) + 1
-            if ok and row['pause_after']:
-                await human(f"Stage '{name}' needs human assistance", row['pause_after'])
+            if ok and version['pause_after']:
+                await human(f"Stage '{name}' needs human assistance", version['pause_after'])
             if not ok and ('NEEDS_HUMAN' in detail or 'NEEDS_AUTH' in detail):
                 await human(detail, 'auth' if 'NEEDS_AUTH' in detail else 'other')
                 return ActionResult(extracted_content='Human assisted. Inspect current state before continuing; the script may have partially acted.')
             return ActionResult(extracted_content=detail) if ok else ActionResult(error=detail)
+
+        async def site_reflexes(host):
+            return self.store.for_site(host)
 
         async def human(reason, category='other'):
             pause = time.monotonic()
@@ -415,6 +561,7 @@ class BrowserSession:
             # Pre-execution input binding travels with the callback so existing
             # drive_browser-compatible drivers keep their call signature.
             replay.bind_inputs = bind
+            replay.catalog = site_reflexes  # lookup when the agent arrives on a site
             result = await drive_browser(self.browser, task, inputs, '', RunControl([False]), human, replay, save, on_event=event,
                                           interaction_tools={'request_input_values': request_input_values,
                                                              'request_confirmation': request_confirmation},

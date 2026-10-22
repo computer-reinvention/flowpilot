@@ -195,7 +195,7 @@ async def test_session_partial_effects_are_not_auto_repaired(tmp_path, monkeypat
     async def drive(browser, task, inputs, entry, control, human, replay, save, **kwargs):
         await save('add', 'Add fare', 'async()=>{}')
         detail = (await replay('add')).error
-        assert 'Do not replay this stage automatically' in detail
+        assert 'Do not replay it automatically' in detail
         return 'inspected'
     monkeypatch.setattr(agent_session, 'drive_browser', drive)
     try:
@@ -217,7 +217,7 @@ def test_legacy_store_migrates_and_catalogs_referenced_inputs(tmp_path):
     store = agent_session.UserStore(tmp_path, 'legacy')
     try:
         assert store.scripts() == [{'domain': 'a.test', 'name': 'old', 'description': 'Old', 'successes': 0,
-                                    'failures': 0, 'inputs': None, 'referenced_inputs': ['query']}]
+                                    'failures': 0, 'status': 'active', 'inputs': None, 'referenced_inputs': ['query']}]
     finally:
         store.close()
 
