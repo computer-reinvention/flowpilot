@@ -112,7 +112,7 @@ async def test_generation_rejects_stale_snapshot_before_provider_or_second_dump(
     monkeypatch.setattr(explorer, 'generate_program', generate)
     async def agent(task, system, tools, dispatch, **kwargs):
         await dispatch('observe', {})
-        await env.page.evaluate("() => {result.textContent='Changed $20';}")
+        await env.page.evaluate("() => {action.disabled=true;}")
         with pytest.raises(TaskFault):
             await dispatch('generate_and_save_reflex', dict(name='stage', description='Compile'))
         await dispatch('finish_exploration', {})

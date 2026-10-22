@@ -65,9 +65,12 @@ async def test_freshness_is_not_structural_identity(change):
         value['content'] = [['top', 'Total $99']]
     else:
         b.agent_focus_target_id = 'tab-b'
-    with pytest.raises(TaskFault) as exc:
-        await p.require_fresh(b, before)
-    assert exc.value.error.code == ErrorCode.STALE_GENERATION
+    if change == 'text':
+        await p.require_fresh(b, before)  # text-only churn does not fence action targets
+    else:
+        with pytest.raises(TaskFault) as exc:
+            await p.require_fresh(b, before)
+        assert exc.value.error.code == ErrorCode.STALE_GENERATION
     after = await p.observe(b)
     assert after.structural_fingerprint == before.structural_fingerprint
     if change in ('value', 'disabled', 'text'):

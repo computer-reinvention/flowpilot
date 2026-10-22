@@ -147,8 +147,13 @@ class ObservationPolicy:
         structural = self._digest(identities)
         progress = self._digest([raw['content'], [(c['identity'], c['status']) for c in raw['controls']]])
         document = self._digest(raw['docs'])
-        freshness = self._digest([target, raw['url'], document, structural, progress, raw['nodes'], raw['busy'], raw['unknown'],
-                                  raw.get('opaque', []), raw.get('count', 0)])
+        # Freshness fences what an action can target: the document, every control's
+        # identity, state and node instance. Text-only churn (tickers, carousels,
+        # rotating ads) still moves the progress fingerprint for no-progress
+        # detection but does not invalidate actions; decisions that depend on a
+        # displayed value are restated in the confirmation the owner approves.
+        controls = [(c['identity'], c['status']) for c in raw['controls']]
+        freshness = self._digest([target, raw['url'], document, structural, controls, raw['nodes'], raw['busy'], raw['unknown']])
         return raw, target, document, structural, progress, freshness
 
     def _snapshot(self, capture, readiness):
@@ -195,8 +200,10 @@ class ObservationPolicy:
                 while True:
                     capture = await self._capture(browser)
                     now = time.monotonic()
-                    if capture[-1] != last:
-                        unchanged_since, last = now, capture[-1]
+                    # Convergence waits for text too (results still streaming in),
+                    # unlike the action fence, which only tracks action targets.
+                    if (capture[4], capture[-1]) != last:
+                        unchanged_since, last = now, (capture[4], capture[-1])
                     raw = capture[0]
                     if raw['unknown']:
                         trace('observation.result', readiness='unknown', seconds=round(now - start, 3))

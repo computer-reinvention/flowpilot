@@ -11,7 +11,7 @@ import pytest_asyncio
 
 from backend import pi_browser, runner
 from backend.observation import create_observation
-from backend.task_contracts import ErrorCode, TaskFault
+from backend.task_contracts import ErrorCode, TaskFault, task_error
 from backend.task_settings import TaskSettings
 from scripts.smoke_observation import synthetic_browser
 
@@ -45,8 +45,7 @@ async def test_delayed_hydration_with_perpetual_traffic_and_clock(local_browser)
     await asyncio.sleep(0.04)
     await p.require_fresh(browser, a)  # explicit timestamp churn is benign
     await page.evaluate("() => { result.textContent='Ready $99'; }")
-    with pytest.raises(TaskFault):
-        await p.require_fresh(browser, a)
+    await p.require_fresh(browser, a)  # text-only churn does not move action targets
     b = await p.observe(browser)
     assert a.structural_fingerprint == b.structural_fingerprint
     assert a.progress_fingerprint != b.progress_fingerprint
@@ -284,9 +283,11 @@ async def test_volatile_optout_does_not_hide_result_or_control_state(local_brows
     p = policy()
     before = await p.observe(browser)
     await page.evaluate("() => { result.textContent='Price $200'; }")
-    with pytest.raises(TaskFault):
-        await p.require_fresh(browser, before)
     current = await p.observe(browser)
+    # Result text inside an opt-out stays visible to progress (no-progress
+    # detection) even though it no longer fences actions.
+    assert current.progress_fingerprint != before.progress_fingerprint
+    assert 'Price $200' in current.elements
     await page.evaluate("() => { action.textContent='Changed action'; }")
     with pytest.raises(TaskFault):
         await p.require_fresh(browser, current)
@@ -338,8 +339,9 @@ async def test_accessible_label_and_aria_selection_are_meaningful(local_browser)
     await page.evaluate("() => { const date=document.createElement('time'); date.id='delivery'; date.textContent='2026-11-01'; document.body.append(date); }")
     before = await p.observe(browser)
     await page.evaluate("() => document.querySelector('#delivery').textContent='2026-12-01'")
-    with pytest.raises(TaskFault):
-        await p.require_fresh(browser, before)
+    # Text, not an action target: it does not fence, but it is never ignored as noise.
+    await p.require_fresh(browser, before)
+    assert (await p.observe(browser)).progress_fingerprint != before.progress_fingerprint
 
 
 async def test_owned_trace_calls_exclude_scripts_inputs_and_dom(local_browser, monkeypatch):
@@ -431,3 +433,17 @@ async def test_generated_reflex_cannot_mask_stale_prompt_snapshot(local_browser,
         await runner._generate_reflex(SimpleNamespace(entry_url=url, task='synthetic'), {}, browser, None,
                                       observation_policy=policy())
     assert await page.evaluate('() => window.wrong') == '0'
+
+
+async def test_completion_with_an_unresponsive_browser_is_reported_unverified(local_browser, monkeypatch):
+    browser, page, url = local_browser
+    p = policy(timeout=0.4)
+    async def dead(_):
+        raise TaskFault(task_error(ErrorCode.READINESS_TIMEOUT, 'Observation deadline expired without a snapshot'))
+    async def agent(task, system, tools, dispatch, **kwargs):
+        monkeypatch.setattr(type(p), 'observe', lambda self, b: dead(b))
+        await dispatch('complete', {'verify': 'async()=>true', 'summary': 'Site blocked; nothing booked'})
+    monkeypatch.setattr(pi_browser, 'run_pi', agent)
+    result = await pi_browser.drive_browser(browser, 'check', {}, url, SimpleNamespace(checkpoint=AsyncMock()),
+                                           None, None, None, observation_policy=p)
+    assert result.startswith('The browser stopped responding') and 'Site blocked; nothing booked' in result

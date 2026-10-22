@@ -222,7 +222,16 @@ async def drive_browser(browser, task, inputs, entry_url, control, human_help,
         if name == "complete":
             guarded_check = observation_policy is not None
             if checked_scripts:
-                observation = await observation_policy.observe(browser)
+                try:
+                    observation = await observation_policy.observe(browser)
+                except TaskFault as fault:
+                    if fault.error.code not in (ErrorCode.READINESS_TIMEOUT, ErrorCode.UNAVAILABLE):
+                        raise
+                    # The browser stopped answering: nothing more can happen on the
+                    # page, so deliver the report, explicitly marked unverified.
+                    completion = ('The browser stopped responding, so this could not be verified on the page.\n\n'
+                                  + args["summary"])
+                    return {"verified": False, "reported": True}
                 if observation.readiness == 'unknown':
                     # complete only reads: an opaque wall (bot check, full-page
                     # cross-origin frame) must not stop the agent reporting it.
