@@ -135,6 +135,31 @@ _DUMP_ELEMENTS_JS = """
 PARTIAL_EFFECTS = "PARTIAL_EFFECTS"
 
 
+import re as _re
+
+# Fixed sleeps in model-written scripts wait for something to change (suggestions,
+# a results list). Each becomes "until the page has changed and been quiet for
+# 300 ms" (at least 700 ms), capped at the original duration: never shorter when
+# nothing happens.
+_SLEEP = _re.compile(r'new\s+Promise\(\s*\(?\s*(\w+)\s*\)?\s*=>\s*setTimeout\(\s*\1\s*,\s*([^()]+?|[^()]*\([^()]*\)[^()]*?)\s*\)\s*\)')
+_SETTLE_JS = ('const __fpWait = ms => new Promise(resolve => { const total = Number(ms) || 0, '
+              'floor = Math.min(total, 700), start = performance.now(); let quiet; const done = () => { '
+              'observer.disconnect(); clearTimeout(quiet); clearTimeout(cap); resolve(); }; '
+              'const settle = () => { const left = floor - (performance.now() - start); '
+              'if (left > 0) { quiet = setTimeout(settle, left); } else { done(); } }; '
+              'const observer = new MutationObserver(() => { clearTimeout(quiet); quiet = setTimeout(settle, 300); }); '
+              'observer.observe(document, {subtree: true, childList: true, attributes: true, characterData: true}); '
+              'const cap = setTimeout(done, total); });')
+
+
+def adaptive_waits(script: str) -> str:
+    """Rewrite fixed sleeps into change-then-quiet waits capped at the same duration."""
+    rewritten = _SLEEP.sub(lambda m: f'__fpWait({m.group(2)})', script)
+    if rewritten == script:
+        return script
+    return f'async (inputs, entryUrl) => {{ {_SETTLE_JS} return await ({rewritten})(inputs, entryUrl); }}'
+
+
 def _repairable(msg: str) -> bool:
     """A failure is eligible for automatic whole-script repair only when it is a
     script failure with no observed partial effect and no human boundary."""
@@ -190,7 +215,7 @@ async def _execute_reflex(
     try:
         import json as _json
         arg_strs = [_json.dumps(inputs), _json.dumps(entry_url)]
-        expression = f'({script})({", ".join(arg_strs)})'
+        expression = f'({adaptive_waits(script)})({", ".join(arg_strs)})'
         session_id = await page._ensure_session()
         timeout = float(os.environ.get("REFLEX_TIMEOUT_SECONDS", "30"))
         if timeout <= 0:
