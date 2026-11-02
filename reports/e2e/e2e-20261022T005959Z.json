@@ -1,0 +1,110 @@
+{
+  "base_url": "http://localhost:8080",
+  "results": [
+    {
+      "name": "flight_search",
+      "task_id": "task_c77daf9c6bba45a29ae44d6194507e7e",
+      "session_id": "session_171c44f159da4d9ebc11517412134727",
+      "profile_id": "profile_28fb7a86b5904e26a1ec8a8a34d13a04",
+      "state": "completed",
+      "seconds_total": 69.67,
+      "seconds_to_running": 0.54,
+      "states": [
+        [
+          "running",
+          0.54
+        ],
+        [
+          "completed",
+          69.67
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "Google Flights shows these as the 3 cheapest nonstop options for Mumbai (BOM) to New Delhi (DEL) on Thu 12 Nov 2026. The search was one-way, economy, 1 adult, with prices in INR. Nothing was booked.\n\n1. SpiceJet, \u20b96,616. It departs 11:20 PM and arrives 1:40 AM on 13 Nov (2h 20m). Google also lists a second SpiceJet departure at 11:20 PM at the same \u20b96,616. That one arrives 2:05 AM on 13 Nov (2h 45m).\n2. Akasa Air, \u20b97,001. It departs 8:55 PM and arrives 11:15 PM (2h 20m).\n3. Akasa Air, \u20b97,001. It departs 6:35 PM and arrives 9:00 PM (2h 25m).\n\nThe next cheapest nonstops were SpiceJet 10:30 PM to 12:50 AM at \u20b97,111 and Akasa Air 1:00 PM to 3:25 PM at \u20b97,150.\n\nThe first time the page loaded, it showed a cheapest nonstop of \u20b97,484 and no IndiGo flights. Prices dropped once the results finished loading, so the figures above are from the fully loaded list.\n\nSource: https://www.google.com/travel/flights/search?tfs=CBwQAhogEgoyMDI2LTExLTEyKABqBwgBEgNCT01yBwgBEgNERUxAAUgBcAGCAQsI____________AZgBAg&tfu=EgoIABAAGAAgAigB&hl=en&curr=INR",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 8,
+          "tool_calls": 7,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 58.52,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "flight_search",
+      "task_id": "task_ebdd001740644c1e93c3712b1121bda7",
+      "session_id": "session_87693e82346a46ffb1789e9d52b23529",
+      "profile_id": "profile_28fb7a86b5904e26a1ec8a8a34d13a04",
+      "state": "completed",
+      "seconds_total": 37.64,
+      "seconds_to_running": 0.54,
+      "states": [
+        [
+          "running",
+          0.54
+        ],
+        [
+          "completed",
+          37.64
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "Google Flights shows these as the 3 cheapest nonstop options for Mumbai (BOM) to New Delhi (DEL) on Thu 12 Nov 2026. The search was one-way, economy, 1 adult, with prices in INR. I didn't book anything.\n\n1. **SpiceJet, \u20b96,616.** It departs 11:20 PM and arrives 1:40 AM on 13 Nov (2h 20m). A second SpiceJet nonstop also leaves at 11:20 PM for the same \u20b96,616. It arrives 2:05 AM on 13 Nov (2h 45m).\n2. **Akasa Air, \u20b97,001.** It departs 8:55 PM and arrives 11:15 PM (2h 20m).\n3. **Akasa Air, \u20b97,001.** It departs 6:35 PM and arrives 9:00 PM (2h 25m).\n\nThe next cheapest nonstops are SpiceJet 10:30 PM to 12:50 AM (+1) at \u20b97,111 and Akasa Air 1:00 PM to 3:25 PM at \u20b97,150.\n\nThe page was still loading results when I read it. Its list matches the fully loaded results from my earlier check.\n\nSource: https://www.google.com/travel/flights/search?tfs=CBwQAhogEgoyMDI2LTExLTEyKABqBwgBEgNCT01yBwgBEgNERUxAAUgBcAGCAQsI____________AZgBAg&tfu=EgoIABAAGAAgAigB&hl=en&curr=INR",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 27.69,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "flight_search",
+      "task_id": "task_94a4b058035442328ebfa77d2ccfb54d",
+      "session_id": "session_9a5fb18e801545d79b3d0b9ff030496e",
+      "profile_id": "profile_28fb7a86b5904e26a1ec8a8a34d13a04",
+      "state": "completed",
+      "seconds_total": 68.06,
+      "seconds_to_running": 0.5,
+      "states": [
+        [
+          "running",
+          0.5
+        ],
+        [
+          "completed",
+          68.06
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "These are the 3 cheapest nonstop options on Google Flights for Mumbai (BOM) to New Delhi (DEL) on Thu 12 Nov 2026. The search was one-way, economy, 1 adult, with prices in INR. I didn't book anything.\n\n1. **SpiceJet, \u20b96,616.** It departs 11:20 PM and arrives 1:40 AM on 13 Nov (2h 20m). A second SpiceJet nonstop also leaves at 11:20 PM for the same \u20b96,616. It arrives 2:05 AM on 13 Nov (2h 45m).\n2. **Akasa Air, \u20b97,001.** It departs 8:55 PM and arrives 11:15 PM (2h 20m).\n3. **Akasa Air, \u20b97,001.** It departs 6:35 PM and arrives 9:00 PM (2h 25m).\n\nThe next cheapest nonstops are SpiceJet 10:30 PM to 12:50 AM (+1) at \u20b97,111 and Akasa Air 1:00 PM to 3:25 PM at \u20b97,150.\n\nThe page was still showing \"Fetching results\" when I read it, so prices could shift slightly. The list matches what I found in two earlier checks.\n\nSource: https://www.google.com/travel/flights/search?tfs=CBwQAhogEgoyMDI2LTExLTEyKABqBwgBEgNCT01yBwgBEgNERUxAAUgBcAGCAQsI____________AZgBAg&tfu=EgoIABAAGAAgAigB&hl=en&curr=INR",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 28.3,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    }
+  ]
+}

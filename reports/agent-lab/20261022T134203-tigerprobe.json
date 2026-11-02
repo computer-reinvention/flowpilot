@@ -1,0 +1,41 @@
+{
+  "task": "Open https://en.wikipedia.org/wiki/Tiger and report the article's first sentence and its URL.",
+  "user": "tigerprobe",
+  "outcome": {
+    "state": "completed",
+    "seconds": 31.09,
+    "answer": "First sentence of the Tiger article: \"The tiger is a large cat and a member of the genus Panthera native to Asia.\"\n\nURL: https://en.wikipedia.org/wiki/Tiger\n\nI couldn't read the article page directly. Its page snapshot was too large for the browser tool, which returned an error each time. I took the sentence from the article's Wikipedia REST summary (https://en.wikipedia.org/api/rest_v1/page/summary/Tiger). That summary gives the article URL above as its canonical page.",
+    "metrics": {
+      "model_turns": 10,
+      "tool_calls": 8,
+      "reused": 0,
+      "saved": 0,
+      "replay_failures": 0,
+      "human_seconds": 0.0,
+      "wall_seconds": 31.09,
+      "agent_seconds": 31.09
+    },
+    "secrets": []
+  },
+  "log": [
+    "[    0.7s] browser ready in 0.7s",
+    "[    2.6s] \u2192 navigate {\"url\": \"https://en.wikipedia.org/wiki/Tiger\"}",
+    "[    3.0s]   \u2717 navigate TaskFault: unavailable (0.4s)",
+    "[    5.1s] \u2192 observe {}",
+    "[    6.2s]   \u2717 observe ValidationError: 1 validation error for Observation\nreferences\n  Tuple should have at most 2000 items after validation, not 2900 [type=too_long]\n    For further information visit https://errors.pydantic.dev/2.13/v/too_long (1.1s)",
+    "[    8.3s] \u2192 execute {\"script\": \"async()=>{const p=document.querySelector('#mw-content-text .mw-parser-output > p:not(.mw-empty-elt)');return {url:location.href,text:p.innerText.slice(0,500)}}\", \"precondition\": \"async()=>true\", \"postcondition\": \"async()=>true\"}",
+    "[    8.3s]   \u2717 execute RuntimeError: Page changed; call observe before further browser actions (0.0s)",
+    "[    9.5s] \u2192 navigate {\"url\": \"https://en.wikipedia.org/wiki/Tiger\"}",
+    "[   10.7s]   \u2717 navigate ValidationError: 1 validation error for Observation\nreferences\n  Tuple should have at most 2000 items after validation, not 2900 [type=too_long]\n    For further information visit https://errors.pydantic.dev/2.13/v/too_long (1.2s)",
+    "[   12.6s] \u2192 execute {\"script\": \"async()=>{const p=document.querySelector('#mw-content-text .mw-parser-output > p:not(.mw-empty-elt)');return {url:location.href,text:p.innerText.slice(0,600)}}\", \"precondition\": \"async()=>true\", \"postcondition\": \"async()=>true\"}",
+    "[   12.6s]   \u2717 execute RuntimeError: Page changed; call observe before further browser actions (0.0s)",
+    "[   19.0s] \u2192 execute {\"script\": \"async()=>{const p=document.querySelector('#mw-content-text .mw-parser-output > p:not(.mw-empty-elt)');return {url:location.href,text:p.innerText.slice(0,600)}}\", \"precondition\": \"async()=>true\", \"postcondition\": \"async()=>true\"}",
+    "[   19.0s]   \u2717 execute RuntimeError: Page changed; call observe before further browser actions (0.0s)",
+    "[   23.7s] \u2192 navigate {\"url\": \"https://en.wikipedia.org/api/rest_v1/page/summary/Tiger\"}",
+    "[   24.8s]   \u2190 navigate {\"url\": \"\", \"page\": {\"url\": \"https://en.wikipedia.org/api/rest_v1/page/summary/Tiger\", \"readiness\": \"ready\", \"elements\": \"\\nPage text (bounded; form values omitted):\\n{\\\"type\\\":\\\"standard\\\",\\\"title\\\":\\\"Tiger\\\",\\\"displaytitle\\\":\\\"<span lang=\\\\\\\"en\\\\\\\" dir=\\\\\\\"ltr\\\\\\\"><span class=\\\\\\\"mw-page-title-main\\\\\\\">Tiger</span></span>\\\",\\\"namespace\\\":{\\\"id\\\":0,\\\"text\\\":\\\"\\\"},\\\"wikibase_item\\\":\\\"Q19939\\\",\\\"titles\\\":{\\\"canonical\\\":\\\"Tiger\\\",\\\"normalized\\\":\\\"Tiger\\\",\\\"display\\\":\\\"<span lang=\\\\\\\"en\\\\\\\" dir=\\\\\\\"ltr\\\\\\\"><span class=\\\\\\\"mw-page-title-main\\\\\\\">Tiger</span></span>\\\"},\\\"pageid\\\":30075,\\\"thumbnail\\\":{\\\"source\\\":\\\"https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b0/Bengal_tiger_%28Panthera_tigris_tigris%29_female_3_crop.jpg/330px-Bengal_tiger_%28Panthera_tigris_tigris%29_female_3_crop.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail\\\",\\\"width\\\":330,\\\"height\\\":220},\\\"\u2026 (+1873) (1.1s)",
+    "[   27.3s] \u2192 complete {\"verify\": \"async()=>true\", \"summary\": \"First sentence of the Tiger article: \\\"The tiger is a large cat and a member of the genus Panthera native to Asia.\\\"\\n\\nURL: https://en.wikipedia.org/wiki/Tiger\\n\\nI couldn't read the article page directly. Its page snapshot was too large for the browser tool, which returned an error each time. I took the sentence from the article's Wikipedia REST summary (https://en.wikipedia.org/api/rest_v1/page/summary/Tiger). That summary gives the article URL above as its canonical page.\"}",
+    "[   29.4s]   \u2190 complete {\"verified\": true} (2.1s)",
+    "[   31.8s] COMPLETED in 31.09s metrics={\"model_turns\": 10, \"tool_calls\": 8, \"reused\": 0, \"saved\": 0, \"replay_failures\": 0, \"human_seconds\": 0.0, \"wall_seconds\": 31.09, \"agent_seconds\": 31.09}",
+    "[   31.8s] ANSWER:\nFirst sentence of the Tiger article: \"The tiger is a large cat and a member of the genus Panthera native to Asia.\"\n\nURL: https://en.wikipedia.org/wiki/Tiger\n\nI couldn't read the article page directly. Its page snapshot was too large for the browser tool, which returned an error each time. I took the sentence from the article's Wikipedia REST summary (https://en.wikipedia.org/api/rest_v1/page/summary/Tiger). That summary gives the article URL above as its canonical page."
+  ]
+}

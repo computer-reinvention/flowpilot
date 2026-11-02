@@ -1,0 +1,559 @@
+{
+  "base_url": "https://flowpilot.technology",
+  "results": [
+    {
+      "name": "cab",
+      "task_id": "task_0b12f60e8a3d40ffb7db771efc5a81da",
+      "session_id": "session_d54d8f43720b4d828efe36a8a5f0c71f",
+      "profile_id": "profile_74454f637b1d471794a53896179f586c",
+      "state": "cancelled",
+      "seconds_total": 612.91,
+      "seconds_to_running": 1.35,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.35
+        ]
+      ],
+      "interactions": [],
+      "result": null,
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "cab",
+      "task_id": "task_b4cfc41cdca7413ba3a3049fb7bb5804",
+      "session_id": "session_cf7651d8c556495fa0bf892ff919fcab",
+      "profile_id": "profile_74454f637b1d471794a53896179f586c",
+      "state": "completed",
+      "seconds_total": 484.21,
+      "seconds_to_running": 1.08,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.08
+        ],
+        [
+          "completed",
+          484.21
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "I couldn't get cab options or fares from savaari.com, so I have no cheapest cab to confirm with you, and nothing was booked or submitted.\n\nOn the Airport tab, \"Pickup from Airport\" mode, I got as far as:\n- **Pickup:** \"Terminal 2, Chhatrapati Shivaji International Airport, Mumbai\" is selected.\n- **Date:** 23 October 2026 shows as 23-10-2026.\n\nThese parts failed:\n- **Drop-off:** I never got \"Bandra Kurla Complex\" accepted. The form kept showing \"Please select from Dropdown\", and my last attempt to re-enter it left only \"B\" in the field.\n- **Time:** I couldn't set 10:00. It still shows the default 2:15 AM, because the time dropdown wouldn't open from the script.\n- **Search:** \"Explore Cabs\" did nothing, and the page stayed on https://www.savaari.com/. The page also stopped responding to several scripted clicks.\n\nThe quickest way forward is to enter the drop-off and time by hand on savaari.com. I can then read the fares and ask you to confirm the cheapest one before booking.",
+        "source_urls": [
+          "https://www.savaari.com/"
+        ],
+        "metrics": {
+          "model_turns": 33,
+          "tool_calls": 32,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 476.65,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "cab_new_trip",
+      "task_id": "task_a405f9271aaa4816a4fd94339c5ba08a",
+      "session_id": "session_d97bd9c920df4fc1872178de8a9c5ab0",
+      "profile_id": "profile_74454f637b1d471794a53896179f586c",
+      "state": "completed",
+      "seconds_total": 224.62,
+      "seconds_to_running": 1.28,
+      "seconds_to_first_pause": 220.68,
+      "states": [
+        [
+          "running",
+          1.28
+        ],
+        [
+          "waiting_for_confirmation",
+          220.68
+        ],
+        [
+          "running",
+          222.46
+        ],
+        [
+          "completed",
+          224.62
+        ]
+      ],
+      "interactions": [
+        {
+          "t": 220.68,
+          "interaction": "confirmation",
+          "message": "Savaari airport pickup: Mumbai T2 \u2192 Powai, 24-10-2026 2:30 PM. Options (fare + taxes): Wagon R/Swift \u20b9677+\u20b934 (cheapest); Dzire/Etios \u20b9690+\u20b935; Ertiga \u20b9917+\u20b946; Innova \u20b91,346+\u20b967; Innova Crysta \u20b91,359+\u20b968. Proceed to select the cheapest (Wagon R, Swift, \u20b9677 + \u20b934 taxes)?",
+          "fields": []
+        }
+      ],
+      "result": {
+        "answer": "Not booked: you declined this proposal, so FlowPilot stopped without taking any further action.\n\nSavaari airport pickup: Mumbai T2 \u2192 Powai, 24-10-2026 2:30 PM. Options (fare + taxes): Wagon R/Swift \u20b9677+\u20b934 (cheapest); Dzire/Etios \u20b9690+\u20b935; Ertiga \u20b9917+\u20b946; Innova \u20b91,346+\u20b967; Innova Crysta \u20b91,359+\u20b968. Proceed to select the cheapest (Wagon R, Swift, \u20b9677 + \u20b934 taxes)?",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 19,
+          "tool_calls": 19,
+          "reused": 0,
+          "saved": 1,
+          "replay_failures": 0,
+          "wall_seconds": 215.51,
+          "human_seconds": 0.73
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "flight",
+      "task_id": "task_2ad0684c728b42caa1085457f399fa35",
+      "session_id": "session_01d4213c9f7043d7ad16bd1dadcbe8b6",
+      "profile_id": "profile_20d00e8459234ce380f31c5c924da498",
+      "state": "completed",
+      "seconds_total": 32.45,
+      "seconds_to_running": 1.1,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.1
+        ],
+        [
+          "completed",
+          32.45
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The 3 cheapest nonstop economy one-way flights from Mumbai (BOM) to Delhi (DEL) on Thu 12 Nov 2026, 1 adult, as listed on Google Flights:\n1. SpiceJet: departs 11:20 PM, arrives 1:40 AM (+1, 13 Nov). Price \u20b97,118.\n2. SpiceJet: departs 11:20 PM, arrives 2:05 AM (+1, 13 Nov). Price \u20b97,484.\n3. Akasa Air: departs 8:55 PM, arrives 11:15 PM. Price \u20b97,599. A second Akasa Air flight departing 6:35 PM and arriving 9:00 PM is also \u20b97,599, so it ties for third.\nNext cheapest is SpiceJet 6:25 AM\u20138:45 AM at \u20b97,923. Nothing was booked.\nSource: https://www.google.com/travel/flights?q=One%20way%20economy%20flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20nonstop%201%20adult&curr=INR&hl=en",
+        "source_urls": [
+          "https://www.google.com/travel/flights?q=One%20way%20economy%20flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20nonstop%201%20adult&curr=INR&hl=en"
+        ],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 26.26,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "flight",
+      "task_id": "task_b0597b1c41ec409b8231c9d53cbf7082",
+      "session_id": "session_e0b9f9f714a746e3baa12f70df586bea",
+      "profile_id": "profile_20d00e8459234ce380f31c5c924da498",
+      "state": "completed",
+      "seconds_total": 30.5,
+      "seconds_to_running": 1.05,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.05
+        ],
+        [
+          "completed",
+          30.5
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The 3 cheapest nonstop economy one-way flights from Mumbai (BOM) to New Delhi (DEL) on Thu 12 Nov 2026, for 1 adult, as listed on Google Flights:\n1. SpiceJet: departs 11:20 PM, arrives 1:40 AM on 13 Nov. Price \u20b97,118.\n2. SpiceJet: departs 11:20 PM, arrives 2:05 AM on 13 Nov. Price \u20b97,484.\n3. Akasa Air: departs 6:35 PM, arrives 9:00 PM. Price \u20b97,599. A second Akasa Air flight, departing 8:55 PM and arriving 11:15 PM, is also \u20b97,599, so it ties for third.\nNothing was booked.\nSource: https://www.google.com/travel/flights?q=One%20way%20economy%20flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20nonstop%201%20adult&curr=INR&hl=en",
+        "source_urls": [
+          "https://www.google.com/travel/flights?q=One%20way%20economy%20flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20nonstop%201%20adult&curr=INR&hl=en"
+        ],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 23.34,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "flight_new_route",
+      "task_id": "task_cc5668262054494489a6b4e50e099b38",
+      "session_id": "session_d04b0081c4e44ec5971d91d62116dbd3",
+      "profile_id": "profile_20d00e8459234ce380f31c5c924da498",
+      "state": "completed",
+      "seconds_total": 31.4,
+      "seconds_to_running": 1.02,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.02
+        ],
+        [
+          "completed",
+          31.4
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The 3 cheapest nonstop economy one-way flights from Bengaluru (BLR) to Hyderabad (HYD) on Fri 20 Nov 2026 are listed below. Google Flights shows prices for 2 adults in total.\n1. Air India Express: departs 8:30 AM, arrives 9:55 AM. \u20b910,518.\n2. Air India Express: departs 5:50 AM, arrives 7:20 AM. \u20b910,668.\n3. Air India Express: departs 5:30 PM, arrives 6:55 PM. \u20b911,154. Another Air India Express flight, departing 7:45 PM and arriving 9:20 PM, is also \u20b911,154, so it ties for third.\nOther nonstops were \u20b912,426 (9:50 PM\u201311:15 PM) and \u20b914,172 (2:50 PM\u20134:15 PM), both Air India Express. Alliance Air's 10:00 PM\u201311:40 PM flight had no price listed. Nothing was booked.\nSource: https://www.google.com/travel/flights?q=One%20way%20economy%20flights%20from%20BLR%20to%20HYD%20on%202026-11-20%20nonstop%202%20adults&curr=INR&hl=en",
+        "source_urls": [
+          "https://www.google.com/travel/flights?q=One%20way%20economy%20flights%20from%20BLR%20to%20HYD%20on%202026-11-20%20nonstop%202%20adults&curr=INR&hl=en"
+        ],
+        "metrics": {
+          "model_turns": 4,
+          "tool_calls": 3,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 24.87,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "shopping",
+      "task_id": "task_e0c105d0bd464f74834a623ca0e2dd77",
+      "session_id": "session_8fb713f3e08c42599a117420861ff8e1",
+      "profile_id": "profile_8144642b784a4d93acf7fc6be93e02cc",
+      "state": "completed",
+      "seconds_total": 51.59,
+      "seconds_to_running": 1.0,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.0
+        ],
+        [
+          "completed",
+          51.59
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "Top 3 wireless earbuds under \u20b92,000 on amazon.in. These come from a search filtered to 4 stars & up and under \u20b92,000, sorted by average customer review. I skipped listings with only 8\u201311 ratings, such as 5.0-star items, because they aren't reliable. Nothing was added to the cart.\n1. occiam Wireless Earbuds, Bluetooth 5.3, 48H playtime. Price \u20b9999, rating 4.5/5 from 1,826 ratings. https://www.amazon.in/occiam-Wireless-Bluetooth-Headphones-Waterproof/dp/B0HJ8FRF3Z\n2. HAVIT TW982 Earbuds with ENC, Bluetooth 5.4. Price \u20b91,101, rating 4.5/5 from 418 ratings. https://www.amazon.in/TW982-Cancelling-Bluetooth-Earphones-Headphones/dp/B0DGGT9PLB\n3. Wireless Earbuds Pro 3 (TWS, ANC, Skin White). Price \u20b91,869, rating 4.4/5 from about 8,099 ratings. https://www.amazon.in/Wireless-Bluetooth-Earphones-Cancellation-High-Fidelity/dp/B0HHL8SL53\nFor third place I chose the Pro 3 over a 4.4-star \u20b91,699 earbud with 551 ratings, because it has far more ratings. Prices and ratings are as shown on the search results page.",
+        "source_urls": [
+          "https://www.amazon.in/occiam-Wireless-Bluetooth-Headphones-Waterproof/dp/B0HJ8FRF3Z",
+          "https://www.amazon.in/TW982-Cancelling-Bluetooth-Earphones-Headphones/dp/B0DGGT9PLB",
+          "https://www.amazon.in/Wireless-Bluetooth-Earphones-Cancellation-High-Fidelity/dp/B0HHL8SL53"
+        ],
+        "metrics": {
+          "model_turns": 4,
+          "tool_calls": 3,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 41.51,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "shopping",
+      "task_id": "task_29b10b30d0b54cb2afc7c13991c7b585",
+      "session_id": "session_ab42a6ab790544fcb5686c8f2f52ce00",
+      "profile_id": "profile_8144642b784a4d93acf7fc6be93e02cc",
+      "state": "completed",
+      "seconds_total": 37.06,
+      "seconds_to_running": 1.04,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.04
+        ],
+        [
+          "completed",
+          37.06
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "Top 3 wireless earbuds under \u20b92,000 on amazon.in. These come from a search filtered to 4 stars & up and under \u20b92,000, sorted by average customer review. I skipped listings with only 8\u201311 ratings, such as the 5.0-star ones, because they aren't reliable. Nothing was added to the cart.\n1. occiam Wireless Earbuds, Bluetooth 5.3, 48H playtime. \u20b9999, 4.5/5 from 1,826 ratings. https://www.amazon.in/occiam-Wireless-Bluetooth-Headphones-Waterproof/dp/B0HJ8FRF3Z\n2. HAVIT TW982 Earbuds with ENC, Bluetooth 5.4. \u20b91,101, 4.5/5 from 418 ratings. https://www.amazon.in/TW982-Cancelling-Bluetooth-Earphones-Headphones/dp/B0DGGT9PLB\n3. Wireless Earbuds Pro 3 (TWS, ANC, Skin White). \u20b91,869, 4.4/5 from about 8,099 ratings. https://www.amazon.in/Wireless-Bluetooth-Earphones-Cancellation-High-Fidelity/dp/B0HHL8SL53\nFor third place I chose the Pro 3 over a 4.4-star \u20b91,699 earbud with 551 ratings, because it has far more ratings. Prices and ratings are as shown on the search results page.\nI did not re-check the product URLs this time. They are carried over from my earlier search, and the search results I re-read this time showed the same three products.",
+        "source_urls": [
+          "https://www.amazon.in/occiam-Wireless-Bluetooth-Headphones-Waterproof/dp/B0HJ8FRF3Z",
+          "https://www.amazon.in/TW982-Cancelling-Bluetooth-Earphones-Headphones/dp/B0DGGT9PLB",
+          "https://www.amazon.in/Wireless-Bluetooth-Earphones-Cancellation-High-Fidelity/dp/B0HHL8SL53"
+        ],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 29.95,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "shopping_new_query",
+      "task_id": "task_c7220d4498c145a88478a15d38044e35",
+      "session_id": "session_d928f543b9bd4248929ed914b8de9ae8",
+      "profile_id": "profile_8144642b784a4d93acf7fc6be93e02cc",
+      "state": "completed",
+      "seconds_total": 47.44,
+      "seconds_to_running": 0.97,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          0.97
+        ],
+        [
+          "completed",
+          47.44
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "Top 3 portable Bluetooth speakers under \u20b93,000 on amazon.in. The search was filtered to 4 stars & up and under \u20b93,000, then sorted by average customer review. I skipped accessory cases, which fill the top of the results. I also skipped the Toreto Orbix, which is 5.0 stars but has only 18 ratings. Nothing was added to the cart.\n1. Edifier MP85 Portable Bluetooth Speaker (Black): \u20b91,990, 4.6/5 from 681 ratings. https://www.amazon.in/Edifier-MP85-Black-Orange-Bluetooth-Portable/dp/B0C3B1P2LJ\n2. Bobtot Portable Bluetooth Speaker, IPX7 Waterproof with TWS (Red): \u20b92,819, 4.6/5 from 309 ratings. https://www.amazon.in/Bobtot-Portable-Bluetooth-Wireless-Waterproof/dp/B0DHV8ZCMK\n3. JBL Go 3 Ultra Portable Bluetooth Speaker (Blue): \u20b92,999, 4.5/5 from about 75,200 ratings. https://www.amazon.in/JBL-Wireless-Portable-Bluetooth-Waterproof/dp/B08FB396L1\nFor third place, several speakers are at 4.5 stars. I chose the JBL Go 3 because it has by far the most ratings, but at \u20b92,999 it only just fits the budget. Two other 4.5-star options are:\n- Kunodi Outdoor Waterproof Speaker, \u20b92,742.67, 11.5K ratings: https://www.amazon.in/Waterproof-Bluetooth-Wireless-Portable-Subwoofer/dp/B07797FJKY\n- A small IP67 360\u00b0 speaker, \u20b91,399, 3.8K ratings. I did not capture its URL.\nPrices and ratings are as shown on the search results page.",
+        "source_urls": [
+          "https://www.amazon.in/Edifier-MP85-Black-Orange-Bluetooth-Portable/dp/B0C3B1P2LJ",
+          "https://www.amazon.in/Bobtot-Portable-Bluetooth-Wireless-Waterproof/dp/B0DHV8ZCMK",
+          "https://www.amazon.in/JBL-Wireless-Portable-Bluetooth-Waterproof/dp/B08FB396L1",
+          "https://www.amazon.in/Waterproof-Bluetooth-Wireless-Portable-Subwoofer/dp/B07797FJKY"
+        ],
+        "metrics": {
+          "model_turns": 4,
+          "tool_calls": 3,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 39.47,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "hotel",
+      "task_id": "task_4d68861ad6614f5fa97d4da523f5fd2a",
+      "session_id": "session_c624323fe235429fbb425f81e8c1f452",
+      "profile_id": "profile_6a678cc0f284431c95eac6053f387571",
+      "state": "completed",
+      "seconds_total": 163.3,
+      "seconds_to_running": 1.29,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.29
+        ],
+        [
+          "completed",
+          163.3
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The three cheapest North Goa stays with a guest rating of 8 or higher on Booking.com are below. They are for 2 adults, 1 room, check-in 12 Nov 2026 and check-out 14 Nov 2026. I booked nothing.\n\n| # | Name | Area | Rating | Total for 2 nights |\n|---|---|---|---|---|\n| 1 | Trippy Turtle | Arambol | 9.3 (6 reviews) | \u20b91,080 + \u20b954 taxes and fees |\n| 2 | Om Ganesh Guest House Cliffside | Arambol | 8.6 (87 reviews) | \u20b91,260 + \u20b963 taxes and fees |\n| 3 | Ludu guest house | Arambol | 9.3 (3 reviews) | \u20b91,500 + \u20b975 taxes and fees |\n\n- **How I picked them:** I used the Booking.com results for \"North Goa, India\", filtered to review score 8+ and sorted by lowest price. The prices are the ones shown for the room listed on each result.\n- **Caveat:** The next cheapest were God's Gift Guest House at \u20b91,598 and Shree Hari Guest House at \u20b91,600, so the top three above are the cheapest on that page. The first two results had only a handful of reviews or a single room, so availability could change.\n\nSource: https://www.booking.com/searchresults.html?ss=North%20Goa%2C%20India&dest_id=5052&dest_type=region&checkin=2026-11-12&checkout=2026-11-14&group_adults=2&no_rooms=1&group_children=0&selected_currency=INR&order=price&nflt=review_score%3D80",
+        "source_urls": [
+          "https://www.booking.com/searchresults.html?ss=North%20Goa%2C%20India&dest_id=5052&dest_type=region&checkin=2026-11-12&checkout=2026-11-14&group_adults=2&no_rooms=1&group_children=0&selected_currency=INR&order=price&nflt=review_score%3D80"
+        ],
+        "metrics": {
+          "model_turns": 19,
+          "tool_calls": 19,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 153.58,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "hotel",
+      "task_id": "task_781227a3e9454349bbe90ec5681d46ed",
+      "session_id": "session_a639dcee703f46eba42173857d8d81e5",
+      "profile_id": "profile_6a678cc0f284431c95eac6053f387571",
+      "state": "completed",
+      "seconds_total": 34.59,
+      "seconds_to_running": 1.1,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.1
+        ],
+        [
+          "completed",
+          34.59
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The three cheapest North Goa stays with a guest rating of 8 or higher on Booking.com are all in Arambol. The search was for 2 adults, 1 room, 12\u201314 Nov 2026. I booked nothing.\n\n| # | Name | Rating | Total for 2 nights |\n|---|---|---|---|\n| 1 | Trippy Turtle | 9.3 (6 reviews) | \u20b91,080 + \u20b954 taxes and fees |\n| 2 | Om Ganesh Guest House Cliffside | 8.6 (87 reviews) | \u20b91,260 + \u20b963 taxes and fees |\n| 3 | Ludu guest house | 9.3 (3 reviews) | \u20b91,500 + \u20b975 taxes and fees |\n\n- **How I picked them:** I used the Booking.com results for \"North Goa, India\", filtered to review score 8+ and sorted by lowest price. The prices are for the room listed on each result.\n- **Next cheapest:** God's Gift Guest House (rating 8.0) at \u20b91,598 and Shree Hari Guest House (rating 8.3) at \u20b91,600, so the top three above hold.\n- **Availability:** Trippy Turtle and Ludu guest house have only a handful of reviews, so availability could change.\n\nSource: https://www.booking.com/searchresults.html?ss=North%20Goa%2C%20India&dest_id=5052&dest_type=region&checkin=2026-11-12&checkout=2026-11-14&group_adults=2&no_rooms=1&group_children=0&selected_currency=INR&order=price&nflt=review_score%3D80",
+        "source_urls": [
+          "https://www.booking.com/searchresults.html?ss=North%20Goa%2C%20India&dest_id=5052&dest_type=region&checkin=2026-11-12&checkout=2026-11-14&group_adults=2&no_rooms=1&group_children=0&selected_currency=INR&order=price&nflt=review_score%3D80"
+        ],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 27.02,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "hotel_new_city",
+      "task_id": "task_ae02ba778870451f90d2bd0d7caa6726",
+      "session_id": "session_6c41fe8378c54858aeaf0898f34886eb",
+      "profile_id": "profile_6a678cc0f284431c95eac6053f387571",
+      "state": "completed",
+      "seconds_total": 136.85,
+      "seconds_to_running": 1.02,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.02
+        ],
+        [
+          "completed",
+          136.85
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The three cheapest Jaipur stays with a guest rating of 8 or higher on Booking.com are below. They are for 2 adults, 1 room, 5\u20137 Dec 2026 (2 nights). I booked nothing.\n\n| # | Name | Rating | Total for 2 nights |\n|---|---|---|---|\n| 1 | Checkpoint Backpacker Jaipur | 8.5 (35 reviews) | \u20b91,380 + \u20b969 taxes and fees |\n| 2 | Basuki Hotel | 8.0 (4 reviews) | \u20b91,600 + \u20b980 taxes and fees |\n| 3 | Om Trance Homestay | 8.4 (65 reviews) | \u20b91,600 + \u20b980 taxes and fees |\n\n- **Room listed:** Each price is for the room shown on the results page: a Deluxe Double Room at Checkpoint Backpacker, a Standard Double Room with Fan at Basuki, and a Double Room with 2 twin beds at Om Trance.\n- **Availability:** Checkpoint Backpacker and Om Trance each showed only 1 room left at that price.\n- **Next cheapest:** Stay Awhile (girls only, rating 9.0, 2 reviews) at \u20b91,620 came next.\n- **How I picked them:** I filtered the results for Jaipur to review score 8+ and sorted by lowest price.\n\nSource: https://www.booking.com/searchresults.html?ss=Jaipur&dest_id=-2098033&dest_type=city&checkin=2026-12-05&checkout=2026-12-07&group_adults=2&no_rooms=1&group_children=0&selected_currency=INR&order=price&nflt=review_score%3D80",
+        "source_urls": [
+          "https://www.booking.com/searchresults.html?ss=Jaipur&dest_id=-2098033&dest_type=city&checkin=2026-12-05&checkout=2026-12-07&group_adults=2&no_rooms=1&group_children=0&selected_currency=INR&order=price&nflt=review_score%3D80"
+        ],
+        "metrics": {
+          "model_turns": 19,
+          "tool_calls": 18,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 129.09,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "train",
+      "task_id": "task_8035d8cab1fe4e2d9601ba1732270818",
+      "session_id": "session_29449181874446e29ee2cca2f4c0e897",
+      "profile_id": "profile_efc4766290df4d3fbb2da3afcda80cfa",
+      "state": "failed",
+      "seconds_total": 48.74,
+      "seconds_to_running": 1.02,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.02
+        ],
+        [
+          "failed",
+          48.74
+        ]
+      ],
+      "interactions": [],
+      "result": null,
+      "error": {
+        "code": "provider_failure",
+        "message": "Execution failed; inspect website state before a new task",
+        "retryable": false,
+        "retry_after_seconds": null
+      },
+      "run": "cold"
+    },
+    {
+      "name": "train",
+      "task_id": "task_a1d25d9a318f404a9217f2e17e3cc283",
+      "session_id": "session_bb839723b7f942b4a7189cc63c28a35c",
+      "profile_id": "profile_efc4766290df4d3fbb2da3afcda80cfa",
+      "state": "failed",
+      "seconds_total": 31.93,
+      "seconds_to_running": 1.02,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.02
+        ],
+        [
+          "failed",
+          31.93
+        ]
+      ],
+      "interactions": [],
+      "result": null,
+      "error": {
+        "code": "provider_failure",
+        "message": "Execution failed; inspect website state before a new task",
+        "retryable": false,
+        "retry_after_seconds": null
+      },
+      "run": "warm"
+    },
+    {
+      "name": "train_new_route",
+      "task_id": "task_c4f8e8dbd9f74c4987910e5159360a81",
+      "session_id": "session_5475caa72a49410d9c16c18b11d7be94",
+      "profile_id": "profile_efc4766290df4d3fbb2da3afcda80cfa",
+      "state": "completed",
+      "seconds_total": 55.62,
+      "seconds_to_running": 1.05,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.05
+        ],
+        [
+          "completed",
+          55.62
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "ConfirmTkt lists 19 trains from Delhi (NDLS) to Jaipur (JP) for 9 Dec 2026. The 3 earliest departures after 06:00 are below. I didn't book anything.\n\n1. 12015 Ajmer Shatabdi: departs 06:10 from NDLS and arrives 10:35 at JP. Chair Car (CC) fare is \u20b9705 (AVL 959).\n2. 14662 Shalimar Malani: departs 11:00 and arrives 17:35. It has no Chair Car class. The 3A fare is \u20b9575 (WL 2).\n3. 14321 Be Bhuj Express: departs 11:50 and arrives 17:50. It has no Chair Car class. The 3A fare is \u20b9575 (AVL 2).\n\nTrains 2 and 3 are listed as leaving from Delhi (DLI), not New Delhi (NDLS). Only the first leaves from New Delhi. If you want trains from NDLS only, the next NDLS departure after 06:10 is 12958 Swarn Jayanti Rajdhani, departing 19:55 and arriving 23:45, with a 3A fare of \u20b91075. I didn't check the other trains in the list for their departure station.\n\nSource: https://www.confirmtkt.com/rbooking/trains/from/NDLS/to/JP/09-12-2026",
+        "source_urls": [
+          "https://www.confirmtkt.com/rbooking/trains/from/NDLS/to/JP/09-12-2026"
+        ],
+        "metrics": {
+          "model_turns": 9,
+          "tool_calls": 8,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 49.14,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    }
+  ]
+}

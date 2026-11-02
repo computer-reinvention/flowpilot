@@ -70,48 +70,76 @@ class UserStore:
                 id INTEGER PRIMARY KEY, task TEXT, inputs TEXT, result TEXT,
                 metrics TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
         ''')
-        columns = {row[1] for row in self.db.execute('PRAGMA table_info(reflexes)')}
-        if 'pause_after' not in columns:
-            self.db.execute('ALTER TABLE reflexes ADD COLUMN pause_after TEXT')
-        if 'tags' not in columns:
-            self.db.execute("ALTER TABLE reflexes ADD COLUMN tags TEXT DEFAULT '[]'")
-        if 'inputs' not in columns:
-            # JSON declared-input schema; NULL for legacy undeclared reflexes.
-            self.db.execute('ALTER TABLE reflexes ADD COLUMN inputs TEXT')
         # Health: a new script starts as a candidate, one successful replay makes it
         # active, consecutive failures make it broken (not offered for lookup). A new
         # script for an active reflex waits in `candidate` instead of replacing it.
-        for column, ddl in (('steps', 'TEXT'), ('status', "TEXT DEFAULT 'active'"),
-                            ('consecutive_failures', 'INTEGER DEFAULT 0'), ('candidate', 'TEXT'),
-                            ('updated_at', 'TEXT')):
-            if column not in columns:
-                self.db.execute(f'ALTER TABLE reflexes ADD COLUMN {column} {ddl}')
+        self._migrate('main')
         self.db.commit()
+        self.library = False
+        self.author = ''
+
+    REFLEX_COLUMNS = (('pause_after', 'TEXT'), ('tags', "TEXT DEFAULT '[]'"), ('inputs', 'TEXT'), ('steps', 'TEXT'),
+                      ('status', "TEXT DEFAULT 'active'"), ('consecutive_failures', 'INTEGER DEFAULT 0'),
+                      ('candidate', 'TEXT'), ('updated_at', 'TEXT'), ('author', "TEXT DEFAULT ''"))
+
+    def _migrate(self, schema):
+        self.db.execute(f'CREATE TABLE IF NOT EXISTS {schema}.reflexes (domain TEXT, name TEXT, description TEXT, '
+                        'script TEXT, successes INTEGER DEFAULT 0, failures INTEGER DEFAULT 0, PRIMARY KEY(domain,name))')
+        columns = {row[1] for row in self.db.execute(f'PRAGMA {schema}.table_info(reflexes)')}
+        for column, ddl in self.REFLEX_COLUMNS:
+            if column not in columns:
+                self.db.execute(f'ALTER TABLE {schema}.reflexes ADD COLUMN {column} {ddl}')
+
+    def attach_library(self, path, author):
+        """Share reflexes across every account: they hold placeholders, not user data.
+        Profile reflexes win; another account's reflex is offered once it has replayed."""
+        Path(path).parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self.db.execute('PRAGMA busy_timeout = 5000')
+        self.db.execute('ATTACH DATABASE ? AS lib', (str(path),))
+        self._migrate('lib')
+        self.db.commit()
+        self.library, self.author = True, author
 
     BROKEN_AFTER = 2  # consecutive failed replays
 
+    def _schemas(self):
+        return ('main', 'lib') if self.library else ('main',)
+
+    def _usable_where(self, schema):
+        if schema == 'main':
+            return "(status != 'broken' OR candidate IS NOT NULL)", ()
+        # Another account's reflex runs here only after it has replayed successfully.
+        return "(status != 'broken' OR candidate IS NOT NULL) AND (author = ? OR successes > 0)", (self.author,)
+
     def _catalog(self, where, params, limit):
-        rows = self.db.execute(
-            'SELECT domain,name,description,successes,failures,status,inputs,script,steps,candidate FROM reflexes '
-            f"WHERE (status != 'broken' OR candidate IS NOT NULL) {where} "
-            "ORDER BY status = 'active' DESC, successes - failures DESC, updated_at DESC LIMIT ?", (*params, limit))
-        result = []
-        for row in rows:
-            item = dict(row)
-            fields, script, steps, candidate = item.pop('inputs'), item.pop('script'), item.pop('steps'), item.pop('candidate')
-            if item['status'] == 'broken':
-                item['status'] = 'candidate'  # only the waiting candidate is usable
-                fields = json.loads(candidate).get('inputs')
-                fields = json.dumps(fields) if fields is not None else None
-            item.update(catalog_entry(json.loads(fields) if fields else None, script))
-            if steps:
-                steps = json.loads(steps)
-                item['steps'] = len(steps)
-                start = next((step['url'] for step in steps if step['type'] == 'navigate'), None)
-                if start:
-                    item['start_url'] = start
-            result.append(item)
-        return result
+        result, seen = [], set()
+        for schema in self._schemas():
+            usable, extra = self._usable_where(schema)
+            rows = self.db.execute(
+                f'SELECT domain,name,description,successes,failures,status,inputs,script,steps,candidate FROM {schema}.reflexes '
+                f'WHERE {usable} {where} '
+                "ORDER BY status = 'active' DESC, successes - failures DESC, updated_at DESC LIMIT ?", (*extra, *params, limit))
+            for row in rows:
+                if (row['domain'], row['name']) in seen:
+                    continue  # the profile's own version wins
+                seen.add((row['domain'], row['name']))
+                item = dict(row)
+                fields, script, steps, candidate = item.pop('inputs'), item.pop('script'), item.pop('steps'), item.pop('candidate')
+                if item['status'] == 'broken':
+                    item['status'] = 'candidate'  # only the waiting candidate is usable
+                    fields = json.loads(candidate).get('inputs')
+                    fields = json.dumps(fields) if fields is not None else None
+                item.update(catalog_entry(json.loads(fields) if fields else None, script))
+                if steps:
+                    steps = json.loads(steps)
+                    item['steps'] = len(steps)
+                    start = next((step['url'] for step in steps if step['type'] == 'navigate'), None)
+                    if start:
+                        item['start_url'] = start
+                if schema == 'lib':
+                    item['shared'] = True
+                result.append(item)
+        return result[:limit]
 
     def scripts(self):
         """Catalog for the model: usable reflexes, active and proven first."""
@@ -122,12 +150,18 @@ class UserStore:
         return self._catalog('AND domain = ?', (site,), 20)
 
     def reflex(self, site, name):
-        row = self.db.execute('SELECT rowid AS id, * FROM reflexes WHERE domain=? AND name=?', (site, name)).fetchone()
-        if row is None:
-            # A recorded sequence opens its own start page, so it can run from anywhere.
-            rows = self.db.execute('SELECT rowid AS id, * FROM reflexes WHERE name=? AND steps IS NOT NULL', (name,)).fetchall()
-            row = rows[0] if len(rows) == 1 else None
-        return row
+        for schema in self._schemas():
+            usable, extra = ('1', ()) if schema == 'main' else self._usable_where(schema)
+            row = self.db.execute(f'SELECT rowid AS id, * FROM {schema}.reflexes WHERE domain=? AND name=? AND {usable}',
+                                  (site, name, *extra)).fetchone()
+            if row is None:
+                # A recorded sequence opens its own start page, so it can run from anywhere.
+                rows = self.db.execute(f'SELECT rowid AS id, * FROM {schema}.reflexes '
+                                       f'WHERE name=? AND steps IS NOT NULL AND {usable}', (name, *extra)).fetchall()
+                row = rows[0] if len(rows) == 1 else None
+            if row is not None:
+                return {**dict(row), 'scope': schema}
+        return None
 
     @staticmethod
     def usable(row):
@@ -141,54 +175,67 @@ class UserStore:
         return None, None
 
     def save_reflex(self, site, name, description, script, steps, fields, pause_after, tags):
+        message = self._save('main', site, name, description, script, steps, fields, pause_after, tags)
+        if self.library:
+            self._save('lib', site, name, description, script, steps, fields, pause_after, tags)
+            message += ' (also shared in the global reflex library)'
+        return message
+
+    def _save(self, schema, site, name, description, script, steps, fields, pause_after, tags):
+        table = f'{schema}.reflexes'
         version = {'description': description, 'script': script, 'steps': steps, 'inputs': fields,
                    'pause_after': pause_after, 'tags': tags or []}
         steps_json = json.dumps(steps) if steps else None
-        row = self.db.execute('SELECT status, script, steps FROM reflexes WHERE domain=? AND name=?', (site, name)).fetchone()
+        row = self.db.execute(f'SELECT status, script, steps FROM {table} WHERE domain=? AND name=?', (site, name)).fetchone()
         if row and (row['script'], row['steps']) == (script, steps_json):
-            self.db.execute("UPDATE reflexes SET description=?, inputs=?, updated_at=datetime('now') WHERE domain=? AND name=?",
+            self.db.execute(f"UPDATE {table} SET description=?, inputs=?, updated_at=datetime('now') WHERE domain=? AND name=?",
                             (description, None if fields is None else json.dumps(fields), site, name))
             self.db.commit()
             return f'Unchanged {site}/{name}; its record is kept'
         if row and row['status'] == 'active':
-            self.db.execute("UPDATE reflexes SET candidate=?, updated_at=datetime('now') WHERE domain=? AND name=?",
+            self.db.execute(f"UPDATE {table} SET candidate=?, updated_at=datetime('now') WHERE domain=? AND name=?",
                             (json.dumps(version), site, name))
             self.db.commit()
             return (f'Saved a candidate for {site}/{name}; the active script stays in use until it fails, '
                     'then the candidate is tried and replaces it after one successful replay')
-        self.db.execute('''INSERT INTO reflexes(domain,name,description,script,pause_after,tags,inputs,steps,status,
-                successes,failures,consecutive_failures,candidate,updated_at) VALUES(?,?,?,?,?,?,?,?,'candidate',0,0,0,NULL,datetime('now'))
-            ON CONFLICT(domain,name) DO UPDATE SET description=excluded.description,script=excluded.script,
-                pause_after=excluded.pause_after,tags=excluded.tags,inputs=excluded.inputs,steps=excluded.steps,
-                status='candidate',successes=0,failures=0,consecutive_failures=0,candidate=NULL,updated_at=excluded.updated_at''',
+        self.db.execute(
+            f'INSERT INTO {table}(domain,name,description,script,pause_after,tags,inputs,steps,status,successes,failures,'
+            "consecutive_failures,candidate,updated_at,author) VALUES(?,?,?,?,?,?,?,?,'candidate',0,0,0,NULL,datetime('now'),?) "
+            'ON CONFLICT(domain,name) DO UPDATE SET description=excluded.description,script=excluded.script,'
+            'pause_after=excluded.pause_after,tags=excluded.tags,inputs=excluded.inputs,steps=excluded.steps,'
+            "status='candidate',successes=0,failures=0,consecutive_failures=0,candidate=NULL,"
+            'updated_at=excluded.updated_at,author=excluded.author',
             (site, name, description, script, pause_after, json.dumps(tags or []),
-             None if fields is None else json.dumps(fields), steps_json))
+             None if fields is None else json.dumps(fields), steps_json, self.author))
         self.db.commit()
         return f'Saved {site}/{name} as a candidate; it becomes active after one successful replay'
 
-    def record_replay(self, row_id, which, ok):
-        """Apply a replay outcome to the reflex's health."""
-        row = self.db.execute('SELECT * FROM reflexes WHERE rowid=?', (row_id,)).fetchone()
+    def record_replay(self, row_id, which, ok, scope='main'):
+        """Apply a replay outcome to the reflex's health, in the store it came from."""
+        table = f'{scope}.reflexes'
+        row = self.db.execute(f'SELECT * FROM {table} WHERE rowid=?', (row_id,)).fetchone()
         if row is None:
             return
         if which == 'candidate':
             if ok:
                 candidate = json.loads(row['candidate'])
-                self.db.execute('''UPDATE reflexes SET description=?,script=?,steps=?,inputs=?,pause_after=?,tags=?,
-                    status='active',successes=1,failures=0,consecutive_failures=0,candidate=NULL,updated_at=datetime('now')
-                    WHERE rowid=?''', (candidate['description'], candidate['script'],
-                                       json.dumps(candidate['steps']) if candidate.get('steps') else None,
-                                       None if candidate.get('inputs') is None else json.dumps(candidate['inputs']),
-                                       candidate.get('pause_after'), json.dumps(candidate.get('tags') or []), row_id))
+                self.db.execute(
+                    f'UPDATE {table} SET description=?,script=?,steps=?,inputs=?,pause_after=?,tags=?,'
+                    "status='active',successes=1,failures=0,consecutive_failures=0,candidate=NULL,"
+                    "updated_at=datetime('now') WHERE rowid=?",
+                    (candidate['description'], candidate['script'],
+                     json.dumps(candidate['steps']) if candidate.get('steps') else None,
+                     None if candidate.get('inputs') is None else json.dumps(candidate['inputs']),
+                     candidate.get('pause_after'), json.dumps(candidate.get('tags') or []), row_id))
             else:
-                self.db.execute("UPDATE reflexes SET candidate=NULL, updated_at=datetime('now') WHERE rowid=?", (row_id,))
+                self.db.execute(f"UPDATE {table} SET candidate=NULL, updated_at=datetime('now') WHERE rowid=?", (row_id,))
         elif ok:
-            self.db.execute('''UPDATE reflexes SET successes=successes+1, consecutive_failures=0, status='active',
-                updated_at=datetime('now') WHERE rowid=?''', (row_id,))
+            self.db.execute(f"UPDATE {table} SET successes=successes+1, consecutive_failures=0, status='active', "
+                            "updated_at=datetime('now') WHERE rowid=?", (row_id,))
         else:
-            self.db.execute('''UPDATE reflexes SET failures=failures+1, consecutive_failures=consecutive_failures+1,
-                status=CASE WHEN consecutive_failures+1 >= ? THEN 'broken' ELSE status END, updated_at=datetime('now')
-                WHERE rowid=?''', (self.BROKEN_AFTER, row_id))
+            self.db.execute(f'UPDATE {table} SET failures=failures+1, consecutive_failures=consecutive_failures+1, '
+                            "status=CASE WHEN consecutive_failures+1 >= ? THEN 'broken' ELSE status END, "
+                            "updated_at=datetime('now') WHERE rowid=?", (self.BROKEN_AFTER, row_id))
         self.db.commit()
 
     def history(self, limit=6):
@@ -478,7 +525,7 @@ class BrowserSession:
             else:
                 ok, detail = await _execute_reflex(version['script'], stage_inputs, '', self.browser,
                                                  **({'observation_policy': self.observation_policy} if self.observation_policy is not None else {}))
-            self.store.record_replay(row['id'], which, ok)
+            self.store.record_replay(row['id'], which, ok, row.get('scope', 'main'))
             metrics['reused' if ok else 'replay_failures'] += 1
             partial = not ok and PARTIAL_EFFECTS in detail
             if partial:
@@ -504,8 +551,9 @@ class BrowserSession:
                         return ActionResult(extracted_content=detail)
                     # The repair just succeeded on the live page: it replaces the
                     # script with a fresh record. Keep scope captured before execution.
-                    self.store.db.execute("""UPDATE reflexes SET script=?, successes=1, failures=0, consecutive_failures=0,
-                        status='active', candidate=NULL, updated_at=datetime('now') WHERE rowid=?""", (fixed, row['id']))
+                    self.store.db.execute(f"""UPDATE {row.get('scope', 'main')}.reflexes SET script=?, successes=1, failures=0,
+                        consecutive_failures=0, status='active', candidate=NULL, updated_at=datetime('now') WHERE rowid=?""",
+                                          (fixed, row['id']))
                     self.store.db.commit()
                     metrics['repaired'] = metrics.get('repaired', 0) + 1
             if ok and version['pause_after']:

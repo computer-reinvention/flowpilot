@@ -1,0 +1,217 @@
+[
+ {
+  "check": "owner login",
+  "ok": true,
+  "detail": "HTTP 200"
+ },
+ {
+  "check": "auth no-store",
+  "ok": true,
+  "detail": "no-store"
+ },
+ {
+  "check": "owner /me",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "bad password rejected",
+  "ok": true,
+  "detail": "HTTP 401"
+ },
+ {
+  "check": "unauthenticated /me rejected",
+  "ok": true,
+  "detail": "HTTP 401"
+ },
+ {
+  "check": "duplicate signup rejected",
+  "ok": true,
+  "detail": "HTTP 409"
+ },
+ {
+  "check": "create api key",
+  "ok": true,
+  "detail": "HTTP 200"
+ },
+ {
+  "check": "list api keys hides secret",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "empty task -> 422",
+  "ok": true,
+  "detail": "HTTP 422"
+ },
+ {
+  "check": "bad idempotency key -> 422",
+  "ok": true,
+  "detail": "HTTP 422"
+ },
+ {
+  "check": "no credential -> 401",
+  "ok": true,
+  "detail": "HTTP 401"
+ },
+ {
+  "check": "same key+payload re-attaches",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "same key, changed payload -> 409",
+  "ok": true,
+  "detail": "HTTP 409"
+ },
+ {
+  "check": "long-poll without after_revision -> 422",
+  "ok": true,
+  "detail": "HTTP 422"
+ },
+ {
+  "check": "read-only task completes",
+  "ok": true,
+  "detail": "completed in 31s"
+ },
+ {
+  "check": "result has sources",
+  "ok": false,
+  "detail": ""
+ },
+ {
+  "check": "other account cannot read task -> 404",
+  "ok": true,
+  "detail": "HTTP 404"
+ },
+ {
+  "check": "other account cannot cancel task -> 404",
+  "ok": true,
+  "detail": "HTTP 404"
+ },
+ {
+  "check": "follow-up reuses session/profile",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "follow-up completes",
+  "ok": true,
+  "detail": "completed"
+ },
+ {
+  "check": "agent asks for input",
+  "ok": true,
+  "detail": "waiting_for_input"
+ },
+ {
+  "check": "stale generation -> 409",
+  "ok": true,
+  "detail": "HTTP 409"
+ },
+ {
+  "check": "input accepted",
+  "ok": true,
+  "detail": "HTTP 202"
+ },
+ {
+  "check": "input task completes using the answer",
+  "ok": false,
+  "detail": "completed"
+ },
+ {
+  "check": "agent asks for confirmation",
+  "ok": true,
+  "detail": "waiting_for_confirmation"
+ },
+ {
+  "check": "decline accepted",
+  "ok": true,
+  "detail": "HTTP 202"
+ },
+ {
+  "check": "decline completes as not-done",
+  "ok": true,
+  "detail": "completed"
+ },
+ {
+  "check": "agent requests browser help",
+  "ok": true,
+  "detail": "waiting_for_browser"
+ },
+ {
+  "check": "mint assistance link",
+  "ok": true,
+  "detail": "HTTP 201"
+ },
+ {
+  "check": "assistance no-store",
+  "ok": true,
+  "detail": "no-store"
+ },
+ {
+  "check": "assistance link has no api key",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "viewer page loads",
+  "ok": true,
+  "detail": "HTTP 200"
+ },
+ {
+  "check": "viewer state loads",
+  "ok": true,
+  "detail": "HTTP 200"
+ },
+ {
+  "check": "viewer screenshot",
+  "ok": true,
+  "detail": "HTTP 200 image/png"
+ },
+ {
+  "check": "other account cannot mint link -> 404",
+  "ok": true,
+  "detail": "HTTP 404"
+ },
+ {
+  "check": "browser resolved accepted",
+  "ok": true,
+  "detail": "HTTP 202"
+ },
+ {
+  "check": "viewer link revoked after resume",
+  "ok": true,
+  "detail": "HTTP 410"
+ },
+ {
+  "check": "task finishes after browser help",
+  "ok": true,
+  "detail": "completed"
+ },
+ {
+  "check": "cancel accepted",
+  "ok": true,
+  "detail": "HTTP 202"
+ },
+ {
+  "check": "cancelled task reaches cancelled",
+  "ok": true,
+  "detail": "cancelled"
+ },
+ {
+  "check": "revoke key",
+  "ok": true,
+  "detail": "HTTP 200"
+ },
+ {
+  "check": "revoked key -> 401",
+  "ok": true,
+  "detail": "HTTP 401"
+ },
+ {
+  "check": "dashboard loads",
+  "ok": true,
+  "detail": "HTTP 200"
+ }
+]

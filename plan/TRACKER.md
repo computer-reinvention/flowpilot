@@ -124,3 +124,25 @@ These are gaps in proof, not known regressions.
   - The kernel accepts `ops_network_policy.nft` (`nft --check` passes; Docker Desktop rejected it).
   - `ops_network_rehearsal.py` fails before loading the policy, because its browser namespace cannot reach the fixture across the namespace bridge (the outer namespace reaches it with HTTP 200). This is a harness routing issue still to debug.
   - Until it is proven, sandbox browsers can reach private and metadata addresses (e.g. 169.254.169.254); DigitalOcean user-data here holds no secrets.
+
+### Final droplet benchmark (revision 6e73d37, 1536 MB per browser)
+
+| Scenario | Cold | Warm 1 | Warm 2 | Outcome |
+|---|---:|---:|---:|---|
+| Flight search, BOM→DEL (Google Flights) | 41 s | 33 s | 32 s | 3 cheapest nonstops with times, INR prices and source URL |
+| Cab, BOM T2→BKC, 23 Oct 10:00 | 208 s | 166 s | n/a | Savaari: 5 car options with fares; cheapest Wagon R/Swift ₹615 + ₹31; confirmation requested, declined by the harness, nothing booked |
+
+Fixes behind the cab result:
+- the action fence ignores text-only page churn;
+- a decline completes with the proposal;
+- the agent finds open alternatives via web search;
+- per-browser memory raised to 1536 MB after a measured OOM at 1 GiB;
+- sanitized progress is published in the task view.
+
+✅ The cab use case works. ❌ The `flowpilot.technology` DNS change is still waiting on Chrome access or a manual GoDaddy edit.
+
+## Live domain (2026-10-22)
+
+- `flowpilot.technology` A `@` → 64.227.128.41 (GoDaddy, TTL 1/2 h); `www`/`experimental` CNAME to apex.
+- Caddy 2.11.7 holds a Let's Encrypt (YE2) certificate, valid to 2027-01-20; HTTP 308-redirects to HTTPS.
+- `GET https://flowpilot.technology/health/browser-tasks` → ready. Flight e2e over the domain: 38.7 s / 38.5 s (`reports/e2e/e2e-20261022T060557Z.json`).

@@ -1,0 +1,43 @@
+{
+  "base_url": "https://flowpilot.technology",
+  "results": [
+    {
+      "name": "cab",
+      "task_id": "task_ece542b016804275b12643bcda55df91",
+      "session_id": "session_a36819465bdd4ce985cbda612a151708",
+      "profile_id": "profile_fcb02178f8cb430fae6d190e71a9fe33",
+      "state": "completed",
+      "seconds_total": 177.46,
+      "seconds_to_running": 1.46,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.46
+        ],
+        [
+          "completed",
+          177.46
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The browser stopped responding, so this could not be verified on the page.\n\nI couldn't get cab options or fares, so no cab was chosen and nothing was booked.\n\nOn MakeMyTrip (https://www.makemytrip.com/cabs/) I entered the search in Airport Transfers:\n- **Pickup:** Terminal 2, Navpada, Vile Parle East, Andheri East, Mumbai. This was the first Terminal 2 suggestion and may not be exactly the one you meant.\n- **Drop:** Bandra Kurla Complex, Bandra East, Mumbai\n- **Date and time:** 23 Oct 2026, 10:00\n\nThe results page (/cabs/listing) loaded blank, showing only \"200-OK\", and still did so after a reload. I also tried Savaari's Mumbai airport-taxi page. It only partly loaded, with no booking form or fares.\n\nIf you'd like, I can retry later or try another cab site.",
+        "source_urls": [
+          "https://www.makemytrip.com/cabs/"
+        ],
+        "metrics": {
+          "model_turns": 15,
+          "tool_calls": 14,
+          "reused": 0,
+          "saved": 1,
+          "replay_failures": 0,
+          "wall_seconds": 166.84,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    }
+  ]
+}

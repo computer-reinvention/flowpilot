@@ -1,0 +1,119 @@
+{
+  "base_url": "https://flowpilot.technology",
+  "results": [
+    {
+      "name": "cab",
+      "task_id": "task_301a972aa2c24e4284957f5ea20966e5",
+      "session_id": "session_53602017825742df9495c6203cfced22",
+      "profile_id": "profile_c012c16f9bd040c480ad0c0156161333",
+      "state": "completed",
+      "seconds_total": 39.44,
+      "seconds_to_running": 1.32,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.32
+        ],
+        [
+          "completed",
+          39.44
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "I didn't find any cab options or fares, and I booked nothing. You didn't name a booking site, so I tried Savaari (https://www.savaari.com/airport-taxi/mumbai). The page loaded only the header, with no booking form, so I couldn't search for the CSMIA Terminal 2 to Bandra Kurla Complex trip on 2026-10-23 at 10:00. If you tell me which site to use, or want me to try another one, I'll search there and ask you to confirm before booking anything.",
+        "source_urls": [
+          "https://www.savaari.com/airport-taxi/mumbai"
+        ],
+        "metrics": {
+          "model_turns": 5,
+          "tool_calls": 4,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 30.82,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "cab",
+      "task_id": "task_6a3b0637fdc04b2e903cf758ad939dc0",
+      "session_id": "session_88c7d4fd82764549a3c6a8a2220a3a99",
+      "profile_id": "profile_c012c16f9bd040c480ad0c0156161333",
+      "state": "completed",
+      "seconds_total": 34.06,
+      "seconds_to_running": 0.94,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          0.94
+        ],
+        [
+          "completed",
+          34.06
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "I couldn't find any cab options or fares, and I booked nothing. The Savaari Mumbai airport taxi page (https://www.savaari.com/airport-taxi/mumbai) loads only the header, with no booking form. That means I couldn't search for CSMIA Terminal 2 to Bandra Kurla Complex on 2026-10-23 at 10:00. If you'd like me to try a different cab site, tell me which one and I'll search there. I'll ask you to confirm before booking anything.",
+        "source_urls": [
+          "https://www.savaari.com/airport-taxi/mumbai"
+        ],
+        "metrics": {
+          "model_turns": 4,
+          "tool_calls": 3,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 25.41,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "cab_new_trip",
+      "task_id": "task_a1376a3dc8ea4a80bae63fcbb0a3ade9",
+      "session_id": "session_0e38200556344080bcd9f9f780d9bedd",
+      "profile_id": "profile_c012c16f9bd040c480ad0c0156161333",
+      "state": "completed",
+      "seconds_total": 26.67,
+      "seconds_to_running": 0.99,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          0.99
+        ],
+        [
+          "completed",
+          26.67
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "I couldn't find any cab options or fares, and I booked nothing. You didn't name a booking site, so I tried Savaari (https://www.savaari.com/airport-taxi/mumbai). The page loads only the header, with no booking form. That means I couldn't search for CSMIA Terminal 2 to Powai on 2026-10-24 at 14:30. If you tell me which other cab site to use, I'll search there and ask you to confirm before booking anything.",
+        "source_urls": [
+          "https://www.savaari.com/airport-taxi/mumbai"
+        ],
+        "metrics": {
+          "model_turns": 4,
+          "tool_calls": 3,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 17.89,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    }
+  ]
+}

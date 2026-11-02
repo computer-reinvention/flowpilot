@@ -1,0 +1,110 @@
+{
+  "base_url": "https://flowpilot.technology",
+  "results": [
+    {
+      "name": "flight_search",
+      "task_id": "task_0b952b4bd0dc41c9bb78083da2ad91de",
+      "session_id": "session_ce11f2aad37f4257b693a5463e2d5e51",
+      "profile_id": "profile_60fe5b3d35914656b83e8d512bbeeb8b",
+      "state": "completed",
+      "seconds_total": 40.42,
+      "seconds_to_running": 1.54,
+      "states": [
+        [
+          "running",
+          1.54
+        ],
+        [
+          "completed",
+          40.42
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The 3 cheapest nonstop economy one-way flights from Mumbai (BOM) to New Delhi (DEL) on Thu 12 Nov 2026, for 1 adult, are below. I read them from Google Flights with the Nonstop filter on. Prices are in INR and include taxes and fees.\n\n1. SpiceJet: departs 11:20 PM, arrives 1:40 AM on Fri 13 Nov (2 hr 20 min). Price \u20b97,484.\n2. SpiceJet: departs 11:20 PM, arrives 2:05 AM on Fri 13 Nov (2 hr 45 min). Price \u20b97,484. This is a separate listing with the same departure time and price as option 1.\n3. Akasa Air: departs 6:35 PM, arrives 9:00 PM on 12 Nov (2 hr 25 min). Price \u20b97,717.\n\nThe next cheapest were Akasa Air at 8:55 PM and 1:00 PM (both \u20b97,950) and SpiceJet at 10:30 PM (\u20b97,923). I did not book anything.\n\nSource: https://www.google.com/travel/flights?q=Flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20one%20way%20economy%201%20adult%20nonstop&curr=INR&hl=en",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 4,
+          "tool_calls": 3,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 30.62,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "flight_search",
+      "task_id": "task_00e03a4843354e229229227803c8c9e5",
+      "session_id": "session_396d9ff00e724d8da99c0aef146fc772",
+      "profile_id": "profile_60fe5b3d35914656b83e8d512bbeeb8b",
+      "state": "completed",
+      "seconds_total": 38.68,
+      "seconds_to_running": 1.21,
+      "states": [
+        [
+          "running",
+          1.21
+        ],
+        [
+          "completed",
+          38.68
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The 3 cheapest nonstop economy one-way flights from Mumbai (BOM) to New Delhi (DEL) on Thu 12 Nov 2026, for 1 adult, are below. I read them from Google Flights with the Nonstop filter on. Prices are in INR and include taxes and fees.\n\n1. SpiceJet: departs 11:20 PM, arrives 1:40 AM on Fri 13 Nov (2 hr 20 min). Price \u20b97,484.\n2. SpiceJet: departs 11:20 PM, arrives 2:05 AM on Fri 13 Nov (2 hr 45 min). Price \u20b97,484. This is a separate listing from option 1 with the same departure time and price.\n3. Akasa Air: departs 6:35 PM, arrives 9:00 PM on 12 Nov (2 hr 25 min). Price \u20b97,717.\n\nThe next cheapest were SpiceJet at 10:30 PM (\u20b97,923) and Akasa Air at 8:55 PM (\u20b97,950). I did not book anything.\n\nSource: https://www.google.com/travel/flights?q=Flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20one%20way%20economy%201%20adult%20nonstop&curr=INR&hl=en",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 4,
+          "tool_calls": 3,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 31.68,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "flight_search",
+      "task_id": "task_0ee383b4a52c42bbb9d125b18b2ea41a",
+      "session_id": "session_5217a548ee984d68af227713a7b9758a",
+      "profile_id": "profile_60fe5b3d35914656b83e8d512bbeeb8b",
+      "state": "completed",
+      "seconds_total": 38.54,
+      "seconds_to_running": 1.11,
+      "states": [
+        [
+          "running",
+          1.11
+        ],
+        [
+          "completed",
+          38.54
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The 3 cheapest nonstop economy one-way flights from Mumbai (BOM) to New Delhi (DEL) on Thu 12 Nov 2026, for 1 adult, are below. I read them from Google Flights with the Nonstop filter on. Prices are in INR and include taxes and fees.\n\n1. SpiceJet: departs 11:20 PM, arrives 1:40 AM on Fri 13 Nov (2 hr 20 min). Price \u20b97,484.\n2. SpiceJet: departs 11:20 PM, arrives 2:05 AM on Fri 13 Nov (2 hr 45 min). Price \u20b97,484. This is a separate listing from option 1 with the same departure time and price.\n3. Akasa Air: departs 6:35 PM, arrives 9:00 PM on 12 Nov (2 hr 25 min). Price \u20b97,717.\n\nThe next cheapest were SpiceJet at 10:30 PM (\u20b97,923) and Akasa Air at 8:55 PM (\u20b97,950). I did not book anything.\n\nSource: https://www.google.com/travel/flights?q=Flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20one%20way%20economy%201%20adult%20nonstop&curr=INR&hl=en",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 4,
+          "tool_calls": 3,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 31.68,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    }
+  ]
+}

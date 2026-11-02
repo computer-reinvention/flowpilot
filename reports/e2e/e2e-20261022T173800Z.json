@@ -1,0 +1,119 @@
+{
+  "base_url": "https://flowpilot.technology",
+  "results": [
+    {
+      "name": "cab",
+      "task_id": "task_8dc9d2875da44b05bdc4e809f5a3d296",
+      "session_id": "session_d1bae562daff42e99bd2c0b1358bdc37",
+      "profile_id": "profile_19db70956eca433d9a06d1abde1f7fd1",
+      "state": "completed",
+      "seconds_total": 124.3,
+      "seconds_to_running": 1.5,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.5
+        ],
+        [
+          "completed",
+          124.3
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "I couldn't get fares from savaari.com, so I haven't chosen a cab or booked anything. No fares or cab options were retrieved, so there is nothing for you to confirm yet.\n\nOn the Airport tab, I set \"Pickup from Airport\" and selected \"Terminal 2, Chhatrapati Shivaji International Airport, Mumbai\". The date field showed 23-10-2026. I did not set the 10:00 time; the field still showed 3:15 AM.\n\nThe drop-address field (\"Bandra Kurla Complex\") needs a suggestion picked from a dropdown, which comes from Google Maps. That service didn't load in this browser, so no suggestions ever appeared. Pressing \"Explore Cabs\" returned \"Please select your address.\" and stayed on the homepage.\n\nYou could retry in a browser where the address suggestions load, or book directly at https://www.savaari.com or on 90 4545 0000. I can rerun the search if the address dropdown starts working.",
+        "source_urls": [
+          "https://www.savaari.com/"
+        ],
+        "metrics": {
+          "model_turns": 15,
+          "tool_calls": 14,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 102.38,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "cab",
+      "task_id": "task_f7a86c2c8e2646c08cc24fa3fb4528b6",
+      "session_id": "session_916bdcc70dd9471b8bb8b6958ea59599",
+      "profile_id": "profile_19db70956eca433d9a06d1abde1f7fd1",
+      "state": "completed",
+      "seconds_total": 36.15,
+      "seconds_to_running": 1.02,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.02
+        ],
+        [
+          "completed",
+          36.15
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "I couldn't get any cab fares from savaari.com, so I haven't picked a cab or booked anything. There is nothing for you to confirm yet.\n\nThe blocker is the drop-address field on the homepage. It only accepts a suggestion chosen from a Google Maps dropdown, and in this browser that dropdown didn't load in my earlier attempt. Without a drop address, \"Explore Cabs\" returns \"Please select your address.\" and stays on the homepage. This time I only reopened the page and made one attempt to switch to the Airport tab, which failed on a script error. I did not retry the search.\n\nYou can book directly at https://www.savaari.com or call 90 4545 0000. I can rerun the search if the address suggestions start loading.",
+        "source_urls": [
+          "https://www.savaari.com/"
+        ],
+        "metrics": {
+          "model_turns": 5,
+          "tool_calls": 4,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 29.52,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "cab_new_trip",
+      "task_id": "task_e2193fdc86574b12a4ff1a1ed54f89a0",
+      "session_id": "session_ca8e406df79942758db32ba1fb31a410",
+      "profile_id": "profile_19db70956eca433d9a06d1abde1f7fd1",
+      "state": "completed",
+      "seconds_total": 77.66,
+      "seconds_to_running": 1.02,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.02
+        ],
+        [
+          "completed",
+          77.66
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "I couldn't get any cab options or fares from savaari.com, so I haven't chosen a cab or booked anything. There is nothing for you to confirm yet.\n\nThe homepage drop-address field only accepts a suggestion picked from a Google Maps dropdown. Google Maps hasn't loaded in this browser. Two earlier attempts for a similar airport route failed on the same dropdown, and \"Explore Cabs\" returned \"Please select your address.\"\n\nThis time I got as far as the homepage form. My attempts to switch to the Airport tab and type \"Powai, Mumbai\" failed on script errors, so I never saw whether suggestions appeared. I did not set the terminal, the date (24-10-2026) or the time (14:30).\n\nYou can book directly at https://www.savaari.com or call 90 4545 0000. I can rerun the search if the address suggestions start loading.",
+        "source_urls": [
+          "https://www.savaari.com/"
+        ],
+        "metrics": {
+          "model_turns": 9,
+          "tool_calls": 8,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 47.73,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    }
+  ]
+}

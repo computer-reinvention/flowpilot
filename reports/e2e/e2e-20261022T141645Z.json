@@ -1,0 +1,94 @@
+{
+  "base_url": "https://flowpilot.technology",
+  "results": [
+    {
+      "name": "cab",
+      "task_id": "task_6a485ffde0bb4188a3a4dc196f4b4ce1",
+      "session_id": "session_cb481a338fe84f73aa15469248935f55",
+      "profile_id": "profile_9a442c3fb1ed429b9cc0c55df6a4b346",
+      "state": "completed",
+      "seconds_total": 258.99,
+      "seconds_to_running": 1.34,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.34
+        ],
+        [
+          "completed",
+          258.99
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "I couldn't get any cab options or fares from Savaari for CSMIA Terminal 2 to Bandra Kurla Complex on 23-10-2026 at 10:00, so I booked nothing and have no cheapest cab to ask you to confirm.\n\nThe results page (https://www.savaari.com/select_cars?...) shows \"Services are temporarily unavailable for this itinerary. Please check back in later.\"\n\n- **Other tests:** I got the same message for a Terminal 2 to Powai search on 23-10-2026 at 10:00. It also appeared for 24-10-2026 at 14:30, an itinerary the site had loaded earlier. That points to a site-wide or date-wide problem rather than your route.\n- **Approach used:** I built the results page directly from the URL, using an approximate latitude/longitude for BKC that I chose myself. The saved form-filling workflow failed partway through, and I didn't get the form to submit by hand.\n\nYou could try again later, or call Savaari on 90 4545 0000.",
+        "source_urls": [
+          "https://www.savaari.com/select_cars"
+        ],
+        "metrics": {
+          "model_turns": 13,
+          "tool_calls": 16,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 1,
+          "wall_seconds": 250.27,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "cab_new_trip",
+      "task_id": "task_2a71cd3a06a3444bb374b51d895c4825",
+      "session_id": "session_a1f3fa488a0641d492bdb40f9181f3a0",
+      "profile_id": "profile_9a442c3fb1ed429b9cc0c55df6a4b346",
+      "state": "completed",
+      "seconds_total": 106.02,
+      "seconds_to_running": 1.81,
+      "seconds_to_first_pause": 103.48,
+      "states": [
+        [
+          "running",
+          1.81
+        ],
+        [
+          "waiting_for_confirmation",
+          103.48
+        ],
+        [
+          "running",
+          104.85
+        ],
+        [
+          "completed",
+          106.02
+        ]
+      ],
+      "interactions": [
+        {
+          "t": 103.48,
+          "interaction": "confirmation",
+          "message": "Cheapest: Wagon R/Swift (4-seater AC) \u20b9677 + \u20b934 taxes (~\u20b9711), 9 km included. Others: Dzire/Etios \u20b9690, Ertiga \u20b9917, Innova \u20b91,346, Innova Crysta \u20b91,359 (+taxes). Book the Wagon R?",
+          "fields": []
+        }
+      ],
+      "result": {
+        "answer": "Not booked: you declined this proposal, so FlowPilot stopped without taking any further action.\n\nCheapest: Wagon R/Swift (4-seater AC) \u20b9677 + \u20b934 taxes (~\u20b9711), 9 km included. Others: Dzire/Etios \u20b9690, Ertiga \u20b9917, Innova \u20b91,346, Innova Crysta \u20b91,359 (+taxes). Book the Wagon R?",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 4,
+          "tool_calls": 4,
+          "reused": 1,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 96.93,
+          "human_seconds": 1.26
+        }
+      },
+      "error": null,
+      "run": "warm"
+    }
+  ]
+}

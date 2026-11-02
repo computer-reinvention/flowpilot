@@ -1,0 +1,89 @@
+{
+  "base_url": "http://localhost:8080",
+  "results": [
+    {
+      "name": "flight_search",
+      "task_id": "task_3a81e0eb199d481997806677903cdbe3",
+      "session_id": "session_c37b8c356c154cb1966afe4291a2fe8b",
+      "profile_id": "profile_4b4e05699313431a98f1fe0735de89e6",
+      "state": "interrupted",
+      "seconds_total": 280.77,
+      "seconds_to_running": 0.54,
+      "states": [
+        [
+          "running",
+          0.54
+        ],
+        [
+          "interrupted",
+          280.77
+        ]
+      ],
+      "interactions": [],
+      "result": null,
+      "error": {
+        "code": "interrupted",
+        "message": "Script timed out; website effects are unknown; inspect before retrying",
+        "retryable": false,
+        "retry_after_seconds": null
+      },
+      "run": "cold"
+    },
+    {
+      "name": "flight_search",
+      "task_id": "task_63cfee6f851f4e6ba8b9acee848e25d2",
+      "session_id": "session_81089eef799a4169a9a891a9816c69ae",
+      "profile_id": "profile_4b4e05699313431a98f1fe0735de89e6",
+      "state": "failed",
+      "seconds_total": 39.34,
+      "seconds_to_running": 0.52,
+      "states": [
+        [
+          "running",
+          0.52
+        ],
+        [
+          "failed",
+          39.34
+        ]
+      ],
+      "interactions": [],
+      "result": null,
+      "error": {
+        "code": "provider_failure",
+        "message": "Execution failed; inspect website state before a new task",
+        "retryable": false,
+        "retry_after_seconds": null
+      },
+      "run": "warm"
+    },
+    {
+      "name": "flight_search",
+      "task_id": "task_68bc4cc90f944921b33cc79b06712394",
+      "session_id": "session_0042636d1f90439abc6ad6d097987cd5",
+      "profile_id": "profile_4b4e05699313431a98f1fe0735de89e6",
+      "state": "failed",
+      "seconds_total": 72.06,
+      "seconds_to_running": 0.51,
+      "states": [
+        [
+          "running",
+          0.51
+        ],
+        [
+          "failed",
+          72.06
+        ]
+      ],
+      "interactions": [],
+      "result": null,
+      "error": {
+        "code": "provider_failure",
+        "message": "Execution failed; inspect website state before a new task",
+        "retryable": false,
+        "retry_after_seconds": null
+      },
+      "run": "warm"
+    }
+  ]
+}

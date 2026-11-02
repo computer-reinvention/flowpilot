@@ -1,0 +1,142 @@
+{
+  "base_url": "https://flowpilot.technology",
+  "results": [
+    {
+      "name": "cab_booking",
+      "task_id": "task_6515f72c2d48409dace905b0295cad6c",
+      "session_id": "session_923ae3c8fb7a44efadc8f52d035518a8",
+      "profile_id": "profile_3554ba1f0f874688b2112ca5336d8afb",
+      "state": "completed",
+      "seconds_total": 164.18,
+      "seconds_to_running": 1.72,
+      "states": [
+        [
+          "running",
+          1.72
+        ],
+        [
+          "waiting_for_confirmation",
+          160.37
+        ],
+        [
+          "running",
+          161.29
+        ],
+        [
+          "completed",
+          164.18
+        ]
+      ],
+      "interactions": [
+        {
+          "t": 160.37,
+          "interaction": "confirmation",
+          "message": "Savaari cab, Mumbai T2 airport to Bandra Kurla Complex, 23-10-2026 10:00 AM. Cheapest: Wagon R / Swift (or similar), 4-seater AC, 8 km included \u2014 \u20b9615 + \u20b931 charges & taxes (about \u20b9646). Other options: Dzire/Etios \u20b9628+\u20b931; Ertiga \u20b9917+\u20b946; Toyota Innova \u20b91,101+\u20b955; Innova Crysta \u20b91,112+\u20b956. Proceed to book the cheapest?",
+          "fields": []
+        }
+      ],
+      "result": {
+        "answer": "Not booked: you declined this proposal, so FlowPilot stopped without taking any further action.\n\nSavaari cab, Mumbai T2 airport to Bandra Kurla Complex, 23-10-2026 10:00 AM. Cheapest: Wagon R / Swift (or similar), 4-seater AC, 8 km included \u2014 \u20b9615 + \u20b931 charges & taxes (about \u20b9646). Other options: Dzire/Etios \u20b9628+\u20b931; Ertiga \u20b9917+\u20b946; Toyota Innova \u20b91,101+\u20b955; Innova Crysta \u20b91,112+\u20b956. Proceed to book the cheapest?",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 0,
+          "tool_calls": 0,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 0.0,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "cab_booking",
+      "task_id": "task_2a1720a4dfeb47209ce6e3eddd89c341",
+      "session_id": "session_72e7c8f0793743108da587a949add8bb",
+      "profile_id": "profile_3554ba1f0f874688b2112ca5336d8afb",
+      "state": "completed",
+      "seconds_total": 147.37,
+      "seconds_to_running": 0.9,
+      "states": [
+        [
+          "running",
+          0.9
+        ],
+        [
+          "waiting_for_confirmation",
+          144.59
+        ],
+        [
+          "running",
+          145.52
+        ],
+        [
+          "completed",
+          147.37
+        ]
+      ],
+      "interactions": [
+        {
+          "t": 144.59,
+          "interaction": "confirmation",
+          "message": "Savaari airport cab, Mumbai T2 (Chhatrapati Shivaji Intl Airport) \u2192 Bandra Kurla Complex, 23-10-2026 10:00 AM. Options: Wagon R/Swift \u20b9615 (+\u20b931 taxes), Dzire/Etios \u20b9628 (+\u20b931), Ertiga \u20b9917 (+\u20b946), Toyota Innova \u20b91,101 (+\u20b955), Innova Crysta \u20b91,112 (+\u20b956). Cheapest: Wagon R/Swift (4-seater AC, 8 km included) at \u20b9615 + \u20b931 = about \u20b9646. Proceed to select it and continue toward booking?",
+          "fields": []
+        }
+      ],
+      "result": {
+        "answer": "Not booked: you declined this proposal, so FlowPilot stopped without taking any further action.\n\nSavaari airport cab, Mumbai T2 (Chhatrapati Shivaji Intl Airport) \u2192 Bandra Kurla Complex, 23-10-2026 10:00 AM. Options: Wagon R/Swift \u20b9615 (+\u20b931 taxes), Dzire/Etios \u20b9628 (+\u20b931), Ertiga \u20b9917 (+\u20b946), Toyota Innova \u20b91,101 (+\u20b955), Innova Crysta \u20b91,112 (+\u20b956). Cheapest: Wagon R/Swift (4-seater AC, 8 km included) at \u20b9615 + \u20b931 = about \u20b9646. Proceed to select it and continue toward booking?",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 0,
+          "tool_calls": 0,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 0.0,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "flight_search",
+      "task_id": "task_34ebad0b5263429193f8a9296d13b38a",
+      "session_id": "session_1a47d547329c4b4da9b86e602c55da32",
+      "profile_id": "profile_e76e7345b35e4d609750bdf47219bade",
+      "state": "completed",
+      "seconds_total": 36.45,
+      "seconds_to_running": 0.97,
+      "states": [
+        [
+          "running",
+          0.97
+        ],
+        [
+          "completed",
+          36.45
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The 3 cheapest nonstop one-way economy flights for 1 adult from Mumbai (BOM) to New Delhi (DEL) on Thu, 12 Nov 2026, as listed on Google Flights with the Nonstop filter on (prices in INR, including taxes and fees):\n\n1. **SpiceJet**: departs 11:20 PM, arrives 1:40 AM on 13 Nov. Duration 2 hr 20 min. **\u20b97,118**.\n2. **Akasa Air**: departs 6:35 PM, arrives 9:00 PM on 12 Nov. Duration 2 hr 25 min. **\u20b97,353**.\n3. **SpiceJet**: departs 11:20 PM, arrives 2:05 AM on 13 Nov. Duration 2 hr 45 min. **\u20b97,484**.\n\nThe next cheapest was Akasa Air at \u20b97,599. Optional charges such as bag fees may apply. I did not book anything.\n\nSource: https://www.google.com/travel/flights?q=Flights%20to%20DEL%20from%20BOM%20on%202026-11-12%20oneway%20economy%201%20adult%20nonstop&curr=INR&hl=en",
+        "source_urls": [
+          "https://www.google.com/travel/flights?q=Flights%20to%20DEL%20from%20BOM%20on%202026-11-12%20oneway%20economy%201%20adult%20nonstop&curr=INR&hl=en"
+        ],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 29.95,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    }
+  ]
+}

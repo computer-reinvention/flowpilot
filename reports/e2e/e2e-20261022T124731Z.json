@@ -1,0 +1,245 @@
+{
+  "base_url": "https://flowpilot.technology",
+  "results": [
+    {
+      "name": "cab",
+      "task_id": "task_707df216c9934b5f94d9869c063a778e",
+      "session_id": "session_7cbd2b5751534bb380a2675450bd3340",
+      "profile_id": "profile_932e8a0d53cc405da2a369dd7466e02a",
+      "state": "completed",
+      "seconds_total": 228.02,
+      "seconds_to_running": 1.47,
+      "seconds_to_first_pause": 224.8,
+      "states": [
+        [
+          "running",
+          1.47
+        ],
+        [
+          "waiting_for_confirmation",
+          224.8
+        ],
+        [
+          "running",
+          225.8
+        ],
+        [
+          "completed",
+          228.02
+        ]
+      ],
+      "interactions": [
+        {
+          "t": 224.8,
+          "interaction": "confirmation",
+          "message": "Savaari, Mumbai Airport T2 \u2192 Bandra Kurla Complex, 23-10-2026 10:00 AM. Options: Wagon R/Swift 4-seater \u20b9615 (+\u20b931 taxes); Dzire/Etios \u20b9628 (+\u20b931); Ertiga \u20b9917 (+\u20b946); Toyota Innova \u20b91,101 (+\u20b955); Innova Crysta \u20b91,112 (+\u20b956). Cheapest: Wagon R/Swift at \u20b9615 + \u20b931 = \u20b9646 total (8 km included). Proceed to select this car and continue booking?",
+          "fields": []
+        }
+      ],
+      "result": {
+        "answer": "Not booked: you declined this proposal, so FlowPilot stopped without taking any further action.\n\nSavaari, Mumbai Airport T2 \u2192 Bandra Kurla Complex, 23-10-2026 10:00 AM. Options: Wagon R/Swift 4-seater \u20b9615 (+\u20b931 taxes); Dzire/Etios \u20b9628 (+\u20b931); Ertiga \u20b9917 (+\u20b946); Toyota Innova \u20b91,101 (+\u20b955); Innova Crysta \u20b91,112 (+\u20b956). Cheapest: Wagon R/Swift at \u20b9615 + \u20b931 = \u20b9646 total (8 km included). Proceed to select this car and continue booking?",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 24,
+          "tool_calls": 24,
+          "reused": 0,
+          "saved": 7,
+          "replay_failures": 0,
+          "wall_seconds": 217.79,
+          "human_seconds": 0.46
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "cab",
+      "task_id": "task_f5df57a9ce6b4963a768e5d892073a53",
+      "session_id": "session_0e059c7240bb440485ad9a4ee021183e",
+      "profile_id": "profile_932e8a0d53cc405da2a369dd7466e02a",
+      "state": "running",
+      "seconds_total": 602.79,
+      "seconds_to_running": 0.94,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          0.94
+        ]
+      ],
+      "interactions": [],
+      "result": null,
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "cab_new_trip",
+      "admission_status": 409,
+      "error": {
+        "error": {
+          "code": "conflict",
+          "message": "Profile is leased",
+          "retryable": false,
+          "retry_after_seconds": null
+        }
+      },
+      "run": "warm"
+    },
+    {
+      "name": "flight",
+      "admission_status": 429,
+      "error": {
+        "error": {
+          "code": "capacity_exhausted",
+          "message": "Browser capacity is reserved",
+          "retryable": true,
+          "retry_after_seconds": 5
+        }
+      },
+      "run": "cold"
+    },
+    {
+      "name": "flight",
+      "admission_status": 429,
+      "error": {
+        "error": {
+          "code": "capacity_exhausted",
+          "message": "Browser capacity is reserved",
+          "retryable": true,
+          "retry_after_seconds": 5
+        }
+      },
+      "run": "warm"
+    },
+    {
+      "name": "flight_new_route",
+      "admission_status": 429,
+      "error": {
+        "error": {
+          "code": "capacity_exhausted",
+          "message": "Browser capacity is reserved",
+          "retryable": true,
+          "retry_after_seconds": 5
+        }
+      },
+      "run": "warm"
+    },
+    {
+      "name": "shopping",
+      "admission_status": 429,
+      "error": {
+        "error": {
+          "code": "capacity_exhausted",
+          "message": "Browser capacity is reserved",
+          "retryable": true,
+          "retry_after_seconds": 5
+        }
+      },
+      "run": "cold"
+    },
+    {
+      "name": "shopping",
+      "admission_status": 429,
+      "error": {
+        "error": {
+          "code": "capacity_exhausted",
+          "message": "Browser capacity is reserved",
+          "retryable": true,
+          "retry_after_seconds": 5
+        }
+      },
+      "run": "warm"
+    },
+    {
+      "name": "shopping_new_query",
+      "admission_status": 429,
+      "error": {
+        "error": {
+          "code": "capacity_exhausted",
+          "message": "Browser capacity is reserved",
+          "retryable": true,
+          "retry_after_seconds": 5
+        }
+      },
+      "run": "warm"
+    },
+    {
+      "name": "hotel",
+      "admission_status": 429,
+      "error": {
+        "error": {
+          "code": "capacity_exhausted",
+          "message": "Browser capacity is reserved",
+          "retryable": true,
+          "retry_after_seconds": 5
+        }
+      },
+      "run": "cold"
+    },
+    {
+      "name": "hotel",
+      "admission_status": 429,
+      "error": {
+        "error": {
+          "code": "capacity_exhausted",
+          "message": "Browser capacity is reserved",
+          "retryable": true,
+          "retry_after_seconds": 5
+        }
+      },
+      "run": "warm"
+    },
+    {
+      "name": "hotel_new_city",
+      "admission_status": 429,
+      "error": {
+        "error": {
+          "code": "capacity_exhausted",
+          "message": "Browser capacity is reserved",
+          "retryable": true,
+          "retry_after_seconds": 5
+        }
+      },
+      "run": "warm"
+    },
+    {
+      "name": "train",
+      "admission_status": 429,
+      "error": {
+        "error": {
+          "code": "capacity_exhausted",
+          "message": "Browser capacity is reserved",
+          "retryable": true,
+          "retry_after_seconds": 5
+        }
+      },
+      "run": "cold"
+    },
+    {
+      "name": "train",
+      "admission_status": 429,
+      "error": {
+        "error": {
+          "code": "capacity_exhausted",
+          "message": "Browser capacity is reserved",
+          "retryable": true,
+          "retry_after_seconds": 5
+        }
+      },
+      "run": "warm"
+    },
+    {
+      "name": "train_new_route",
+      "admission_status": 429,
+      "error": {
+        "error": {
+          "code": "capacity_exhausted",
+          "message": "Browser capacity is reserved",
+          "retryable": true,
+          "retry_after_seconds": 5
+        }
+      },
+      "run": "warm"
+    }
+  ]
+}

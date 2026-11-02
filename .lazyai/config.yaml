@@ -1,0 +1,195 @@
+# LazyAI project configuration. Existing files are never replaced or upgraded.
+version: 1
+agent:
+  # All workstreams use this backend. Changes require lazyai stop, then relaunch.
+  backend: claude # opencode (V2) | codex
+  # Optional executable path; defaults to the backend name on PATH.
+  # executable: /path/to/codex
+interactive:
+  # Templates are inactive until strict is true; free-form input is the default.
+  strict: false
+  # Choose the initially highlighted template; strict mode also shows a picker.
+  default_contract: task
+  # Skill-informed input forms, not bundled skills or evidence of usage frequency.
+  # Comments and labels are not sent to the agent: answers must state boundaries.
+  # No authority supplied by defaults; review restored drafts before sending.
+  # Use references/aliases, never secret values.
+  # Labels fit the 60x18 form with its sidebar: 14 cells required, 16 optional.
+  # "Permit + stops" asks for allowed actions, explicit mutation authority (or none),
+  # and stopping conditions. State these in answers; comments are not transmitted.
+  contracts:
+    # agent-run-contract: scope a run; do not turn diagnosis into edits or edits into release.
+    task:
+      title: Task contract
+      fields:
+        - key: outcome
+          label: Outcome
+          type: multiline
+          required: true
+        - key: acceptance
+          label: Success checks
+          type: multiline
+          required: true
+        - key: constraints
+          # Scope, non-goals, allowed actions, and stopping conditions.
+          label: Scope/allow/stop
+          type: multiline
+          required: false
+    # system-mapping: explain current flow and ownership; stop before redesign or edits.
+    system_mapping:
+      title: System mapping
+      fields:
+        - key: target
+          label: Target
+          type: text
+          required: true
+        - key: question
+          # What to explain and why; explanation only, no redesign or edits.
+          label: Explain only
+          type: multiline
+          required: true
+        - key: evidence
+          label: Evidence refs
+          type: multiline
+          required: false
+        - key: constraints
+          # Depth, environment variants, and excluded paths.
+          label: No design/edits
+          type: multiline
+          required: false
+    # environment-forensics: retrieve facts/timeline; stop before causal claims or fixes.
+    # Live-db/secret-handling guidance: explicit environment, bounded read-only sources,
+    # no primary fallback or secret disclosure; project-specific access stays outside this file.
+    environment_forensics:
+      title: Environment forensics
+      fields:
+        - key: environment
+          # Exact environment and source or replica alias; no credentials.
+          label: Env/source
+          type: text
+          required: true
+        - key: locator
+          label: Scoped ID
+          type: text
+          required: true
+        - key: window
+          # Time range and timezone, or current-state snapshot.
+          label: Time + zone
+          type: text
+          required: true
+        - key: question
+          label: Facts, not RCA
+          type: multiline
+          required: true
+        - key: authority
+          # Allowed reads, no mutations; redaction/query limits and stop conditions.
+          label: Reads + stops
+          type: multiline
+          required: true
+        - key: evidence
+          label: Refs/age/gaps
+          type: multiline
+          required: false
+    # incident-rca: test causal hypotheses against original evidence; stop before fixes/release.
+    incident_rca:
+      title: Incident RCA
+      fields:
+        - key: incident
+          label: Incident ID
+          type: text
+          required: true
+        - key: environment
+          label: Env/scope
+          type: text
+          required: true
+        - key: evidence
+          label: Failure/trace
+          type: multiline
+          required: true
+        - key: expected
+          label: Expected/good
+          type: multiline
+          required: true
+        - key: authority
+          # Allowed experiments, explicit mutations (none for diagnosis-only), stops.
+          label: Permit + stops
+          type: multiline
+          required: true
+        - key: constraints
+          # Hypotheses, retry budget, unavailable evidence; stop before fixes/release.
+          label: No fix/release
+          type: multiline
+          required: false
+    # change-design: resolve behavior and tradeoffs; deliver an implementable slice, then stop before edits.
+    change_design:
+      title: Change design
+      fields:
+        - key: outcome
+          label: Design goal
+          type: multiline
+          required: true
+        - key: acceptance
+          label: Success/keep
+          type: multiline
+          required: true
+        - key: evidence
+          label: Goal/RCA/impact
+          type: multiline
+          required: false
+        - key: constraints
+          # Non-goals, compatibility, environment, rollout limits, open decisions.
+          label: No code edits
+          type: multiline
+          required: false
+    # tdd-change-delivery: implement stable intent via red/green and side-effect checks; stop before release.
+    implementation:
+      title: Implementation
+      fields:
+        - key: outcome
+          label: Approved goal
+          type: multiline
+          required: true
+        - key: acceptance
+          label: Success/keep
+          type: multiline
+          required: true
+        - key: authority
+          # Allowed files/environment, explicit mutation authority and stops.
+          label: Permit + stops
+          type: multiline
+          required: true
+        - key: evidence
+          label: Failure/RCA/refs
+          type: multiline
+          required: false
+        - key: checks
+          # Red reproduction, regressions, broader gates; no commit/push/release.
+          label: Tests; no ship
+          type: multiline
+          required: false
+    # change-verification: independently challenge a revision; report failures, do not repair or release.
+    verification:
+      title: Change verification
+      fields:
+        - key: revision
+          label: Exact revision
+          type: text
+          required: true
+        - key: environment
+          label: Env/surface
+          type: text
+          required: true
+        - key: acceptance
+          label: Success/keep
+          type: multiline
+          required: true
+        - key: authority
+          # Allowed checks, explicit mutation authority and stops; report failures only.
+          label: Permit + stops
+          type: multiline
+          required: true
+        - key: evidence
+          # Original red reproduction, change map, claimed tests; no repairs/release.
+          label: No fix/release
+          type: multiline
+          required: false

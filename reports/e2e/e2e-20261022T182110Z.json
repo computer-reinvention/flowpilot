@@ -1,0 +1,469 @@
+{
+  "base_url": "https://flowpilot.technology",
+  "results": [
+    {
+      "name": "flight",
+      "task_id": "task_e25d66b6ff314feb918b69900cc257ff",
+      "session_id": "session_7df6ce47b2734d7db59ddeaa93491dda",
+      "profile_id": "profile_cb4f3aa7ad6c4b4da0c405b878a5c715",
+      "state": "completed",
+      "seconds_total": 33.44,
+      "seconds_to_running": 1.28,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.28
+        ],
+        [
+          "completed",
+          33.44
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The 3 cheapest nonstop BOM\u2192DEL flights on Thu 12 Nov 2026 (one-way, economy, 1 adult, prices in INR):\n1. SpiceJet, departs 11:20 PM, arrives 2:05 AM on 13 Nov, \u20b97,484.\n2. SpiceJet, departs 11:20 PM, arrives 1:40 AM on 13 Nov, \u20b97,118. This is the cheapest of all.\n3. Akasa Air, departs 8:55 PM, arrives 11:15 PM, \u20b97,599.\nSorted by price, the order is \u20b97,118, \u20b97,484, \u20b97,599. The next cheapest is Akasa Air at 6:35 PM for \u20b97,853.\nSource: https://www.google.com/travel/flights?q=Flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20one%20way%20economy%201%20adult%20nonstop%20only&curr=INR&hl=en\nNothing was booked.",
+        "source_urls": [
+          "https://www.google.com/travel/flights?q=Flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20one%20way%20economy%201%20adult%20nonstop%20only&curr=INR&hl=en"
+        ],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 26.08,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "flight",
+      "task_id": "task_d3121607af814b1daab8006215e09670",
+      "session_id": "session_3625cc41d7014e99a240040835567c9b",
+      "profile_id": "profile_cb4f3aa7ad6c4b4da0c405b878a5c715",
+      "state": "completed",
+      "seconds_total": 39.43,
+      "seconds_to_running": 0.92,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          0.92
+        ],
+        [
+          "completed",
+          39.43
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The 3 cheapest nonstop BOM\u2192DEL flights on Thu 12 Nov 2026 (one-way, economy, 1 adult, prices in INR):\n1. SpiceJet, departs 11:20 PM, arrives 1:40 AM on 13 Nov, \u20b97,118.\n2. SpiceJet, departs 11:20 PM, arrives 2:05 AM on 13 Nov, \u20b97,484.\n3. Akasa Air, departs 8:55 PM, arrives 11:15 PM, \u20b97,599.\nThe next cheapest is Akasa Air at 6:35 PM for \u20b97,853.\nSource: https://www.google.com/travel/flights?q=Flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20one%20way%20economy%201%20adult%20nonstop%20only&curr=INR&hl=en\nNothing was booked.",
+        "source_urls": [
+          "https://www.google.com/travel/flights?q=Flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20one%20way%20economy%201%20adult%20nonstop%20only&curr=INR&hl=en"
+        ],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 3,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 31.86,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "flight_new_route",
+      "task_id": "task_020963a4708a4b348b3651df9e8d3198",
+      "session_id": "session_ecb77fb280cd42cf837410cbda2337a1",
+      "profile_id": "profile_cb4f3aa7ad6c4b4da0c405b878a5c715",
+      "state": "completed",
+      "seconds_total": 28.92,
+      "seconds_to_running": 0.92,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          0.92
+        ],
+        [
+          "completed",
+          28.92
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The 3 cheapest nonstop BLR\u2192HYD flights on Fri 20 Nov 2026 (one-way, economy, 2 adults) are below. Prices are the total for 2 adults, in INR.\n1. Air India Express, departs 8:30 AM, arrives 9:55 AM, \u20b910,518.\n2. Air India Express, departs 5:50 AM, arrives 7:20 AM, \u20b910,668.\n3. Air India Express, departs 7:45 PM, arrives 9:20 PM, \u20b910,668. This ties with option 2 on price.\nThe next cheapest is Air India Express at 5:30 PM for \u20b911,154. Google Flights showed no price for an Alliance Air nonstop at 10:00 PM, so I left it out.\nSource: https://www.google.com/travel/flights?q=Flights%20from%20BLR%20to%20HYD%20on%202026-11-20%20one%20way%20economy%202%20adults%20nonstop%20only&curr=INR&hl=en\nNothing was booked.",
+        "source_urls": [
+          "https://www.google.com/travel/flights?q=Flights%20from%20BLR%20to%20HYD%20on%202026-11-20%20one%20way%20economy%202%20adults%20nonstop%20only&curr=INR&hl=en"
+        ],
+        "metrics": {
+          "model_turns": 4,
+          "tool_calls": 3,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 22.72,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "shopping",
+      "task_id": "task_9f85b500fa1f468c8ff7cab94ee267fa",
+      "session_id": "session_d70f3751e77646508ce12713946c4dc7",
+      "profile_id": "profile_0a75d55d072f406eaabcc75a205e843b",
+      "state": "completed",
+      "seconds_total": 44.7,
+      "seconds_to_running": 0.9,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          0.9
+        ],
+        [
+          "completed",
+          44.7
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "Top 3 under \u20b92,000 with 4+ stars, picked from Amazon.in search results sorted by customer review. I skipped 5.0-star listings that have only 8\u201311 ratings, because that's too few to trust. Nothing was added to the cart.\n1. occiam Wireless Earbuds, Bluetooth 5.3 (48H playtime, LED charging case): \u20b9999, 4.5 stars, 1,826 ratings. https://www.amazon.in/occiam-Wireless-Bluetooth-Headphones-Waterproof/dp/B0HJ8FRF3Z\n2. HAVIT TW982 ENC Earbuds, Bluetooth 5.4: \u20b91,101, 4.5 stars, 418 ratings. https://www.amazon.in/TW982-Cancelling-Bluetooth-Earphones-Headphones/dp/B0DGGT9PLB\n3. Wireless Earbuds Pro 3 (TWS, active noise cancellation, Skin White): \u20b91,869, 4.4 stars, 8,098 ratings. https://www.amazon.in/Wireless-Bluetooth-Earphones-Cancellation-High-Fidelity/dp/B0HHL8SL53\nClose runner-up: OnePlus Nord Buds 3r, \u20b91,999, 4.3 stars, 52,049 ratings.",
+        "source_urls": [
+          "https://www.amazon.in/occiam-Wireless-Bluetooth-Headphones-Waterproof/dp/B0HJ8FRF3Z",
+          "https://www.amazon.in/TW982-Cancelling-Bluetooth-Earphones-Headphones/dp/B0DGGT9PLB",
+          "https://www.amazon.in/Wireless-Bluetooth-Earphones-Cancellation-High-Fidelity/dp/B0HHL8SL53"
+        ],
+        "metrics": {
+          "model_turns": 5,
+          "tool_calls": 4,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 37.09,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "shopping",
+      "task_id": "task_88701c7d2382470c8c18b43ef246e2e6",
+      "session_id": "session_f210abd848264507915d2bcbbd366c15",
+      "profile_id": "profile_0a75d55d072f406eaabcc75a205e843b",
+      "state": "completed",
+      "seconds_total": 39.38,
+      "seconds_to_running": 0.9,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          0.9
+        ],
+        [
+          "completed",
+          39.38
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "Top 3 under \u20b92,000 with 4+ stars, from Amazon.in search results sorted by customer review. These come from an earlier run of this same request, and I didn't re-check the pages this time. I skipped 5.0-star listings with only 8\u201311 ratings. Nothing was added to the cart.\n1. occiam Wireless Earbuds, Bluetooth 5.3: \u20b9999, 4.5 stars, 1,826 ratings. https://www.amazon.in/occiam-Wireless-Bluetooth-Headphones-Waterproof/dp/B0HJ8FRF3Z\n2. HAVIT TW982 ENC Earbuds, Bluetooth 5.4: \u20b91,101, 4.5 stars, 418 ratings. https://www.amazon.in/TW982-Cancelling-Bluetooth-Earphones-Headphones/dp/B0DGGT9PLB\n3. Wireless Earbuds Pro 3 (TWS, active noise cancellation): \u20b91,869, 4.4 stars, 8,098 ratings. https://www.amazon.in/Wireless-Bluetooth-Earphones-Cancellation-High-Fidelity/dp/B0HHL8SL53\nClose runner-up: OnePlus Nord Buds 3r, \u20b91,999, 4.3 stars, 52,049 ratings.",
+        "source_urls": [
+          "https://www.amazon.in/occiam-Wireless-Bluetooth-Headphones-Waterproof/dp/B0HJ8FRF3Z",
+          "https://www.amazon.in/TW982-Cancelling-Bluetooth-Earphones-Headphones/dp/B0DGGT9PLB",
+          "https://www.amazon.in/Wireless-Bluetooth-Earphones-Cancellation-High-Fidelity/dp/B0HHL8SL53"
+        ],
+        "metrics": {
+          "model_turns": 2,
+          "tool_calls": 1,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 10.45,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "shopping_new_query",
+      "task_id": "task_9247074b368f4ea3bb04bada8544af06",
+      "session_id": "session_88797213f1dc45ec8da933966092bd34",
+      "profile_id": "profile_0a75d55d072f406eaabcc75a205e843b",
+      "state": "completed",
+      "seconds_total": 35.15,
+      "seconds_to_running": 1.78,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.77
+        ],
+        [
+          "completed",
+          35.15
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "Top 3 portable Bluetooth speakers under \u20b93,000 with 4+ stars, from Amazon.in search results (price filter up to \u20b93,000, sorted by customer review). I skipped speaker cases and accessories. I also skipped a 5.0-star Toreto Orbix that has only 18 ratings. Nothing was added to the cart.\n1. Edifier MP85 Portable Bluetooth Speaker: \u20b91,990, 4.6 stars, 681 ratings. https://www.amazon.in/Edifier-MP85-Black-Orange-Bluetooth-Portable/dp/B0C3B1P2LJ\n2. Bobtot Portable Bluetooth Speaker, IPX7 waterproof, TWS, Red: \u20b92,819, 4.6 stars, 309 ratings. https://www.amazon.in/Bobtot-Portable-Bluetooth-Wireless-Waterproof/dp/B0DHV8ZCMK\n3. JBL Go 3 Ultra Portable Speaker (Blue): \u20b92,999, 4.5 stars, 75,207 ratings. https://www.amazon.in/JBL-Wireless-Portable-Bluetooth-Waterproof/dp/B08FB396L1\nThird place was a tie at 4.5 stars. I chose the JBL Go 3 for its far larger rating count. The runner-up is the Kunodi Outdoor Waterproof Bluetooth Speaker: \u20b92,742.67, 4.5 stars, 11,551 ratings. https://www.amazon.in/Waterproof-Bluetooth-Wireless-Portable-Subwoofer/dp/B07797FJKY",
+        "source_urls": [
+          "https://www.amazon.in/Edifier-MP85-Black-Orange-Bluetooth-Portable/dp/B0C3B1P2LJ",
+          "https://www.amazon.in/Bobtot-Portable-Bluetooth-Wireless-Waterproof/dp/B0DHV8ZCMK",
+          "https://www.amazon.in/JBL-Wireless-Portable-Bluetooth-Waterproof/dp/B08FB396L1",
+          "https://www.amazon.in/Waterproof-Bluetooth-Wireless-Portable-Subwoofer/dp/B07797FJKY"
+        ],
+        "metrics": {
+          "model_turns": 4,
+          "tool_calls": 3,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 26.84,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "hotel",
+      "task_id": "task_13f8e8db02a3468ab6ae48fdbd63ae0e",
+      "session_id": "session_7847184fdfa44268925d499598a2dd27",
+      "profile_id": "profile_64f740e7adb44672a2fa0562f979fa37",
+      "state": "completed",
+      "seconds_total": 219.52,
+      "seconds_to_running": 0.94,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          0.94
+        ],
+        [
+          "completed",
+          219.52
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "I couldn't get prices for 12\u201314 November 2026. Booking.com's search-results page wouldn't load, and every search URL redirected to the North Goa city page. That page only shows \"from\" prices for 1 night for 2 adults, not for your dates. The 2-night figures below are my estimate (nightly price \u00d7 2), not a quote.\n\nThe three cheapest properties on that page with a guest rating of 8 or higher:\n1. Aqua Wave by YogiTree Hotels (North Goa): rating 8.6, from \u20b91,000 per night, about \u20b92,000 for 2 nights.\n2. Island House Goa (Divar, near North Goa): rating 8.9, from \u20b92,835 per night, about \u20b95,670 for 2 nights.\n3. Comfort Inn Elite (Jua, near North Goa): rating 8.7, from \u20b94,750.40 per night, about \u20b99,500 for 2 nights.\n\nThe page is inconsistent for two of these:\n- Aqua Wave is also listed at \u20b92,693.25 per night in another section, so \u20b91,000 may be a minimum or placeholder price.\n- Island House Goa is also listed at \u20b98,920.80 per night in another section.\n\nPlease check the totals for your dates on Booking.com before relying on them.\n\nSource: https://www.booking.com/city/in/north-goa.html\n\nI did not book anything.",
+        "source_urls": [
+          "https://www.booking.com/city/in/north-goa.html"
+        ],
+        "metrics": {
+          "model_turns": 21,
+          "tool_calls": 23,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 211.77,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "hotel",
+      "task_id": "task_a12c8c8d80304f4f8a325d34e61a1a82",
+      "session_id": "session_2eeed19df8e14932a8e072417e8e208d",
+      "profile_id": "profile_64f740e7adb44672a2fa0562f979fa37",
+      "state": "completed",
+      "seconds_total": 26.07,
+      "seconds_to_running": 1.02,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.02
+        ],
+        [
+          "completed",
+          26.07
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "I couldn't get prices for 12\u201314 November 2026, so I have no three cheapest hotels to report. Booking.com's search-results page for North Goa, 2 adults, those dates and a rating filter of 8+ showed \"0 properties are available\". The date field also reverted to a default of 22\u201323 October. I didn't try another site, and I didn't book anything.\n\nSource tried: https://www.booking.com/searchresults.html?ss=North+Goa&checkin=2026-11-12&checkout=2026-11-14&group_adults=2&no_rooms=1&nflt=review_score%3D80&order=price&selected_currency=INR\n\nThe earlier attempt in this session only got 1-night \"from\" prices from https://www.booking.com/city/in/north-goa.html, not quotes for your dates. Those prices are not totals for 12\u201314 November 2026, so I'm not treating them as an answer.",
+        "source_urls": [
+          "https://www.booking.com/searchresults.html?ss=North+Goa&checkin=2026-11-12&checkout=2026-11-14&group_adults=2&no_rooms=1&nflt=review_score%3D80&order=price&selected_currency=INR",
+          "https://www.booking.com/city/in/north-goa.html"
+        ],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 18.76,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "hotel_new_city",
+      "task_id": "task_f3ea44e4ef894682854921c0f570a1ba",
+      "session_id": "session_31c6e25df43d424baad3e211c54c0af7",
+      "profile_id": "profile_64f740e7adb44672a2fa0562f979fa37",
+      "state": "completed",
+      "seconds_total": 25.19,
+      "seconds_to_running": 0.9,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          0.9
+        ],
+        [
+          "completed",
+          25.19
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "I couldn't find hotel prices or ratings for Jaipur for 5\u20137 December 2026, so I have no three cheapest hotels to report. Booking.com's search for 2 adults, those dates and an 8+ rating filter showed \"0 properties are available\". The date field also reverted to a default of 22\u201323 October. I didn't try another site, and I didn't book anything.\n\nSource tried: https://www.booking.com/searchresults.html?ss=Jaipur&checkin=2026-12-05&checkout=2026-12-07&group_adults=2&no_rooms=1&nflt=review_score%3D80&order=price&selected_currency=INR",
+        "source_urls": [
+          "https://www.booking.com/searchresults.html?ss=Jaipur&checkin=2026-12-05&checkout=2026-12-07&group_adults=2&no_rooms=1&nflt=review_score%3D80&order=price&selected_currency=INR"
+        ],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 18.1,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "train",
+      "task_id": "task_410c7b0b088e4cd5b007d6ef9da727b2",
+      "session_id": "session_80f37c4e8bd640fabf566e0282d92e91",
+      "profile_id": "profile_18767562e1b943878ddb1340a94da62f",
+      "state": "completed",
+      "seconds_total": 60.95,
+      "seconds_to_running": 0.92,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          0.92
+        ],
+        [
+          "completed",
+          60.95
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "ConfirmTkt would only show the Mumbai to Pune route page for Fri 23 Oct 2026, not 6 Nov. Its date strip only goes to 28 Oct. 6 Nov 2026 is also a Friday, and these three trains run daily, so their timings should be the same. The fares and availability below are as shown for 23 Oct and may differ on 6 Nov.\n\nEarliest CSMT departures after 06:00:\n1. 12127 Intercity Exp: departs 06:40, arrives Pune 10:00. Chair Car (CC) \u20b9395, Not Available.\n2. 11007 Deccan Express: departs 07:00, arrives Pune 11:05. Chair Car (CC) \u20b9345, Not Available.\n3. 11301 Udyan Express: departs 07:55, arrives Pune 11:40. 3A \u20b9520, Available (64 seats).\n\nI left out 18520 LTT-VSKP Express (06:55) because it leaves from Lokmanya Tilak Terminus, not CSMT.\n\nSource: https://www.confirmtkt.com/trains/mumbai-to-pune-train-tickets\n\nI did not book anything.",
+        "source_urls": [
+          "https://www.confirmtkt.com/trains/mumbai-to-pune-train-tickets"
+        ],
+        "metrics": {
+          "model_turns": 10,
+          "tool_calls": 10,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 54.4,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "train",
+      "task_id": "task_6cd6981642ec4c2d89890e5ecfb043d7",
+      "session_id": "session_5de7a9a8156943ff8d14f41b3324e3b9",
+      "profile_id": "profile_18767562e1b943878ddb1340a94da62f",
+      "state": "completed",
+      "seconds_total": 24.39,
+      "seconds_to_running": 1.14,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.14
+        ],
+        [
+          "completed",
+          24.39
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "I couldn't get results for 6 November 2026, so I'm reporting the earlier 23 October data.\n\nConfirmTkt's Mumbai to Pune page only showed Fri 23 Oct 2026, and its date strip stopped at 28 Oct. I tried a direct search URL for 6 Nov, but it returned a 404 page. 6 Nov 2026 is also a Friday, and these three trains run daily, so their timings should match. The fares and availability below are as shown for 23 Oct and may differ on 6 Nov.\n\nEarliest CSMT departures after 06:00:\n1. **12127 Intercity Exp:** departs 06:40, arrives Pune 10:00. Chair Car (CC) \u20b9395, Not Available.\n2. **11007 Deccan Express:** departs 07:00, arrives Pune 11:05. Chair Car (CC) \u20b9345, Not Available.\n3. **11301 Udyan Express:** departs 07:55, arrives Pune 11:40. 3A \u20b9520, Available (64 seats).\n\nI left out 18520 LTT-VSKP Express (06:55) because it leaves from Lokmanya Tilak Terminus, not CSMT.\n\nSource: https://www.confirmtkt.com/trains/mumbai-to-pune-train-tickets\n\nI did not book anything.",
+        "source_urls": [
+          "https://www.confirmtkt.com/trains/mumbai-to-pune-train-tickets"
+        ],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 16.4,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "train_new_route",
+      "task_id": "task_2164e1861dc84c54997b7eecd89c59c1",
+      "session_id": "session_3981b0e3ced5414db2fd9633c6a9c362",
+      "profile_id": "profile_18767562e1b943878ddb1340a94da62f",
+      "state": "completed",
+      "seconds_total": 29.04,
+      "seconds_to_running": 0.85,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          0.85
+        ],
+        [
+          "completed",
+          29.04
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "ConfirmTkt only showed this route for Fri 23 Oct 2026, so I couldn't get results for 9 Dec 2026. I did not try a direct date URL this time. The timings below come from the 23 Oct listing, and the fares and availability are as shown for that date. They may differ on 9 Dec, which is a Wednesday.\n\nThe page lists trains from all five New Delhi-area stations. These are the three earliest departures after 06:00:\n\n1. 12015 Ajmer Shatabdi leaves New Delhi (NDLS) at 06:10 and arrives in Jaipur at 10:35. Chair Car (CC) is \u20b9900, shown as Not Available. It runs daily.\n2. 14662 Shalimar Malani leaves Old Delhi (DLI) at 11:00 and arrives at 17:35. 3A is \u20b9575, shown as WL 16 with a 37% chance. It runs daily.\n3. 14321 BE Bhuj Express leaves Old Delhi (DLI) at 11:50 and arrives at 17:50. 3A is \u20b9575, shown as WL 10 with a 57% chance. Its running days are Sun, Mon, Wed and Fri, so it should run on Wednesday 9 Dec.\n\nIf you want only trains from New Delhi station itself, the second one after 12015 is 12958 Swaran Jayanti Rajdhani at 19:55, arriving 23:45. Its 3A fare is \u20b91135, shown as WL 33 with a 56% chance.\n\nSource: https://www.confirmtkt.com/trains/new-delhi-to-jaipur-train-tickets\n\nI did not book anything.",
+        "source_urls": [
+          "https://www.confirmtkt.com/trains/new-delhi-to-jaipur-train-tickets"
+        ],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 21.54,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    }
+  ]
+}

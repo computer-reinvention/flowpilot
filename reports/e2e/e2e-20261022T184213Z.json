@@ -1,0 +1,629 @@
+{
+  "base_url": "https://flowpilot.technology",
+  "results": [
+    {
+      "name": "cab",
+      "task_id": "task_731a0793509743c88dd4018309f59e42",
+      "session_id": "session_1c3991d7f4814ca7930caf6051c7ab8e",
+      "profile_id": "profile_aa368b3d6c534fbd991a584e3b8e7659",
+      "state": "completed",
+      "seconds_total": 236.28,
+      "seconds_to_running": 1.21,
+      "seconds_to_first_pause": 229.23,
+      "states": [
+        [
+          "running",
+          1.21
+        ],
+        [
+          "waiting_for_confirmation",
+          229.23
+        ],
+        [
+          "running",
+          230.31
+        ],
+        [
+          "completed",
+          236.28
+        ]
+      ],
+      "interactions": [
+        {
+          "t": 229.23,
+          "interaction": "confirmation",
+          "message": "Book cheapest cab: Wagon R / Swift (4-seater AC), CSMIA Terminal 2 \u2192 Bandra Kurla Complex, 23-10-2026 10:00, \u20b9615 + \u20b931 taxes (\u2248\u20b9646)? Proceeding will go to the booking page (requires your details).",
+          "fields": []
+        }
+      ],
+      "result": {
+        "answer": "Not booked: you declined this proposal, so FlowPilot stopped without taking any further action.\n\nBook cheapest cab: Wagon R / Swift (4-seater AC), CSMIA Terminal 2 \u2192 Bandra Kurla Complex, 23-10-2026 10:00, \u20b9615 + \u20b931 taxes (\u2248\u20b9646)? Proceeding will go to the booking page (requires your details).",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 21,
+          "tool_calls": 22,
+          "reused": 0,
+          "saved": 1,
+          "replay_failures": 0,
+          "wall_seconds": 223.34,
+          "human_seconds": 0.63
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "cab",
+      "task_id": "task_9ca929ceddc94324abcb6d612dca3001",
+      "session_id": "session_5f1368b18ab640ddb1055bcf635dfc29",
+      "profile_id": "profile_aa368b3d6c534fbd991a584e3b8e7659",
+      "state": "completed",
+      "seconds_total": 75.61,
+      "seconds_to_running": 0.85,
+      "seconds_to_first_pause": 73.89,
+      "states": [
+        [
+          "running",
+          0.85
+        ],
+        [
+          "waiting_for_confirmation",
+          73.89
+        ],
+        [
+          "running",
+          74.9
+        ],
+        [
+          "completed",
+          75.61
+        ]
+      ],
+      "interactions": [
+        {
+          "t": 73.89,
+          "interaction": "confirmation",
+          "message": "Cheapest: Wagon R/Swift (4-seater AC) \u20b9615 + \u20b931 taxes (~\u20b9646), 8 km included, T2 airport \u2192 BKC, 23-10-2026 10:00. Others: Dzire/Etios \u20b9628, Ertiga \u20b9917, Innova \u20b91,101, Innova Crysta \u20b91,112 (+taxes). Book the cheapest?",
+          "fields": []
+        }
+      ],
+      "result": {
+        "answer": "Not booked: you declined this proposal, so FlowPilot stopped without taking any further action.\n\nCheapest: Wagon R/Swift (4-seater AC) \u20b9615 + \u20b931 taxes (~\u20b9646), 8 km included, T2 airport \u2192 BKC, 23-10-2026 10:00. Others: Dzire/Etios \u20b9628, Ertiga \u20b9917, Innova \u20b91,101, Innova Crysta \u20b91,112 (+taxes). Book the cheapest?",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 2,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 1,
+          "wall_seconds": 68.74,
+          "human_seconds": 0.5
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "cab_new_trip",
+      "task_id": "task_ace6eb6759cb47eaa2d900dc691bb02c",
+      "session_id": "session_abeac1a638fe4e5a97ef6a91200e018f",
+      "profile_id": "profile_aa368b3d6c534fbd991a584e3b8e7659",
+      "state": "completed",
+      "seconds_total": 74.08,
+      "seconds_to_running": 1.04,
+      "seconds_to_first_pause": 71.51,
+      "states": [
+        [
+          "running",
+          1.04
+        ],
+        [
+          "waiting_for_confirmation",
+          71.51
+        ],
+        [
+          "running",
+          72.51
+        ],
+        [
+          "completed",
+          74.08
+        ]
+      ],
+      "interactions": [
+        {
+          "t": 71.51,
+          "interaction": "confirmation",
+          "message": "Mumbai T2 airport \u2192 Powai, 24-10-2026. Options: Wagon R/Swift \u20b9615 (+\u20b931 tax), Dzire/Etios \u20b9628, Ertiga \u20b9917, Innova \u20b91,101, Innova Crysta \u20b91,112. Cheapest: Wagon R/Swift \u20b9615+\u20b931. Caveat: the page shows pickup time 10:00 AM, not 14:30, and the drop is a generic Powai address. Fares may differ at 14:30. Book the cheapest?",
+          "fields": []
+        }
+      ],
+      "result": {
+        "answer": "Not booked: you declined this proposal, so FlowPilot stopped without taking any further action.\n\nMumbai T2 airport \u2192 Powai, 24-10-2026. Options: Wagon R/Swift \u20b9615 (+\u20b931 tax), Dzire/Etios \u20b9628, Ertiga \u20b9917, Innova \u20b91,101, Innova Crysta \u20b91,112. Cheapest: Wagon R/Swift \u20b9615+\u20b931. Caveat: the page shows pickup time 10:00 AM, not 14:30, and the drop is a generic Powai address. Fares may differ at 14:30. Book the cheapest?",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 2,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 1,
+          "wall_seconds": 66.91,
+          "human_seconds": 0.45
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "flight",
+      "task_id": "task_7fe4bbe725654e4cb9ec3fb34323d0bb",
+      "session_id": "session_04b846fa13a342c194f05cb8a1c3331c",
+      "profile_id": "profile_a46349b7ab01437cb5f4e276267d6234",
+      "state": "completed",
+      "seconds_total": 30.96,
+      "seconds_to_running": 0.93,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          0.93
+        ],
+        [
+          "completed",
+          30.96
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The 3 cheapest nonstop economy flights for 1 adult, Mumbai (BOM) to Delhi (DEL), one way on 12 Nov 2026 (Google Flights, prices in INR):\n1. SpiceJet: departs 11:20 PM on 12 Nov, arrives 1:40 AM on 13 Nov. \u20b97,118.\n2. SpiceJet: departs 11:20 PM on 12 Nov, arrives 2:05 AM on 13 Nov. \u20b97,484.\n3. Akasa Air: departs 8:55 PM, arrives 11:15 PM on 12 Nov. \u20b97,599.\nNothing was booked.\nSource: https://www.google.com/travel/flights?q=Flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20one%20way%20economy%201%20adult%20nonstop&curr=INR",
+        "source_urls": [
+          "https://www.google.com/travel/flights?q=Flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20one%20way%20economy%201%20adult%20nonstop&curr=INR"
+        ],
+        "metrics": {
+          "model_turns": 4,
+          "tool_calls": 3,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 23.74,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "flight",
+      "task_id": "task_44c2778ebb114d118adb4bacf046ec3e",
+      "session_id": "session_f9868c56bb124e16b3f6cc393f7572e6",
+      "profile_id": "profile_a46349b7ab01437cb5f4e276267d6234",
+      "state": "completed",
+      "seconds_total": 36.67,
+      "seconds_to_running": 1.0,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.0
+        ],
+        [
+          "completed",
+          36.67
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The 3 cheapest nonstop economy flights for 1 adult, Mumbai (BOM) to Delhi (DEL), one way on 12 Nov 2026 (Google Flights, prices in INR):\n1. SpiceJet: departs 11:20 PM on 12 Nov, arrives 1:40 AM on 13 Nov. \u20b97,118.\n2. SpiceJet: departs 11:20 PM on 12 Nov, arrives 2:05 AM on 13 Nov. \u20b97,484.\n3. Akasa Air: departs 8:55 PM, arrives 11:15 PM on 12 Nov. \u20b97,599.\nNothing was booked.\nSource: https://www.google.com/travel/flights?q=Flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20one%20way%20economy%201%20adult%20nonstop&curr=INR",
+        "source_urls": [
+          "https://www.google.com/travel/flights?q=Flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20one%20way%20economy%201%20adult%20nonstop&curr=INR"
+        ],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 3,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 28.6,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "flight_new_route",
+      "task_id": "task_f22498bb008b40159df8248a82852c13",
+      "session_id": "session_1810eb817fef49a79c43b7cae9581147",
+      "profile_id": "profile_a46349b7ab01437cb5f4e276267d6234",
+      "state": "completed",
+      "seconds_total": 53.3,
+      "seconds_to_running": 0.92,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          0.92
+        ],
+        [
+          "completed",
+          53.3
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The 3 cheapest nonstop economy flights, Bengaluru (BLR) to Hyderabad (HYD), one way on 20 Nov 2026. Google Flights shows each price as the total for 2 adults, in INR:\n1. Air India Express: departs 8:30 AM, arrives 9:55 AM, \u20b910,518.\n2. Air India Express: departs 5:50 AM, arrives 7:20 AM, \u20b910,668.\n3. Air India Express: departs 7:45 PM, arrives 9:20 PM, \u20b910,668.\nThe 2nd and 3rd are tied on price. Alliance Air also flies a nonstop at 10:00 PM, arriving 11:40 PM, but Google showed no price for it.\nNothing was booked.\nSource: https://www.google.com/travel/flights?q=Flights%20from%20BLR%20to%20HYD%20on%202026-11-20%20one%20way%20economy%202%20adults%20nonstop&curr=INR",
+        "source_urls": [
+          "https://www.google.com/travel/flights?q=Flights%20from%20BLR%20to%20HYD%20on%202026-11-20%20one%20way%20economy%202%20adults%20nonstop&curr=INR"
+        ],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 3,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 19.97,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "shopping",
+      "task_id": "task_b47e04b865a34b00966d25928f7be127",
+      "session_id": "session_ff51988f359f4f9f9c36704d00ac0d50",
+      "profile_id": "profile_153dafcc34c24a219fb12cb2d422fe86",
+      "state": "completed",
+      "seconds_total": 61.41,
+      "seconds_to_running": 0.93,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          0.93
+        ],
+        [
+          "completed",
+          61.41
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "Top 3 wireless earbuds under \u20b92,000 on amazon.in, from a search sorted by Avg. Customer Review with a price cap of \u20b92,000. All have at least 4 stars. I skipped listings rated 4.8\u20135.0 that had only 8\u201311 ratings, because they aren't reliable, and ranked the rest by rating and then by number of ratings. Nothing was added to the cart.\n\n1. occiam Wireless Earbuds, Bluetooth 5.3, 48H Playtime, LED display case, IP6 waterproof. Price \u20b9999, rating 4.5/5, 1,826 ratings. https://www.amazon.in/dp/B0HJ8FRF3Z\n2. HAVIT TW982 Earbuds with ENC noise cancellation, Bluetooth 5.4, 33H playtime. Price \u20b91,101, rating 4.5/5, 418 ratings. https://www.amazon.in/dp/B0DGGT9PLB\n3. Wireless Earbuds Pro 3 TWS with Active Noise Cancellation, Spatial Audio, USB-C case (Skin White). Price \u20b91,859, rating 4.4/5, 8,098 ratings. https://www.amazon.in/dp/B0HHL8SL53\n\nPrices and ratings are as shown on the search results page. Other 4+ star options near the top were the OnePlus Nord Buds 3r (\u20b91,999, 4.3, about 52K ratings) and the 1 Hora Wireless Earbuds (\u20b91,801, 4.3, about 10.4K ratings).",
+        "source_urls": [
+          "https://www.amazon.in/dp/B0HJ8FRF3Z",
+          "https://www.amazon.in/dp/B0DGGT9PLB",
+          "https://www.amazon.in/dp/B0HHL8SL53"
+        ],
+        "metrics": {
+          "model_turns": 6,
+          "tool_calls": 5,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 52.61,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "shopping",
+      "task_id": "task_5f7e4fa4e28449b48c6d7b382ba8f447",
+      "session_id": "session_4e46cdfcc026447d9155771c185cc9ce",
+      "profile_id": "profile_153dafcc34c24a219fb12cb2d422fe86",
+      "state": "completed",
+      "seconds_total": 18.91,
+      "seconds_to_running": 1.15,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.15
+        ],
+        [
+          "completed",
+          18.91
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "Top 3 wireless earbuds under \u20b92,000 on amazon.in. These come from a search sorted by Avg. Customer Review with a \u20b92,000 price cap, and all are rated at least 4 stars. I skipped listings rated 4.8\u20135.0 that had only 8\u201311 ratings, because they aren't reliable. I did not re-check the pages in this session, so the figures are from the earlier search results page. Nothing was added to the cart.\n\n1. occiam Wireless Earbuds (Bluetooth 5.3, 48H playtime): \u20b9999, rating 4.5, 1,826 ratings. https://www.amazon.in/dp/B0HJ8FRF3Z\n2. HAVIT TW982 (ENC noise cancellation, Bluetooth 5.4): \u20b91,101, rating 4.5, 418 ratings. https://www.amazon.in/dp/B0DGGT9PLB\n3. Wireless Earbuds Pro 3 TWS (Active Noise Cancellation, Skin White): \u20b91,859, rating 4.4, 8,098 ratings. https://www.amazon.in/dp/B0HHL8SL53",
+        "source_urls": [
+          "https://www.amazon.in/dp/B0HJ8FRF3Z",
+          "https://www.amazon.in/dp/B0DGGT9PLB",
+          "https://www.amazon.in/dp/B0HHL8SL53"
+        ],
+        "metrics": {
+          "model_turns": 2,
+          "tool_calls": 1,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 11.77,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "shopping_new_query",
+      "task_id": "task_36a0d35649254261b14912b1391f7cc4",
+      "session_id": "session_facbea5cc70d4dad87c7d4d007e4e53d",
+      "profile_id": "profile_153dafcc34c24a219fb12cb2d422fe86",
+      "state": "completed",
+      "seconds_total": 56.7,
+      "seconds_to_running": 1.03,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.03
+        ],
+        [
+          "completed",
+          56.7
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "Top 3 portable Bluetooth speakers under \u20b93,000 on amazon.in, all rated 4+ stars. They come from a search sorted by Avg. Customer Review with a \u20b93,000 price cap. I skipped speaker cases and covers, which fill the top results, and the Toreto Orbix (5.0 stars but only 18 ratings). The rest are ranked by rating, then by number of ratings. Nothing was added to the cart.\n\n1. Edifier MP85 Portable Bluetooth Speaker (Black): \u20b91,990, 4.6 stars, 681 ratings. https://www.amazon.in/dp/B0C3B1P2LJ\n2. Bobtot Portable Bluetooth Speaker, IPX7 waterproof, TWS (Red): \u20b92,819, 4.6 stars, 309 ratings. https://www.amazon.in/dp/B0DHV8ZCMK\n3. JBL Go 3 Ultra Portable Waterproof Speaker (Blue): \u20b92,999, 4.5 stars, about 75.2K ratings. https://www.amazon.in/dp/B08FB396L1\n\nThe next option was the Kunodi Outdoor Waterproof Speaker at \u20b92,742.67, 4.5 stars, about 11.5K ratings. I took the JBL Go 3 over it because it has far more ratings at the same 4.5 stars. Prices and ratings are as shown on the search results page.",
+        "source_urls": [
+          "https://www.amazon.in/dp/B0C3B1P2LJ",
+          "https://www.amazon.in/dp/B0DHV8ZCMK",
+          "https://www.amazon.in/dp/B08FB396L1"
+        ],
+        "metrics": {
+          "model_turns": 5,
+          "tool_calls": 4,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 22.6,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "hotel",
+      "task_id": "task_817f7fe9d7104a98849e0ec36ba9f7bf",
+      "session_id": "session_14c7b4ca30334f8d905be49c8fdd8510",
+      "profile_id": "profile_2c4823c84fa2469d9b43b11718f2f5ba",
+      "state": "completed",
+      "seconds_total": 351.17,
+      "seconds_to_running": 0.97,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          0.97
+        ],
+        [
+          "completed",
+          351.17
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The browser stopped responding, so this could not be verified on the page.\n\nI found three North Goa hotels rated 8 or higher. Prices are for 2 adults, 1 room, check-in 12 Nov 2026 and check-out 14 Nov 2026, in INR. Each is the cheapest room's \"Price for 2 nights\" on the hotel's Booking.com page, before taxes and fees. Nothing was booked.\n\n1. **Aqua Wave by YogiTree Hotels**: \u20b94,560 (discounted from \u20b95,700; \u20b9228 taxes and fees extra). Rating 8.6. https://www.booking.com/hotel/in/aqua-vista.html?checkin=2026-11-12&checkout=2026-11-14&group_adults=2&no_rooms=1&selected_currency=INR\n2. **Circle (Anjuna area)**: \u20b912,800 (\u20b9640 taxes and fees extra). Rating 9.4. https://www.booking.com/hotel/in/circle.html?checkin=2026-11-12&checkout=2026-11-14&group_adults=2&no_rooms=1&selected_currency=INR\n3. **Island House Goa (Divar, near North Goa)**: \u20b913,608 (\u20b9680 taxes and fees extra). Rating 8.9. https://www.booking.com/hotel/in/island-house-goa.html?checkin=2026-11-12&checkout=2026-11-14&group_adults=2&no_rooms=1&selected_currency=INR\n\nLimits on this ranking:\n- Booking.com's \"North Goa\" page listed only 13 properties, so hotels outside that list were not checked.\n- Of the 13, I only priced the five rated 8.0 or higher with the lowest \"from\" prices.\n- The Anantya At Anamiva (rated 8.2) cost \u20b919,800 for the stay, so it was not among the cheapest.\n- Comfort Inn Elite (rated 8.7, in Jua) showed no room prices for these dates, so I left it out.\n- Booking.com's results page would not load with a date search, so I used the \"North goa\" page (https://www.booking.com/city/in/north-goa.html).",
+        "source_urls": [
+          "https://www.booking.com/hotel/in/aqua-vista.html?checkin=2026-11-12&checkout=2026-11-14&group_adults=2&no_rooms=1&selected_currency=INR",
+          "https://www.booking.com/hotel/in/circle.html?checkin=2026-11-12&checkout=2026-11-14&group_adults=2&no_rooms=1&selected_currency=INR",
+          "https://www.booking.com/hotel/in/island-house-goa.html?checkin=2026-11-12&checkout=2026-11-14&group_adults=2&no_rooms=1&selected_currency=INR",
+          "https://www.booking.com/city/in/north-goa.html"
+        ],
+        "metrics": {
+          "model_turns": 29,
+          "tool_calls": 30,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 339.46,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "hotel",
+      "task_id": "task_cb96efbfcf094dc1bd5b166ab66db6a2",
+      "session_id": "session_b171539e75024351a299e9bdcf33cc74",
+      "profile_id": "profile_2c4823c84fa2469d9b43b11718f2f5ba",
+      "state": "completed",
+      "seconds_total": 19.55,
+      "seconds_to_running": 1.16,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.16
+        ],
+        [
+          "completed",
+          19.55
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "I found three North Goa hotels rated 8 or higher, but the browser stopped responding, so I could not check them on the page. This is a limited result. Prices are the cheapest room's price for 2 nights for 2 adults in 1 room, 12\u201314 Nov 2026, in INR. They are before taxes and fees. Nothing was booked.\n\n1. Aqua Wave by YogiTree Hotels: \u20b94,560, rating 8.6. Taxes and fees add \u20b9228. https://www.booking.com/hotel/in/aqua-vista.html?checkin=2026-11-12&checkout=2026-11-14&group_adults=2&no_rooms=1&selected_currency=INR\n2. Circle (Anjuna area): \u20b912,800, rating 9.4. Taxes and fees add \u20b9640. https://www.booking.com/hotel/in/circle.html?checkin=2026-11-12&checkout=2026-11-14&group_adults=2&no_rooms=1&selected_currency=INR\n3. Island House Goa (Divar, near North Goa): \u20b913,608, rating 8.9. Taxes and fees add \u20b9680. https://www.booking.com/hotel/in/island-house-goa.html?checkin=2026-11-12&checkout=2026-11-14&group_adults=2&no_rooms=1&selected_currency=INR\n\nLimits on this ranking:\n- Booking.com's \"North Goa\" page (https://www.booking.com/city/in/north-goa.html) listed only 13 properties. Hotels outside that list were not checked.\n- Of the 13, I only priced the five rated 8.0 or higher with the lowest \"from\" prices.\n- Anantya At Anamiva (rated 8.2) cost \u20b919,800 for the stay, so it was not among the cheapest.\n- Comfort Inn Elite (rated 8.7, in Jua) showed no room prices for these dates, so I left it out.\n- Booking.com's results page would not load with a date search, which is why I used the \"North Goa\" page.",
+        "source_urls": [
+          "https://www.booking.com/hotel/in/aqua-vista.html?checkin=2026-11-12&checkout=2026-11-14&group_adults=2&no_rooms=1&selected_currency=INR",
+          "https://www.booking.com/hotel/in/circle.html?checkin=2026-11-12&checkout=2026-11-14&group_adults=2&no_rooms=1&selected_currency=INR",
+          "https://www.booking.com/hotel/in/island-house-goa.html?checkin=2026-11-12&checkout=2026-11-14&group_adults=2&no_rooms=1&selected_currency=INR",
+          "https://www.booking.com/city/in/north-goa.html"
+        ],
+        "metrics": {
+          "model_turns": 2,
+          "tool_calls": 1,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 11.66,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "hotel_new_city",
+      "task_id": "task_97ad8447d0d648e1a66aa0ef4fdf6268",
+      "session_id": "session_ed89d8ec80464b7ab75e983abb3aab91",
+      "profile_id": "profile_2c4823c84fa2469d9b43b11718f2f5ba",
+      "state": "completed",
+      "seconds_total": 57.97,
+      "seconds_to_running": 0.99,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          0.99
+        ],
+        [
+          "completed",
+          57.97
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "Partial, unverified result. Prices are for 2 adults, 1 room, 5\u20137 Dec 2026 (2 nights), in INR. Booking.com's date-search results page returned 0 properties, so I used the Jaipur city page (https://www.booking.com/city/in/jaipur.html?checkin=2026-12-05&checkout=2026-12-07&group_adults=2&no_rooms=1&selected_currency=INR) and fetched each hotel page. I did not read a \"Price for 2 nights\" figure on any of them. I took a per-night price from the page source and doubled it, and I may have picked the wrong figure. I compared only the cheapest hotels shown on that page (Jaipur has 1,666), so the ranking may be incomplete.\n\n1. Cozy Den: about \u20b95,200 (\u20b92,600 per night \u00d7 2), rating 9.3. https://www.booking.com/hotel/in/cozy-den-jaipur-jaipur.html?checkin=2026-12-05&checkout=2026-12-07&group_adults=2&no_rooms=1&selected_currency=INR\n2. Mukam, Boutique Homestay: about \u20b96,274 (\u20b93,137 per night \u00d7 2), rating 9.0. https://www.booking.com/hotel/in/mukam-jaipur.html?checkin=2026-12-05&checkout=2026-12-07&group_adults=2&no_rooms=1&selected_currency=INR\n3. Villa 243: about \u20b97,000 (\u20b93,500 per night \u00d7 2), rating 9.2. https://www.booking.com/hotel/in/villa-243.html?checkin=2026-12-05&checkout=2026-12-07&group_adults=2&no_rooms=1&selected_currency=INR\n\nClose behind: Jai Villa (rated 9.4, about \u20b97,650) and Kailash Heritage (rated 9.2, about \u20b98,100). Rawla Rawatsar (rated 9.4) showed no price for these dates, so I left it out. Check each total on the hotel page before relying on it. Nothing was booked.",
+        "source_urls": [
+          "https://www.booking.com/city/in/jaipur.html?checkin=2026-12-05&checkout=2026-12-07&group_adults=2&no_rooms=1&selected_currency=INR",
+          "https://www.booking.com/hotel/in/cozy-den-jaipur-jaipur.html?checkin=2026-12-05&checkout=2026-12-07&group_adults=2&no_rooms=1&selected_currency=INR",
+          "https://www.booking.com/hotel/in/mukam-jaipur.html?checkin=2026-12-05&checkout=2026-12-07&group_adults=2&no_rooms=1&selected_currency=INR",
+          "https://www.booking.com/hotel/in/villa-243.html?checkin=2026-12-05&checkout=2026-12-07&group_adults=2&no_rooms=1&selected_currency=INR"
+        ],
+        "metrics": {
+          "model_turns": 7,
+          "tool_calls": 6,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 50.0,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "train",
+      "task_id": "task_46a8c7b5f10743a085982b43e7e8151e",
+      "session_id": "session_d39543ad31fb4c6f8b38a6fc53f2767d",
+      "profile_id": "profile_0b4242f0a7264a388890b75a9fdb4072",
+      "state": "completed",
+      "seconds_total": 66.51,
+      "seconds_to_running": 1.08,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.08
+        ],
+        [
+          "completed",
+          66.51
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "I found the three earliest CSMT-to-Pune departures after 06:00, but the fares are for 24 Oct 2026, not 6 Nov 2026. ConfirmTkt ignored the date parameter and showed 24 Oct (Saturday). The timetable is the same on any day these trains run, and all three run daily, including Friday 6 Nov.\n\nI left out 18520 LTT-Visakhapatnam Express (06:55) because it departs from Lokmanya Tilak Terminus (LTT), not CSMT.\n\n1. 12127 Intercity Express: departs CSMT 06:40, arrives Pune 10:00. Chair Car \u20b9395 (waitlist 58, low chance).\n2. 11007 Deccan Express: departs CSMT 07:00, arrives Pune 11:05. Chair Car \u20b9345 (waitlist 49, low chance).\n3. 11301 Udyan Express: departs CSMT 07:55, arrives Pune 11:40. 3A \u20b9520 (waitlist 28, 45% chance). No Chair Car class.\n\nSource: https://www.confirmtkt.com/trains/mumbai-to-pune-train-tickets\n\nI did not book anything. To see fares and availability for 6 Nov, use the date picker on the site's search form.",
+        "source_urls": [
+          "https://www.confirmtkt.com/trains/mumbai-to-pune-train-tickets"
+        ],
+        "metrics": {
+          "model_turns": 12,
+          "tool_calls": 10,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 58.79,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "train",
+      "task_id": "task_32d4cbc671144c6092f4ca34671507f0",
+      "session_id": "session_9b04c7cd39ed4051837ff54e36c4bc56",
+      "profile_id": "profile_0b4242f0a7264a388890b75a9fdb4072",
+      "state": "completed",
+      "seconds_total": 34.37,
+      "seconds_to_running": 0.88,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          0.88
+        ],
+        [
+          "completed",
+          34.37
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "These are the 3 earliest CSMT-to-Pune departures after 06:00. I'm not sure the fares are for 6 Nov 2026. The page URL had 06-11-2026, but I couldn't confirm which date the results show. The date strip started at Fri 23 Oct. Check the date on the page before relying on the fares or availability.\n\n1. 12127 Intercity Exp: departs CSMT 06:40, arrives Pune 10:00. Chair Car \u20b9395 (AVL 11).\n2. 11007 Deccan Express: departs CSMT 07:00, arrives Pune 11:05. Chair Car \u20b9345 (AVL 1).\n3. 11301 Udyan Express: departs CSMT 07:55, arrives Pune 11:40. 3A \u20b9520 (AVL 25). It has no Chair Car class.\n\nI left out 18520 Ltt Vskp Express (06:55) because it departs from LTT, not CSMT.\n\nSource: https://www.confirmtkt.com/rbooking/trains/from/CSMT/to/PUNE/06-11-2026\n\nI did not book anything.",
+        "source_urls": [
+          "https://www.confirmtkt.com/rbooking/trains/from/CSMT/to/PUNE/06-11-2026"
+        ],
+        "metrics": {
+          "model_turns": 6,
+          "tool_calls": 5,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 26.92,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "train_new_route",
+      "task_id": "task_3089bb80d1674192bef6d3400ab71e71",
+      "session_id": "session_6e94ee8f42b2400e90443da7cb82bce6",
+      "profile_id": "profile_0b4242f0a7264a388890b75a9fdb4072",
+      "state": "completed",
+      "seconds_total": 45.05,
+      "seconds_to_running": 1.01,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.01
+        ],
+        [
+          "completed",
+          45.05
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "Only two trains depart New Delhi (NDLS) after 06:00 in the results, so I could not fill three from NDLS alone. I could not confirm the fares are for 9 Dec 2026. The page's date strip started at 25 Nov and the date was only in the URL.\n\nNDLS departures after 06:00:\n1. 12015 Ajmer Shatabdi: departs 06:10, arrives Jaipur 10:35. Chair Car \u20b9705 (AVL 959).\n2. 12958 Swarna Jayanti Rajdhani: departs 19:55, arrives Jaipur 23:45. 3A \u20b91075 (AVL 46). No Chair Car class shown.\n\nNext earliest after 06:00 from other Delhi stations:\n- 14662 Shalimar Malani Express: departs Delhi (DLI) 11:00, arrives Jaipur 17:35. 3A \u20b9575 (WL 2).\n- 14321 Bhuj Express: departs DLI 11:50, arrives Jaipur 17:50. 3A \u20b9575 (AVL 2).\n\nSource: https://www.confirmtkt.com/rbooking/trains/from/NDLS/to/JP/09-12-2026\nI did not book anything.",
+        "source_urls": [
+          "https://www.confirmtkt.com/rbooking/trains/from/NDLS/to/JP/09-12-2026"
+        ],
+        "metrics": {
+          "model_turns": 4,
+          "tool_calls": 3,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 22.89,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    }
+  ]
+}

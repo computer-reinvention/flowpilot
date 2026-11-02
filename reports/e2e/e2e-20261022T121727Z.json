@@ -1,0 +1,55 @@
+{
+  "base_url": "https://flowpilot.technology",
+  "results": [
+    {
+      "name": "cab_booking",
+      "task_id": "task_5ee8fb195417473da37f49418ac0e9fc",
+      "session_id": "session_a91faf5e11bb4f0ebe95c474601a44c6",
+      "profile_id": "profile_1bc200d24e8c4f03b587120bac2c8fe6",
+      "state": "completed",
+      "seconds_total": 205.77,
+      "seconds_to_running": 1.42,
+      "states": [
+        [
+          "running",
+          1.42
+        ],
+        [
+          "waiting_for_confirmation",
+          201.96
+        ],
+        [
+          "running",
+          203.0
+        ],
+        [
+          "completed",
+          205.77
+        ]
+      ],
+      "interactions": [
+        {
+          "t": 201.96,
+          "interaction": "confirmation",
+          "message": "Savaari cab, Mumbai Airport T2 \u2192 Bandra Kurla Complex, 23 Oct 2026 10:00 AM. Options: Wagon R/Swift \u20b9615 (+\u20b931 taxes = \u20b9646) [cheapest]; Dzire/Etios \u20b9628 (+\u20b931); Ertiga \u20b9917 (+\u20b946); Toyota Innova \u20b91,101 (+\u20b955); Innova Crysta \u20b91,112 (+\u20b956). Proceed to select the cheapest (Wagon R/Swift, ~\u20b9646) and continue toward booking?",
+          "fields": []
+        }
+      ],
+      "result": {
+        "answer": "Not booked: you declined this proposal, so FlowPilot stopped without taking any further action.\n\nSavaari cab, Mumbai Airport T2 \u2192 Bandra Kurla Complex, 23 Oct 2026 10:00 AM. Options: Wagon R/Swift \u20b9615 (+\u20b931 taxes = \u20b9646) [cheapest]; Dzire/Etios \u20b9628 (+\u20b931); Ertiga \u20b9917 (+\u20b946); Toyota Innova \u20b91,101 (+\u20b955); Innova Crysta \u20b91,112 (+\u20b956). Proceed to select the cheapest (Wagon R/Swift, ~\u20b9646) and continue toward booking?",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 0,
+          "tool_calls": 0,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 0.0,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    }
+  ]
+}

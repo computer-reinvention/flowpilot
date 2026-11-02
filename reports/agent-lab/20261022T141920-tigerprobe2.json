@@ -1,0 +1,31 @@
+{
+  "task": "Open https://en.wikipedia.org/wiki/Tiger and report the article's first sentence and its URL.",
+  "user": "tigerprobe2",
+  "outcome": {
+    "state": "completed",
+    "seconds": 13.47,
+    "answer": "The first sentence of the article is: \"The tiger (Panthera tigris) is a large cat and a member of the genus Panthera native to Asia.\"\n\nURL: https://en.wikipedia.org/wiki/Tiger",
+    "metrics": {
+      "model_turns": 4,
+      "tool_calls": 3,
+      "reused": 0,
+      "saved": 0,
+      "replay_failures": 0,
+      "human_seconds": 0.0,
+      "wall_seconds": 13.47,
+      "agent_seconds": 13.47
+    },
+    "secrets": []
+  },
+  "log": [
+    "[    0.4s] browser ready in 0.4s",
+    "[    3.7s] \u2192 navigate {\"url\": \"https://en.wikipedia.org/wiki/Tiger\"}",
+    "[    4.3s]   \u2717 navigate TaskFault: unavailable (0.6s)",
+    "[    5.2s] \u2192 observe {}",
+    "[    6.4s]   \u2190 observe {\"url\": \"https://en.wikipedia.org/wiki/Tiger\", \"readiness\": \"ready\", \"elements\": \"Part 1 of 11; call observe with part=1 for the next part, or find=\\\"text\\\" to jump to it.\\nr0: A Jump to content disabled=False\\nr1: INPUT vector-main-menu-dropdown-checkbox checkbox button Main menu  disabled=False\\nr2: A  disabled=False\\nr3: DIV p-search search Search Search disabled=False\\nr4: INPUT searchInput search search Search Wikipedia  disabled=False\\nr5: BUTTON Search disabled=False\\nr6: A Donate disabled=False\\nr7: A Create account disabled=False\\nr8: A Log in disabled=False\\nr9: BUTTON Hide Contents hide disabled=False\\nr10: A (Top) disabled=False\\nr11: A 1 Etymology disabled=False\\nr12: A 2 Taxonomy disabled=False\\nr13: BUTTON Toggle Taxonomy subsection disabled=False\\nr14: A 3 Description disabled=False\\nr15: BUTTON Toggle Description subsection disabled=False\\nr16: A 4 Distribution and habit\u2026 (+23365) (1.2s)",
+    "[    9.7s] \u2192 complete {\"verify\": \"async () => location.href.includes('wikipedia.org/wiki/Tiger')\", \"summary\": \"The first sentence of the article is: \\\"The tiger (Panthera tigris) is a large cat and a member of the genus Panthera native to Asia.\\\"\\n\\nURL: https://en.wikipedia.org/wiki/Tiger\"}",
+    "[   12.2s]   \u2190 complete {\"verified\": true} (2.4s)",
+    "[   13.9s] COMPLETED in 13.47s metrics={\"model_turns\": 4, \"tool_calls\": 3, \"reused\": 0, \"saved\": 0, \"replay_failures\": 0, \"human_seconds\": 0.0, \"wall_seconds\": 13.47, \"agent_seconds\": 13.47}",
+    "[   13.9s] ANSWER:\nThe first sentence of the article is: \"The tiger (Panthera tigris) is a large cat and a member of the genus Panthera native to Asia.\"\n\nURL: https://en.wikipedia.org/wiki/Tiger"
+  ]
+}

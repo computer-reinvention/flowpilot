@@ -1,0 +1,158 @@
+{
+  "base_url": "https://flowpilot.technology",
+  "results": [
+    {
+      "name": "cab",
+      "task_id": "task_7a38e4fa0b20423584f1600eb3527828",
+      "session_id": "session_ba3a0eeb84154858a93b9c53a224dd13",
+      "profile_id": "profile_8c761bc6e9b040c48b6d83b0d6b2806e",
+      "state": "completed",
+      "seconds_total": 140.78,
+      "seconds_to_running": 1.4,
+      "seconds_to_first_pause": 137.59,
+      "states": [
+        [
+          "running",
+          1.4
+        ],
+        [
+          "waiting_for_confirmation",
+          137.59
+        ],
+        [
+          "running",
+          138.57
+        ],
+        [
+          "completed",
+          140.78
+        ]
+      ],
+      "interactions": [
+        {
+          "t": 137.59,
+          "interaction": "confirmation",
+          "message": "Cheapest option for Mumbai T2 airport \u2192 Bandra Kurla Complex, 23-10-2026 10:00: Wagon R/Swift (4-seater AC, 8 km incl.) \u20b9615 + \u20b931 charges/taxes (~\u20b9646). Proceed to select this car and continue booking?",
+          "fields": []
+        }
+      ],
+      "result": {
+        "answer": "Not booked: you declined this proposal, so FlowPilot stopped without taking any further action.\n\nCheapest option for Mumbai T2 airport \u2192 Bandra Kurla Complex, 23-10-2026 10:00: Wagon R/Swift (4-seater AC, 8 km incl.) \u20b9615 + \u20b931 charges/taxes (~\u20b9646). Proceed to select this car and continue booking?",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 17,
+          "tool_calls": 18,
+          "reused": 0,
+          "saved": 1,
+          "replay_failures": 0,
+          "wall_seconds": 132.06,
+          "human_seconds": 0.43
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "cab",
+      "task_id": "task_ae0c822823374f788ab11da78d519358",
+      "session_id": "session_76c761020c164fd8b4cf0ed4f3117321",
+      "profile_id": "profile_8c761bc6e9b040c48b6d83b0d6b2806e",
+      "state": "completed",
+      "seconds_total": 61.11,
+      "seconds_to_running": 0.89,
+      "seconds_to_first_pause": 58.49,
+      "states": [
+        [
+          "running",
+          0.89
+        ],
+        [
+          "waiting_for_confirmation",
+          58.49
+        ],
+        [
+          "running",
+          59.5
+        ],
+        [
+          "completed",
+          61.11
+        ]
+      ],
+      "interactions": [
+        {
+          "t": 58.49,
+          "interaction": "confirmation",
+          "message": "Cheapest: Wagon R/Swift (4 seater) \u20b9615 + \u20b931 taxes (~\u20b9646), for T2 airport \u2192 BKC, 23-10-2026 10:00. Others: Dzire/Etios \u20b9628, Ertiga \u20b9917, Innova \u20b91,101, Innova Crysta \u20b91,112 (+taxes). Book the cheapest?",
+          "fields": []
+        }
+      ],
+      "result": {
+        "answer": "Not booked: you declined this proposal, so FlowPilot stopped without taking any further action.\n\nCheapest: Wagon R/Swift (4 seater) \u20b9615 + \u20b931 taxes (~\u20b9646), for T2 airport \u2192 BKC, 23-10-2026 10:00. Others: Dzire/Etios \u20b9628, Ertiga \u20b9917, Innova \u20b91,101, Innova Crysta \u20b91,112 (+taxes). Book the cheapest?",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 2,
+          "tool_calls": 2,
+          "reused": 1,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 53.87,
+          "human_seconds": 0.54
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "cab_new_trip",
+      "task_id": "task_7e0e44180bde4220b30aacb8f1861035",
+      "session_id": "session_0296c49e25ac432faa58237f039ab348",
+      "profile_id": "profile_8c761bc6e9b040c48b6d83b0d6b2806e",
+      "state": "completed",
+      "seconds_total": 183.82,
+      "seconds_to_running": 1.0,
+      "seconds_to_first_pause": 180.96,
+      "states": [
+        [
+          "running",
+          1.0
+        ],
+        [
+          "waiting_for_confirmation",
+          180.96
+        ],
+        [
+          "running",
+          181.93
+        ],
+        [
+          "completed",
+          183.82
+        ]
+      ],
+      "interactions": [
+        {
+          "t": 180.96,
+          "interaction": "confirmation",
+          "message": "Cheapest: Wagon R/Swift (4-seater AC) \u20b9677 + \u20b934 taxes (\u2248\u20b9711), T2 airport \u2192 Powai, 24-10-2026 14:30. Proceed to select it and continue booking?",
+          "fields": []
+        }
+      ],
+      "result": {
+        "answer": "Not booked: you declined this proposal, so FlowPilot stopped without taking any further action.\n\nCheapest: Wagon R/Swift (4-seater AC) \u20b9677 + \u20b934 taxes (\u2248\u20b9711), T2 airport \u2192 Powai, 24-10-2026 14:30. Proceed to select it and continue booking?",
+        "source_urls": [],
+        "metrics": {
+          "model_turns": 11,
+          "tool_calls": 11,
+          "reused": 0,
+          "saved": 1,
+          "replay_failures": 1,
+          "wall_seconds": 176.38,
+          "human_seconds": 23.26
+        }
+      },
+      "error": null,
+      "run": "warm"
+    }
+  ]
+}

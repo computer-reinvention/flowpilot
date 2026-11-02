@@ -1,0 +1,42 @@
+{
+  "base_url": "https://flowpilot.technology",
+  "results": [
+    {
+      "name": "wiki_first_sentence",
+      "task_id": "task_d6d998cb95614708acbf09b8a3b963f1",
+      "session_id": "session_a86d96d7ac934c88b1a1cc61b091629f",
+      "profile_id": "profile_f2cbeec99e8149bc860b9222188dd3e8",
+      "state": "completed",
+      "seconds_total": 26.57,
+      "seconds_to_running": 1.31,
+      "states": [
+        [
+          "running",
+          1.31
+        ],
+        [
+          "completed",
+          26.57
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The first sentence of the Tiger article is: \"The tiger (Panthera tigris) is a large cat and a member of the genus Panthera native to Asia.\"\n\nURL: https://en.wikipedia.org/wiki/Tiger",
+        "source_urls": [
+          "https://en.wikipedia.org/wiki/Tiger"
+        ],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 18.71,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    }
+  ]
+}

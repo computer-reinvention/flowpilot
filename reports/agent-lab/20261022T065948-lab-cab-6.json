@@ -1,0 +1,32 @@
+{
+  "task": "Book a cab from Chhatrapati Shivaji Maharaj International Airport Terminal 2, Mumbai to Bandra Kurla Complex, Mumbai, on 23 October 2026 at 10:00. Use MakeMyTrip Cabs (airport transfer). Find the available cab options with fares, choose the cheapest, and ask me to confirm before booking anything.",
+  "user": "lab-cab-6",
+  "outcome": {
+    "state": "failed",
+    "error": "RuntimeError: Pi ended without verified completion"
+  },
+  "log": [
+    "[    0.4s] browser ready in 0.4s",
+    "[    1.9s] \u2192 observe {}",
+    "[    3.0s]   \u2190 observe {\"url\": \"about:blank\", \"readiness\": \"ready\", \"elements\": \"\\nPage text (bounded; form values omitted):\\n\"} (1.0s)",
+    "[    4.5s] \u2192 navigate {\"url\": \"https://www.makemytrip.com/cabs/\"}",
+    "[    4.6s]   \u2717 navigate RuntimeError: Navigation failed: net::ERR_HTTP2_PROTOCOL_ERROR (0.1s)",
+    "[    6.1s] \u2192 navigate {\"url\": \"https://www.makemytrip.com/cabs/airport-cabs/\"}",
+    "[    6.2s]   \u2717 navigate RuntimeError: Navigation failed: net::ERR_HTTP2_PROTOCOL_ERROR (0.0s)",
+    "[    8.6s] \u2192 navigate {\"url\": \"https://www.makemytrip.com/\"}",
+    "[    8.6s]   \u2717 navigate RuntimeError: Navigation failed: net::ERR_HTTP2_PROTOCOL_ERROR (0.0s)",
+    "[   10.9s] \u2192 navigate {\"url\": \"http://www.makemytrip.com/cabs/\"}",
+    "[   70.9s]   \u2717 navigate TimeoutError: CDP method 'Page.navigate' did not respond within 60s. The browser may be unresponsive (silent WebSocket \u2014 container crashed or proxy lost upstream). (60.0s)",
+    "[   72.5s] \u2192 observe {}",
+    "[   82.5s]   \u2717 observe TaskFault: readiness_timeout (10.0s)",
+    "[   84.2s] \u2192 navigate {\"url\": \"https://html.duckduckgo.com/html/?q=makemytrip+cabs+airport+transfer+mumbai\"}",
+    "[  144.2s]   \u2717 navigate TimeoutError: CDP method 'Page.enable' did not respond within 60s. The browser may be unresponsive (silent WebSocket \u2014 container crashed or proxy lost upstream). (60.0s)",
+    "[  145.6s] \u2192 observe {}",
+    "[  155.6s]   \u2717 observe TaskFault: readiness_timeout (10.0s)",
+    "[  158.6s] \u2192 complete {\"verify\": \"async () => true\", \"summary\": \"I couldn't get cab options or fares, and I didn't book anything. Every attempt to open MakeMyTrip (makemytrip.com/cabs/, the airport-cabs page and the homepage) failed with net::ERR_HTTP2_PROTOCOL_ERROR. The browser then stopped responding, and a DuckDuckGo search I tried as a fallback also timed out. I haven't found the cheapest cab for CSMIA Terminal 2 to BKC on 23 Oct 2026 at 10:00. Once the browser is responsive again, I can retry the search and ask you to confirm before booking.\"}",
+    "[  168.6s]   \u2717 complete TaskFault: readiness_timeout (10.0s)",
+    "[  171.3s] \u2192 complete {\"verify\": \"async () => true\", \"summary\": \"I couldn't get cab options or fares, and I didn't book anything. Every attempt to open MakeMyTrip (makemytrip.com/cabs/, the airport-cabs page and the homepage) failed with net::ERR_HTTP2_PROTOCOL_ERROR. The browser then stopped responding, and a DuckDuckGo search I tried as a fallback also timed out. I haven't found the cheapest cab for CSMIA Terminal 2 to BKC on 23 Oct 2026 at 10:00. Once the browser is responsive again, I can retry the search and ask you to confirm before booking.\"}",
+    "[  181.3s]   \u2717 complete TaskFault: readiness_timeout (10.0s)",
+    "[  187.0s] FAILED RuntimeError: Pi ended without verified completion"
+  ]
+}

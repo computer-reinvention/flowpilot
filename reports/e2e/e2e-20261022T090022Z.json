@@ -1,0 +1,227 @@
+{
+  "base_url": "https://flowpilot.technology",
+  "results": [
+    {
+      "name": "wiki_first_sentence",
+      "task_id": "task_563331d04c9a40499795646a8a3750ad",
+      "session_id": "session_fbbe49c4e62b41c4adfb7365f4ba4cdd",
+      "profile_id": "profile_7b4d12f9f9ab46f8b0462bf273f3ddff",
+      "state": "completed",
+      "seconds_total": 25.5,
+      "seconds_to_running": 1.28,
+      "states": [
+        [
+          "running",
+          1.28
+        ],
+        [
+          "completed",
+          25.5
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "First sentence of the article: \"The tiger (Panthera tigris) is a large cat and a member of the genus Panthera native to Asia.\"\n\nURL: https://en.wikipedia.org/wiki/Tiger",
+        "source_urls": [
+          "https://en.wikipedia.org/wiki/Tiger"
+        ],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 16.78,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "wiki_first_sentence",
+      "task_id": "task_d4e6fe09935143b1846537b8a2da81cc",
+      "session_id": "session_16c5cc5c66244a5d9e2ed2c9d59619f1",
+      "profile_id": "profile_7b4d12f9f9ab46f8b0462bf273f3ddff",
+      "state": "completed",
+      "seconds_total": 22.82,
+      "seconds_to_running": 0.96,
+      "states": [
+        [
+          "running",
+          0.96
+        ],
+        [
+          "completed",
+          22.82
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "First sentence of the article: \"The tiger (Panthera tigris) is a large cat and a member of the genus Panthera native to Asia.\"\n\nURL: https://en.wikipedia.org/wiki/Tiger",
+        "source_urls": [
+          "https://en.wikipedia.org/wiki/Tiger"
+        ],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 16.33,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "wiki_deep_section",
+      "task_id": "task_02cfbcbe4a1d4ee9b185f080168e3f97",
+      "session_id": "session_23843c0486014d3595b73290f2bc9f5f",
+      "profile_id": "profile_9700ea8af09344a19e2117f2dbfe2099",
+      "state": "completed",
+      "seconds_total": 45.86,
+      "seconds_to_running": 1.9,
+      "states": [
+        [
+          "running",
+          1.9
+        ],
+        [
+          "completed",
+          45.86
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The Conservation section of the Tiger article gives its estimate of the wild tiger population as a table, not as a sentence. The table is titled \"Global wild tiger population\" and lists 2022 estimates by country:\n\n- India: 3,167\u20133,682\n- Russia: 573\u2013600\n- Indonesia: 393\n- Nepal: 316\u2013355\n- Thailand: 148\u2013189\n- Malaysia: <150\n- Bhutan: 131\n- Bangladesh: 118\u2013122\n- China: >60\n- Myanmar: 28\n- **Total: 5,638\u20135,899**\n\nThe Conservation section's prose covers legal protections, national action plans, anti-poaching efforts, wildlife corridors and reintroduction. It does not state a global population figure.\n\nThe \"Threats\" section, just before Conservation, gives a different global estimate: \"The tiger has been listed as Endangered on the IUCN Red List since 1986 and the global tiger population is thought to have continuously declined from an estimated population of 5,000\u20138,262 tigers in the late 1990s to 3,726\u20135,578 individuals estimated as of 2022.\"\n\nThe article's two 2022 figures differ: the Conservation table totals 5,638\u20135,899, and the Threats text gives 3,726\u20135,578.\n\nURL: https://en.wikipedia.org/wiki/Tiger",
+        "source_urls": [
+          "https://en.wikipedia.org/wiki/Tiger"
+        ],
+        "metrics": {
+          "model_turns": 5,
+          "tool_calls": 4,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 37.54,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "flight_search",
+      "task_id": "task_af7cdf325cd54852b3f5bc4a02842a9e",
+      "session_id": "session_d7d11d860fdb4785a0f131c6d9574a5f",
+      "profile_id": "profile_91660a3ca1aa4f58a6d187a417e7eb33",
+      "state": "completed",
+      "seconds_total": 47.87,
+      "seconds_to_running": 0.96,
+      "states": [
+        [
+          "running",
+          0.96
+        ],
+        [
+          "completed",
+          47.87
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The 3 cheapest nonstop economy flights from Mumbai (BOM) to New Delhi (DEL) on Thu, 12 Nov 2026 (one-way, 1 adult) are below. I read them from Google Flights with the Nonstop filter on, and prices are in INR including taxes and fees.\n\n1. Akasa Air: departs 1:00 PM, arrives 3:25 PM, 2 hr 25 min, \u20b96,886.\n2. Akasa Air: departs 6:35 PM, arrives 9:00 PM, 2 hr 25 min, \u20b97,115.\n3. SpiceJet: departs 11:20 PM, arrives 1:40 AM on 13 Nov, 2 hr 20 min, \u20b97,118.\n\nThe next cheapest was Akasa Air at 8:55 PM for \u20b97,353. Nothing was booked.\n\nSource: https://www.google.com/travel/flights?q=Flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20one%20way%20economy%201%20adult%20nonstop&curr=INR&hl=en",
+        "source_urls": [
+          "https://www.google.com/travel/flights?q=Flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20one%20way%20economy%201%20adult%20nonstop&curr=INR&hl=en"
+        ],
+        "metrics": {
+          "model_turns": 4,
+          "tool_calls": 3,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 40.39,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "flight_search",
+      "task_id": "task_b1e70a5bd9c04db38430c16ee7e66c16",
+      "session_id": "session_d371a5febfb447f49459967b8f2935ad",
+      "profile_id": "profile_91660a3ca1aa4f58a6d187a417e7eb33",
+      "state": "completed",
+      "seconds_total": 40.26,
+      "seconds_to_running": 0.98,
+      "states": [
+        [
+          "running",
+          0.98
+        ],
+        [
+          "completed",
+          40.26
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The 3 cheapest nonstop economy flights from Mumbai (BOM) to New Delhi (DEL) on Thu, 12 Nov 2026 (one-way, 1 adult) are below. I read them from Google Flights with the Nonstop filter on. Prices are in INR and include taxes and fees.\n\n1. Akasa Air: departs 1:00 PM, arrives 3:25 PM, \u20b96,886.\n2. Akasa Air: departs 6:35 PM, arrives 9:00 PM, \u20b97,115.\n3. SpiceJet: departs 11:20 PM, arrives 1:40 AM on 13 Nov, \u20b97,118.\n\nThe next cheapest was Akasa Air at 8:55 PM for \u20b97,353. Nothing was booked.\n\nSource: https://www.google.com/travel/flights?q=Flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20one%20way%20economy%201%20adult%20nonstop&curr=INR&hl=en",
+        "source_urls": [
+          "https://www.google.com/travel/flights?q=Flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20one%20way%20economy%201%20adult%20nonstop&curr=INR&hl=en"
+        ],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 31.1,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "flight_search",
+      "task_id": "task_3955946ff5244b13bfd539ac8699a4a4",
+      "session_id": "session_e7e1f25fe38c44e78f483f7dc2be4f30",
+      "profile_id": "profile_91660a3ca1aa4f58a6d187a417e7eb33",
+      "state": "completed",
+      "seconds_total": 43.28,
+      "seconds_to_running": 1.0,
+      "states": [
+        [
+          "running",
+          1.0
+        ],
+        [
+          "completed",
+          43.28
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The 3 cheapest nonstop economy flights from Mumbai (BOM) to New Delhi (DEL) on Thu, 12 Nov 2026 (one-way, 1 adult) are below. I read them from Google Flights with the Nonstop filter on. Prices are in INR and include taxes and fees.\n\n1. Akasa Air: departs 1:00 PM, arrives 3:25 PM, \u20b96,886.\n2. Akasa Air: departs 6:35 PM, arrives 9:00 PM, \u20b97,115.\n3. SpiceJet: departs 11:20 PM, arrives 1:40 AM on 13 Nov, \u20b97,118.\n\nThe next cheapest was Akasa Air at 8:55 PM for \u20b97,353. Nothing was booked.\n\nSource: https://www.google.com/travel/flights?q=Flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20one%20way%20economy%201%20adult%20nonstop&curr=INR&hl=en",
+        "source_urls": [
+          "https://www.google.com/travel/flights?q=Flights%20from%20BOM%20to%20DEL%20on%202026-11-12%20one%20way%20economy%201%20adult%20nonstop&curr=INR&hl=en"
+        ],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 34.34,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    }
+  ]
+}

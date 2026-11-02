@@ -1,0 +1,119 @@
+{
+  "base_url": "https://flowpilot.technology",
+  "results": [
+    {
+      "name": "train",
+      "task_id": "task_12dc17319f574ba6a0f81c8a842b3ecb",
+      "session_id": "session_6b3458f5256b4e36810af9730f60557b",
+      "profile_id": "profile_8364dafe490d4875b884538ce57dda80",
+      "state": "completed",
+      "seconds_total": 83.74,
+      "seconds_to_running": 2.22,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          2.22
+        ],
+        [
+          "completed",
+          83.74
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The three earliest trains leaving Mumbai CSMT for Pune Jn after 06:00 on 6 Nov 2026 are below. I did not book anything.\n\n1. **12127 Intercity Exp**: departs CSMT 06:40, arrives Pune 10:00. Chair Car (CC) fare is \u20b9395 (AVL 11). It has no 3A.\n2. **11007 Deccan Express**: departs CSMT 07:00, arrives Pune 11:05. Chair Car (CC) fare is \u20b9345 (AVL 1). It has no 3A.\n3. **11301 Udyan Express**: departs CSMT 07:55, arrives Pune 11:40. 3A fare is \u20b9520 (AVL 25). It has no Chair Car.\n\nSkipped: 18520 Ltt Vskp Express (06:55) leaves from LTT, not CSMT. Indrayani Exp 22105 leaves CSMT at 05:40, before 06:00.\n\nSource: https://www.confirmtkt.com/rbooking/trains/from/CSMT/to/PUNE/06-11-2026",
+        "source_urls": [
+          "https://www.confirmtkt.com/rbooking/trains/from/CSMT/to/PUNE/06-11-2026"
+        ],
+        "metrics": {
+          "model_turns": 13,
+          "tool_calls": 12,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 68.13,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    },
+    {
+      "name": "train",
+      "task_id": "task_3a8d54d3458d401380157a981a7bf4b4",
+      "session_id": "session_d07e81c8eb6847be985ae6ca042cab60",
+      "profile_id": "profile_8364dafe490d4875b884538ce57dda80",
+      "state": "completed",
+      "seconds_total": 21.99,
+      "seconds_to_running": 1.02,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.02
+        ],
+        [
+          "completed",
+          21.99
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "The three earliest trains leaving Mumbai CSMT for Pune Jn after 06:00 on 6 Nov 2026 are below. I did not book anything.\n1. 12127 Intercity Exp: departs 06:40, arrives 10:00. Chair Car (CC) \u20b9395 (AVL 11). No 3A shown.\n2. 11007 Deccan Express: departs 07:00, arrives 11:05. Chair Car (CC) \u20b9345 (AVL 1). No 3A shown.\n3. 11301 Udyan Express: departs 07:55, arrives 11:40. 3A \u20b9520 (AVL 25). No Chair Car shown.\nI skipped 18520 Ltt Vskp Express (06:55) because it leaves from LTT, not CSMT.\nSource: https://www.confirmtkt.com/rbooking/trains/from/CSMT/to/PUNE/06-11-2026",
+        "source_urls": [
+          "https://www.confirmtkt.com/rbooking/trains/from/CSMT/to/PUNE/06-11-2026"
+        ],
+        "metrics": {
+          "model_turns": 3,
+          "tool_calls": 2,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 15.14,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    },
+    {
+      "name": "train_new_route",
+      "task_id": "task_408ffb563ce445849cf521053ce22a58",
+      "session_id": "session_ba4890153ed2474e9f1ff7c52ff23c08",
+      "profile_id": "profile_8364dafe490d4875b884538ce57dda80",
+      "state": "completed",
+      "seconds_total": 65.21,
+      "seconds_to_running": 0.92,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          0.92
+        ],
+        [
+          "completed",
+          65.21
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "I booked nothing. Only two of the 19 trains found leave from New Delhi (NDLS) itself after 06:00 on 9 Dec 2026. The page lists all Delhi-area stations together, so the other trains leave from Delhi Junction (DLI), Delhi Cantt (DEC) or Delhi Sarai Rohilla (DEE).\n\nFrom New Delhi (NDLS) only:\n1. 12015 Ajmer Shatabdi: departs 06:10, arrives Jaipur 10:35. Chair Car (CC) \u20b9705 (AVL 959). No 3A.\n2. 12958 Swran J Rajdhani: departs 19:55, arrives 23:45. 3A \u20b91075 (AVL 46). No Chair Car.\n\nThree earliest after 06:00 from any Delhi station:\n1. 12015 Ajmer Shatabdi: departs NDLS 06:10, arrives 10:35. Chair Car (CC) \u20b9705.\n2. 14662 Shalimar Malani: departs DLI 11:00, arrives 17:35. 3A \u20b9575 (WL 2). No Chair Car.\n3. 14321 Be Bhuj Express: departs DLI 11:50, arrives 17:50. 3A \u20b9575 (AVL 2). No Chair Car.\n\nSource: https://www.confirmtkt.com/rbooking/trains/from/NDLS/to/JP/09-12-2026",
+        "source_urls": [
+          "https://www.confirmtkt.com/rbooking/trains/from/NDLS/to/JP/09-12-2026"
+        ],
+        "metrics": {
+          "model_turns": 6,
+          "tool_calls": 4,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 28.44,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "warm"
+    }
+  ]
+}

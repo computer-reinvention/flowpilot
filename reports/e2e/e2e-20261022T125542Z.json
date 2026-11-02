@@ -1,0 +1,44 @@
+{
+  "base_url": "https://flowpilot.technology",
+  "results": [
+    {
+      "name": "cab",
+      "admission_status": 503,
+      "error": {
+        "error": {
+          "code": "unavailable",
+          "message": "Browser tasks are unavailable",
+          "retryable": true,
+          "retry_after_seconds": 5
+        }
+      },
+      "run": "cold"
+    },
+    {
+      "name": "cab",
+      "admission_status": 503,
+      "error": {
+        "error": {
+          "code": "unavailable",
+          "message": "Browser tasks are unavailable",
+          "retryable": true,
+          "retry_after_seconds": 5
+        }
+      },
+      "run": "warm"
+    },
+    {
+      "name": "cab_new_trip",
+      "admission_status": 503,
+      "error": {
+        "error": {
+          "code": "unavailable",
+          "message": "Browser tasks are unavailable",
+          "retryable": true,
+          "retry_after_seconds": 5
+        }
+      },
+      "run": "warm"
+    }
+  ]
+}

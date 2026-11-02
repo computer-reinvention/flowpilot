@@ -1,0 +1,43 @@
+{
+  "base_url": "https://flowpilot.technology",
+  "results": [
+    {
+      "name": "cab",
+      "task_id": "task_3ad72e19e17048e7acb8432f5d89d0da",
+      "session_id": "session_c66d3308c3354794ad22423ca66d0ffd",
+      "profile_id": "profile_d29a8a3bc5f44bbda5f06a8e216fa467",
+      "state": "completed",
+      "seconds_total": 43.87,
+      "seconds_to_running": 1.23,
+      "seconds_to_first_pause": null,
+      "states": [
+        [
+          "running",
+          1.23
+        ],
+        [
+          "completed",
+          43.87
+        ]
+      ],
+      "interactions": [],
+      "result": {
+        "answer": "I couldn't get cab fares, so nothing is booked and there is no cheapest option to confirm. I opened Uber's ride page (https://www.uber.com/in/en/ride/), the only site I tried. It defaulted to Bangalore, and I couldn't enter the Mumbai airport Terminal 2 and BKC locations. Uber also generally asks you to log in before it shows fares for a scheduled ride. I didn't try any other site. If you log in to Uber or name another cab service, I can retry the search for 2026-10-23 at 10:00. I'll ask you to confirm before booking anything.",
+        "source_urls": [
+          "https://www.uber.com/in/en/ride/"
+        ],
+        "metrics": {
+          "model_turns": 7,
+          "tool_calls": 6,
+          "reused": 0,
+          "saved": 0,
+          "replay_failures": 0,
+          "wall_seconds": 36.48,
+          "human_seconds": 0.0
+        }
+      },
+      "error": null,
+      "run": "cold"
+    }
+  ]
+}

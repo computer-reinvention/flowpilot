@@ -1,0 +1,31 @@
+== cab [cold]
+  [    1.4s] running "Starting private browser"
+  [  137.6s] waiting_for_confirmation {}
+  [  138.6s] running "Decision received; proposed submission was not authorized"
+  [  140.8s] completed {}
+   -> completed in 140.78s (first pause at 137.59s)
+   Not booked: you declined this proposal, so FlowPilot stopped without taking any further action.
+
+Cheapest option for Mumbai T2 airport → Bandra Kurla Complex, 23-10-2026 10:00: Wagon R/Swift (4-seater AC, 8 km incl.) ₹615 + ₹31 charges/taxes (~₹646). Proceed to select this car and continue booking?
+
+== cab [warm]
+  [    0.9s] running "Starting private browser"
+  [   58.5s] waiting_for_confirmation {}
+  [   59.5s] running "Decision received; proposed submission was not authorized"
+  [   61.1s] completed {}
+   -> completed in 61.11s (first pause at 58.49s)
+   Not booked: you declined this proposal, so FlowPilot stopped without taking any further action.
+
+Cheapest: Wagon R/Swift (4 seater) ₹615 + ₹31 taxes (~₹646), for T2 airport → BKC, 23-10-2026 10:00. Others: Dzire/Etios ₹628, Ertiga ₹917, Innova ₹1,101, Innova Crysta ₹1,112 (+taxes). Book the cheapest?
+
+== cab_new_trip [warm]
+  [    1.0s] running "Starting private browser"
+  [  181.0s] waiting_for_confirmation {}
+  [  181.9s] running "Decision received; proposed submission was not authorized"
+  [  183.8s] completed {}
+   -> completed in 183.82s (first pause at 180.96s)
+   Not booked: you declined this proposal, so FlowPilot stopped without taking any further action.
+
+Cheapest: Wagon R/Swift (4-seater AC) ₹677 + ₹34 taxes (≈₹711), T2 airport → Powai, 24-10-2026 14:30. Proceed to select it and continue booking?
+
+wrote reports/e2e/e2e-20261022T185037Z.json
