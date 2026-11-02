@@ -2,7 +2,8 @@
 
 Uses already-built lane005 backend/tools images. Creates only uniquely labelled
 containers/network and no published ports or host mounts. Does NOT prove task crash
-reconciliation; the foundation intentionally lacks executor/control implementations.
+reconciliation. Tests assembled idle startup plus explicit raw-trace rejection;
+readiness is not evidence of Docker/browser/network enforcement.
 """
 import json
 import subprocess
@@ -40,13 +41,14 @@ HTTPServer(('0.0.0.0',2375),H).serve_forever()
                 time.sleep(0.2)
         else:
             raise RuntimeError("fake Docker API unavailable")
-        for enabled, expected in (("false", 200), ("true", 503)):
-            container = docker("run", "-d", "--platform", "linux/amd64", "--label", "flowpilot.ops=lane005", "--network", network, "--cpus", "1", "--memory", "1g", "--pids-limit", "128", "--tmpfs", "/app/profiles:uid=10001,gid=10001,mode=0700,size=2g", "-e", "DOCKER_HOST=tcp://docker-proxy:2375", "-e", "GOOGLE_API_KEY=synthetic-fixture-not-a-provider-key", "-e", "JWT_SECRET=synthetic-local-fixture-secret-at-least-32-bytes", "-e", "FLOWPILOT_TASKS_ENABLED=" + enabled, "flowpilot-lane005-backend:verify")
+        for enabled, trace, expected in (("false", "0", 200), ("true", "0", 200), ("true", "1", 503)):
+            container = docker("run", "-d", "--platform", "linux/amd64", "--label", "flowpilot.ops=lane005", "--network", network, "--cpus", "1", "--memory", "1g", "--pids-limit", "128", "--tmpfs", "/app/profiles:uid=10001,gid=10001,mode=0700,size=2g", "-e", "DOCKER_HOST=tcp://docker-proxy:2375", "-e", "GOOGLE_API_KEY=synthetic-fixture-not-a-provider-key", "-e", "JWT_SECRET=synthetic-local-fixture-secret-at-least-32-bytes", "-e", "ANONYMIZED_TELEMETRY=false", "-e", "FLOWPILOT_TRACE=" + trace, "-e", "FLOWPILOT_TASKS_ENABLED=" + enabled, "flowpilot-lane005-backend:verify")
             resources.append(container)
             path = "/health/browser-tasks" if enabled == "true" else "/health"
             probe = "import urllib.request,urllib.error;\ntry: print(urllib.request.urlopen('http://127.0.0.1:8080" + path + "',timeout=2).status)\nexcept urllib.error.HTTPError as e: print(e.code)"
 
             def wait():
+                status = "not-reachable"
                 for attempt in range(60):
                     try:
                         status = docker("exec", container, "/app/.venv/bin/python", "-c", probe)
@@ -56,7 +58,7 @@ HTTPServer(('0.0.0.0',2375),H).serve_forever()
                         pass
                     time.sleep(0.5)
                 # Logs are intentionally not emitted; they could contain app secrets.
-                raise RuntimeError("disposable backend readiness did not reach expected status " + str(expected))
+                raise RuntimeError("disposable backend readiness did not reach expected status " + str(expected) + "; last public status=" + status)
 
             wait()
             docker("restart", "--time", "65", container)
@@ -64,7 +66,7 @@ HTTPServer(('0.0.0.0',2375),H).serve_forever()
             docker("stop", "--time", "65", container)
             code = docker("inspect", "--format", "{{.State.ExitCode}}", container)
             assert code == "0", "backend did not gracefully exit"
-        print(json.dumps({"disabled_liveness_restart_graceful_stop": "PASS", "incomplete_enabled_composition_503_after_restart": "PASS", "task_interruption_semantics": "UNVERIFIED"}))
+        print(json.dumps({"disabled_liveness_restart_graceful_stop": "PASS", "assembled_idle_composition_ready_after_restart": "PASS", "raw_trace_startup_rejected_503_after_restart": "PASS", "task_interruption_semantics": "UNVERIFIED", "real_browser_and_network_enforcement": "UNVERIFIED"}))
     finally:
         for container in reversed(resources):
             subprocess.run(["docker", "rm", "-f", container], capture_output=True)

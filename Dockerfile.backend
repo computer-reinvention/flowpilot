@@ -37,6 +37,7 @@ COPY backend/ ./backend/
 COPY --from=agent-builder /usr/local/bin/node /usr/local/bin/node
 COPY --from=agent-builder /app/agent-host/ ./agent-host/
 COPY --from=frontend-builder /app/frontend/dist/ ./frontend/
+COPY frontend/src/shadcn-tailwind.LICENSE /usr/share/licenses/shadcn-tailwind/LICENSE
 COPY scripts/ops_health.py scripts/ops_config.py ./scripts/
 COPY scripts/ops_start.sh ./scripts/
 COPY scripts/ops_logging.json ./scripts/
